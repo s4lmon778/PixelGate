@@ -51,7 +51,12 @@ function peerOptions(): PeerOptions {
     debug: 0,
     token: crypto.randomUUID(),
     referrerPolicy: 'no-referrer',
-    config: { iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }] },
+    config: {
+      iceServers: [
+        { urls: 'stun:stun.cloudflare.com:3478' },
+        { urls: 'stun:stun.l.google.com:19302' },
+      ],
+    },
   };
 }
 
@@ -72,6 +77,7 @@ export class CodeConnection {
   private openingReject?: (error: Error) => void;
   private stopped = false;
   private approved = false;
+  private approvalGranted = false;
   private nonce = crypto.randomUUID();
   private requests = 0;
 
@@ -183,6 +189,11 @@ export class CodeConnection {
         }
         this.nonce = data.metadata.nonce;
         this.bind(data);
+        // A valid broker request is enough to ask for consent. Direct route
+        // discovery can continue while the receiver considers the request.
+        this.room = { ...this.room!, pending: true };
+        this.events.room(this.room);
+        this.events.status('Sender found · awaiting your approval');
       });
       this.peer!.on('call', (call) => call.close());
       this.events.status('Waiting for sender');
@@ -220,7 +231,7 @@ export class CodeConnection {
       () =>
         this.fail(
           new Error(
-            'Could not connect directly. Use the same Wi-Fi and check guest-network or VPN isolation.',
+            'The pairing request arrived, but the direct connection timed out. Create a new code. Check browser local-network permission, VPNs, or guest-network isolation even on the same Wi-Fi.',
           ),
         ),
       45000,
@@ -261,6 +272,8 @@ export class CodeConnection {
         return;
       }
       this.channel = channel;
+      this.room = { ...this.room!, routeReady: true };
+      this.events.room(this.room);
       channel.binaryType = 'arraybuffer';
       // Nothing can reach the file receiver before explicit approval.
       channel.onmessage = ({ data: message }) => {
@@ -287,9 +300,8 @@ export class CodeConnection {
         }
       };
       if (this.role === 'receive') {
-        this.room = { ...this.room!, pending: true };
-        this.events.room(this.room);
-        this.events.status('Sender is waiting for approval');
+        if (this.approvalGranted) this.finishApproval();
+        else this.events.status('Sender is waiting for approval');
       } else this.events.status('Waiting for receiver approval');
     });
   }
@@ -300,21 +312,30 @@ export class CodeConnection {
     if (
       this.stopped ||
       this.role !== 'receive' ||
-      !this.room?.pending ||
-      this.channel?.readyState !== 'open'
+      !this.room ||
+      (!this.room.pending && !this.approvalGranted)
     )
       throw new Error(
         'Wait for your sender to connect with the six-digit code.',
       );
-    if (this.approved) throw new Error('This code was already used.');
+    if (this.approvalGranted)
+      throw new Error('This sender was already approved.');
     if (this.room.expires <= Date.now()) {
       this.fail(new Error('Pairing expired.'));
       return;
     }
+    this.approvalGranted = true;
+    this.room = { ...this.room, pending: false, approvalGranted: true };
+    this.events.room(this.room);
+    if (this.channel?.readyState === 'open') this.finishApproval();
+    else this.events.status('Sender approved · connecting directly…');
+  }
+
+  private finishApproval() {
     // Approval must precede the transfer protocol's automatic hello message.
     // The receiver handler is installed in this same JavaScript turn, before
     // any incoming sender messages can be dispatched.
-    this.channel.send(
+    this.channel!.send(
       JSON.stringify({
         type: 'pixelgate-approved',
         version: 1,
@@ -336,6 +357,16 @@ export class CodeConnection {
   private fail(error: Error) {
     if (this.stopped) return;
     void this.stop();
+    if (this.room) {
+      this.room = {
+        ...this.room,
+        pending: false,
+        approvalGranted: false,
+        routeReady: false,
+        failed: true,
+      };
+      this.events.room(this.room);
+    }
     this.events.error(error);
   }
 

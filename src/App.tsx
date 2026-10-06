@@ -1022,14 +1022,22 @@ export default function PixelGate() {
                               {room.code ? (
                                 <div className="approval">
                                   <strong>
-                                    {room.pending
-                                      ? '2. Your sender is ready'
-                                      : '2. Waiting for your sender'}
+                                    {room.failed
+                                      ? '2. Connection failed'
+                                      : room.approvalGranted
+                                        ? '2. Sender approved'
+                                        : room.pending
+                                          ? '2. Approve your sender'
+                                          : '2. Waiting for your sender'}
                                   </strong>
                                   <p className="hint">
-                                    {room.pending
-                                      ? 'Approve only if your sending device is waiting for approval. Files cannot arrive before you approve.'
-                                      : 'Open Send on the other device and enter the six digits above, or scan the QR code.'}
+                                    {room.failed
+                                      ? 'This code is no longer active. Create a fresh code and enter it on your sender.'
+                                      : room.approvalGranted
+                                        ? 'Opening the direct connection. Keep both tabs open; files can start only after the connection is ready.'
+                                        : room.pending
+                                          ? 'Your sender’s request arrived. Approve only if you just tapped Connect on your sending device. Files cannot arrive before you approve.'
+                                          : 'Open Send on the other device, enter the six digits above, then tap Connect; or scan the QR code and tap Connect.'}
                                   </p>
                                   <button
                                     className="button primary"
@@ -1043,6 +1051,15 @@ export default function PixelGate() {
                                     <Check size={16} />
                                     Approve sender
                                   </button>
+                                  {room.failed && (
+                                    <button
+                                      className="button primary"
+                                      disabled={busy}
+                                      onClick={() => void guarded(connect)}
+                                    >
+                                      Create a new code
+                                    </button>
+                                  )}
                                   {room.pending && (
                                     <button
                                       className="text-button"
@@ -1096,11 +1113,17 @@ export default function PixelGate() {
                             </>
                           ) : room.code ? (
                             <div className="pairing-response">
-                              <strong>Waiting for receiver approval</strong>
+                              <strong>
+                                {room.failed
+                                  ? 'Connection failed'
+                                  : room.routeReady
+                                    ? 'Waiting for receiver approval'
+                                    : 'Connecting to receiver'}
+                              </strong>
                               <p className="hint">
-                                On the receiving device, choose Approve sender.
-                                Keep this tab open. You don’t need to copy a
-                                response.
+                                {room.failed
+                                  ? 'Create a new code on the receiver, then reconnect with that code.'
+                                  : 'Keep both tabs open. When your request appears on the receiver, choose Approve sender there. You don’t need to copy a response.'}
                               </p>
                             </div>
                           ) : (

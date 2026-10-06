@@ -95,7 +95,7 @@ Code pairing uses bundled PeerJS with reliable ordered raw data channels. It kee
 - Six-digit pairing uses [PeerJS’s shared public signaling service](https://peerjs.com/client/faq). It receives temporary peer IDs, connection descriptions, ICE candidates, and ordinary network information, but no media, filenames, hashes, manifests, or transfer history. Its availability and service policies are controlled by PeerJS. You can configure your own PeerServer; see [deployment](docs/DEPLOYMENT.md).
 - QR links keep the code in a URL fragment. Fragments are not part of the HTTP request, and PixelGate removes the imported fragment from the address bar. Copy/paste pairing keeps the complete descriptions in fragments or copied responses and makes no PeerJS connection.
 - Pairing descriptions include network addresses and connection credentials. Treat codes, links, and responses as temporary secrets; do not post them publicly.
-- Cloudflare STUN helps discover network routes. No TURN relay is configured. STUN receives network information, not your files.
+- Cloudflare and Google STUN helps discover network routes. No TURN relay is configured. STUN receives network information, not your files.
 - Browser storage is local to the site’s origin. Clearing site data or browser eviction can remove partials and local history. Switching from another host does not migrate its stored transfers.
 - There is no analytics, application account system, or cloud media store. See [SECURITY.md](SECURITY.md) for security assumptions and reporting guidance.
 

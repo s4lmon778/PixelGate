@@ -1,4 +1,4 @@
-import { test, expect, chromium } from '@playwright/test';
+import { test, expect, chromium, firefox, webkit } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import jsQR from 'jsqr';
 import { PNG } from 'pngjs';
@@ -25,8 +25,8 @@ async function scanQr(image: Locator) {
 }
 
 test('six-digit pairing requires approval, transfers verified bytes, and consumes the code', async ({
-  browser,
-}, testInfo) => {
+  browserName,
+}) => {
   const publicSignaling = Boolean(process.env.PIXELGATE_TEST_PUBLIC_SIGNALING);
   const server = publicSignaling
     ? undefined
@@ -37,17 +37,20 @@ test('six-digit pairing requires approval, transfers verified bytes, and consume
         ),
       );
   const port = (server?.address() as AddressInfo | undefined)?.port;
+  // Use native privacy defaults even though the older manual-pairing suite
+  // uses explicit LAN candidates for its headless fixtures.
+  const senderBrowser = await { chromium, firefox, webkit }[
+    browserName
+  ].launch();
   const receiverBrowser =
-    testInfo.project.name === 'webkit'
-      ? await chromium.launch({
-          args: ['--disable-features=WebRtcHideLocalIpsWithMdns'],
-        })
-      : browser;
+    browserName === 'webkit' ? await chromium.launch() : senderBrowser;
   const receiverContext = await receiverBrowser.newContext();
-  const senderContext = await browser.newContext();
+  const senderContext = await senderBrowser.newContext();
   const sockets = new Set<WebSocket>();
   const signals: string[] = [];
   const connections: string[] = [];
+  let holdRoutes = !publicSignaling;
+  const delayedRoutes: (() => void)[] = [];
   for (const context of [receiverContext, senderContext]) {
     if (publicSignaling) {
       context.on('page', (page) =>
@@ -72,8 +75,14 @@ test('six-digit pairing requires approval, transfers verified bytes, and consume
       connections.push(route.url());
       route.onMessage((message) => {
         signals.push(String(message));
-        if (remote.readyState === WebSocket.OPEN) remote.send(message);
-        else pending.push(message);
+        const forward = () => {
+          if (remote.readyState === WebSocket.OPEN) remote.send(message);
+          else pending.push(message);
+        };
+        const type = JSON.parse(String(message)).type;
+        if (holdRoutes && ['ANSWER', 'CANDIDATE'].includes(type))
+          delayedRoutes.push(forward);
+        else forward();
       });
       remote.on('open', () => {
         for (const message of pending) remote.send(message);
@@ -138,13 +147,27 @@ test('six-digit pairing requires approval, transfers verified bytes, and consume
     await expect(
       sender.getByRole('button', { name: 'Send files', exact: true }).last(),
     ).toBeDisabled();
-    await receiver.screenshot({
+    await receiver.locator('.connection-panel').screenshot({
       path: 'test-results/pixelgate-code-receiver.png',
-      fullPage: true,
     });
     await receiver
       .getByRole('button', { name: 'Approve sender', exact: true })
       .click();
+    if (!publicSignaling) {
+      // Consent must work before WebRTC finishes; no transfer is activated yet.
+      await expect(
+        receiver.getByText('2. Sender approved', { exact: true }),
+      ).toBeVisible();
+      await expect(
+        receiver.getByText('Connected', { exact: true }),
+      ).toHaveCount(0);
+      await expect(sender.getByText('Connected', { exact: true })).toHaveCount(
+        0,
+      );
+      holdRoutes = false;
+      for (const forward of delayedRoutes) forward();
+      delayedRoutes.length = 0;
+    }
     await expect(sender.getByText('Connected', { exact: true })).toBeVisible();
     await sender
       .getByRole('button', { name: 'Send files', exact: true })
@@ -195,7 +218,8 @@ test('six-digit pairing requires approval, transfers verified bytes, and consume
   } finally {
     await receiverContext.close();
     await senderContext.close();
-    if (receiverBrowser !== browser) await receiverBrowser.close();
+    if (receiverBrowser !== senderBrowser) await receiverBrowser.close();
+    await senderBrowser.close();
     for (const socket of sockets) socket.terminate();
     if (server)
       await new Promise<void>((resolve) => server.close(() => resolve()));

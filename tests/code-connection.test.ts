@@ -124,7 +124,10 @@ describe('six-digit code pairing', () => {
     expect(state.peers).toHaveLength(3);
     expect(state.peers[0].destroyed).toBe(true);
     expect(state.peers[2].options.config).toEqual({
-      iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }],
+      iceServers: [
+        { urls: 'stun:stun.cloudflare.com:3478' },
+        { urls: 'stun:stun.l.google.com:19302' },
+      ],
     });
     await c.stop();
   });
@@ -164,10 +167,52 @@ describe('six-digit code pairing', () => {
       'hello',
     );
     expect(state.peers[0].destroyed).toBe(false);
-    await expect(c.approve()).rejects.toThrow('already used');
+    await expect(c.approve()).rejects.toThrow('already approved');
     await vi.advanceTimersByTimeAsync(PAIR_TTL + 1);
     expect(e.error).not.toHaveBeenCalled();
     await c.stop();
+  });
+  it('allows consent when the sender request arrives, before the route opens', async () => {
+    const e = events(),
+      c = new CodeConnection('receive', e);
+    await c.start();
+    const data = new Data();
+    data.dataChannel.readyState = 'connecting';
+    state.peers[0].emit('connection', data);
+    expect(c.room!.pending).toBe(true);
+    await c.approve();
+    expect(c.room!.approvalGranted).toBe(true);
+    expect(e.status).toHaveBeenLastCalledWith(
+      'Sender approved · connecting directly…',
+    );
+    expect(e.connected).not.toHaveBeenCalled();
+    expect(data.dataChannel.send).not.toHaveBeenCalled();
+    await expect(c.approve()).rejects.toThrow('already approved');
+    data.dataChannel.readyState = 'open';
+    data.emit('open');
+    expect(e.connected).toHaveBeenCalledOnce();
+    expect(JSON.parse(data.dataChannel.send.mock.calls[0][0]).type).toBe(
+      'pixelgate-approved',
+    );
+    expect(state.peers[0].disconnected).toBe(true);
+    await c.stop();
+  });
+  it('expires approved requests whose direct channel never opens and clears stale approval', async () => {
+    const e = events(),
+      c = new CodeConnection('receive', e);
+    await c.start();
+    const data = new Data();
+    state.peers[0].emit('connection', data);
+    await c.approve();
+    await vi.advanceTimersByTimeAsync(45001);
+    expect(c.room).toMatchObject({
+      pending: false,
+      approvalGranted: false,
+      failed: true,
+    });
+    expect(e.connected).not.toHaveBeenCalled();
+    expect(data.dataChannel.send).not.toHaveBeenCalled();
+    await expect(c.approve()).rejects.toThrow('Wait');
   });
   it('rejects pre-approval media instead of attaching a file receiver', async () => {
     const e = events(),

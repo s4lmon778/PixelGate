@@ -1,11 +1,11 @@
 # Validation record
 
-## GitHub Pages edition · 0.3.0
+## GitHub Pages edition · 0.3.1
 
 Executed on **October 6, 2026**, with synthetic fixtures:
 
 - TypeScript, ESLint, and the production static build pass.
-- **66 unit/integration tests pass**: independent SHA-256, deliberate corruption, changed source content, durable checkpoint recovery, missing staged copies, duplicate/conflict handling, destination/export readback, denied access, quota exhaustion, safe/Unicode paths, 10,000 manifest paths, and 5 GB manifest sizes.
+- **68 unit/integration tests pass**: independent SHA-256, deliberate corruption, changed source content, durable checkpoint recovery, missing staged copies, duplicate/conflict handling, destination/export readback, denied access, quota exhaustion, safe/Unicode paths, 10,000 manifest paths, and 5 GB manifest sizes.
 - Isolated local Git remotes verify first-time Pages publication, deployment history preservation, and rejection of uncommitted source.
 - Serverless pairing tests cover bounded compression/decompression, invalid descriptions and extra fields, ten-minute expiry, wrong session responses, explicit approval, one-sender enforcement, immediate revocation, and copied offer/answer negotiation.
 - **12 Playwright browser checks pass**, exercising a real **2 MiB + 111 byte** peer transfer, independent Node/Web Crypto source/staging hashes, batch download, reselected export verification, damaged export rejection, history after refresh, URL-fragment import in an already-open tab, invalid response rejection, mobile layout, and 200% text sizing.
@@ -20,16 +20,16 @@ The Chromium six-digit scenario also passes against the real public PeerJS servi
 
 ## Browser environment
 
-| Engine / device           | Version / setup                                                                 | Result                             |
-| ------------------------- | ------------------------------------------------------------------------------- | ---------------------------------- |
-| Chromium                  | Playwright Chromium 141.0.7390.37; explicit LAN candidates in headless tests    | Transfer and layout checks         |
-| Firefox                   | Playwright Firefox 142.0.1; host-address obfuscation disabled in headless tests | Transfer and layout checks         |
-| WebKit                    | Playwright WebKit 26.0 sender to Chromium receiver                              | Interoperability and layout checks |
-| Native desktop Safari     | Not run                                                                         | Pending                            |
-| iPhone Safari             | Record actual iOS/browser versions                                              | Pending                            |
-| First-generation Pixel XL | Record actual Android/Chrome versions                                           | Pending                            |
+| Engine / device           | Version / setup                                                                                      | Result                             |
+| ------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| Chromium                  | Playwright Chromium 141.0.7390.37; normal privacy for code pairing; explicit LAN for manual fixtures | Transfer and layout checks         |
+| Firefox                   | Playwright Firefox 142.0.1; normal privacy for code pairing; explicit LAN for manual fixtures        | Transfer and layout checks         |
+| WebKit                    | Playwright WebKit 26.0 sender to Chromium receiver                                                   | Interoperability and layout checks |
+| Native desktop Safari     | Not run                                                                                              | Pending                            |
+| iPhone Safari             | Record actual iOS/browser versions                                                                   | Pending                            |
+| First-generation Pixel XL | Record actual Android/Chrome versions                                                                | Pending                            |
 
-Headless discovery exposes LAN IP candidates because mDNS discovery in this environment is unreliable. Production uses normal browser discovery and reports direct-connection failures. The Chromium receiver used with WebKit also exposes LAN candidates. WebKit’s nonpersistent macOS test contexts do not provide reliable OPFS receiving, so this does not certify native Safari receiving.
+Six-digit tests use normal browser host-address privacy, including WebKit-to-Chromium, and deliberately hold back answers/ICE candidates until the receiver approves: approval must become available before the route opens, and no transfer may start before it opens. The older manual-pairing fixtures use explicit LAN candidates; a separate run of Firefox manual pairing with normal mDNS privacy failed to open a direct channel. This limitation does not affect the six-digit regression results, but demonstrates why automated checks cannot certify all device/network combinations. `PIXELGATE_TEST_EXPLICIT_LAN=1` is an optional test diagnostic; production uses normal browser discovery. WebKit’s nonpersistent macOS test contexts do not provide reliable OPFS receiving, so this does not certify native Safari receiving.
 
 ## Required physical-device and capacity validation
 
@@ -40,3 +40,5 @@ On the actual Pixel XL and iPhone, record OS/browser versions and first check OP
 Exercise screen lock, backgrounding, Wi-Fi loss, refresh and reselection, real storage exhaustion, denied/revoked folder access, exports and duplicate conflicts. Use realistic batches for 100 GB sessions and record quota, free space, elapsed time, throughput, failures, and independent hashes. First-generation Pixel storage may not accommodate 100 GB at once.
 
 Google Photos validation is separate: confirm visibility, capture dates, GPS where present, video playback, folder backup configuration, and completed backup in Google Photos. Live Photo recognition and Apple original-resource retrieval are outside the browser guarantee.
+
+Version 0.3.1 fixes approval being disabled during route negotiation, misleading sender approval instructions during connection attempts, and stale failed-room state. Consent-before-channel-open and failed-route cleanup have unit regressions. Cloudflare STUN has a Google STUN fallback; neither is a file relay. Physical iPhone Safari-to-Arc testing is still pending.

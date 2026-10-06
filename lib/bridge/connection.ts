@@ -6,6 +6,9 @@ export interface PairRoom {
   response?: string;
   code?: string;
   pending?: boolean;
+  routeReady?: boolean;
+  approvalGranted?: boolean;
+  failed?: boolean;
 }
 
 export class Connection {

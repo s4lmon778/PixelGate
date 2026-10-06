@@ -6,13 +6,13 @@ PixelGate 0.3 is a static TypeScript/React application. The UI runs in a browser
 
 The default flow registers a cryptographically generated six-digit receiver ID with PeerJS over TLS WebSockets. Collisions are retried up to eight times. A short QR URL places the code in its fragment; importing it fills the sender’s code input. The sender connects through the broker using a reliable ordered raw data channel and a random connection nonce. No camera or microphone access is requested.
 
-Opening the channel only enables a bounded approval handler. A file receiver is not installed until the user approves the pending sender. Its nonce-bound approval message precedes the transfer protocol’s automatic hello. Both clients then disconnect from signaling, releasing their IDs without closing the direct channel. Only one sender is accepted. Codes expire after ten minutes, direct connection attempts time out after 45 seconds, registration times out after 15 seconds, and revocation destroys the peer immediately.
+The receiver can approve as soon as a validated signaling request arrives, while route discovery continues. Approval is retained only for that sender and expires if the channel never opens. Opening the channel only enables a bounded approval handler. A file receiver is not installed until the user approves the pending sender. Its nonce-bound approval message precedes the transfer protocol’s automatic hello. Both clients then disconnect from signaling, releasing their IDs without closing the direct channel. Only one sender is accepted. Codes expire after ten minutes, direct connection attempts time out after 45 seconds, registration times out after 15 seconds, and revocation destroys the peer immediately.
 
 The public reference build uses the shared service at `0.peerjs.com`. It sees peer IDs, SDP, ICE candidates, and network information. It does not receive manifests, paths, hashes, history, or file bytes. The application controls its own request/connection bounds but does not operate the shared service’s global rate limits or logs. Production applications can configure their own PeerServer.
 
 Copy/paste pairing remains an optional fallback. The receiver gathers an SDP offer in a versioned, compressed envelope with a random session ID and ten-minute expiry. A URL fragment carries this envelope; the sender copies an answer back. Approval validates kind, session, and expiry before setting the remote description. Bounded, data-channel-only descriptions and fixed-size decompression output prevent unbounded input allocation. This mode does not connect to PeerJS.
 
-WebRTC ICE uses Cloudflare STUN to discover routes. No TURN relay is configured. Browser host-address privacy and network isolation can prevent discovery or a direct connection.
+WebRTC ICE uses Cloudflare and Google STUN to discover routes. No TURN relay is configured. Browser host-address privacy and network isolation can prevent discovery or a direct connection.
 
 ## Transfer protocol
 
