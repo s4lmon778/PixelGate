@@ -1,6 +1,6 @@
 # Validation record
 
-## GitHub Pages edition · 0.2.0
+## GitHub Pages edition · 0.2.1
 
 Executed on **October 6, 2026**, with synthetic fixtures:
 
@@ -10,6 +10,7 @@ Executed on **October 6, 2026**, with synthetic fixtures:
 - Serverless pairing tests cover bounded compression/decompression, invalid descriptions and extra fields, ten-minute expiry, wrong session responses, explicit approval, one-sender enforcement, immediate revocation, and copied offer/answer negotiation.
 - **9 Playwright browser checks pass**, exercising a real **2 MiB + 111 byte** peer transfer, independent Node/Web Crypto source/staging hashes, batch download, reselected export verification, damaged export rejection, history after refresh, URL-fragment import in an already-open tab, invalid response rejection, mobile layout, and 200% text sizing.
 - Request inspection checks that static hosting receives only GET asset/document requests and no application signaling calls, pairing tokens, filenames, hashes, or file data.
+- QR regression checks decode the displayed SVG using the independent `jsQR` decoder at desktop, enlarged-dialog, and 390 px mobile sizes. The decoded link is then used for the real peer transfer. Physical phone-camera scanning still requires device testing.
 
 The GitHub Pages edition has no pairing API or cloud database. Tests from the earlier Sites edition’s room service are not claims about this release.
 

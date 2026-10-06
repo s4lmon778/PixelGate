@@ -759,13 +759,38 @@ h1 {
   gap: 26px;
   align-items: center;
 }
-.qr-row img {
+.qr-code {
+  width: 512px;
+  max-width: 100%;
+  flex-shrink: 0;
+}
+.qr-picture {
+  width: 100%;
+}
+.qr-picture img {
   background: #fff;
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-inline: auto;
+}
+.qr-dialog {
+  background: var(--surface);
+  color: var(--text);
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px;
-  width: 144px;
-  height: 144px;
+  border-radius: 12px;
+  padding: 20px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+}
+.qr-dialog::backdrop {
+  background: #000a;
+}
+.qr-dialog .qr-picture {
+  width: min(720px, 75vw, 75dvh);
+}
+.qr-dialog p {
+  max-width: 60ch;
 }
 .pair-code {
   font-size: 1.6875rem;
@@ -1183,10 +1208,6 @@ h1 {
   }
   .pair-code {
     font-size: 1.5625rem;
-  }
-  .qr-row img {
-    width: 125px;
-    height: 125px;
   }
   .button {
     min-height: 44px;

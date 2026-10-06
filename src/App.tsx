@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
+import { QrImage } from './QrImage';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -84,7 +85,12 @@ export default function PixelGate() {
   const [room, setRoom] = useState<PairRoom>();
   const [code, setCode] = useState('');
   const [response, setResponse] = useState('');
-  const [qr, setQr] = useState('');
+  const [qr, setQr] = useState<{
+    offer: string;
+    url?: string;
+    modules?: number;
+    error?: string;
+  }>();
   const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -107,6 +113,7 @@ export default function PixelGate() {
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
   const verifyInput = useRef<HTMLInputElement>(null);
+  const qrDialog = useRef<HTMLDialogElement>(null);
   const receivedRecords = useRef(new Map<string, RecordFile>());
   const receiveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
@@ -158,16 +165,36 @@ export default function PixelGate() {
   }, [view, role]);
   useEffect(() => {
     if (!room?.offer || role !== 'receive') return;
+    let active = true;
+    const offer = room.offer;
     const link = pairingLink(room.offer);
-    QRCode.toDataURL(link, {
-      width: 200,
-      margin: 1,
-      color: { dark: '#111827', light: '#ffffff' },
+    QRCode.toString(link, {
+      type: 'svg',
+      width: 1024,
+      errorCorrectionLevel: 'M',
+      margin: 4,
+      color: { dark: '#000000', light: '#ffffff' },
     })
-      .then(setQr)
+      .then((svg) => {
+        if (active)
+          setQr({
+            offer,
+            modules:
+              QRCode.create(link, { errorCorrectionLevel: 'M' }).modules.size +
+              8,
+            url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`,
+          });
+      })
       .catch(() => {
-        setQr('');
+        if (active)
+          setQr({
+            offer,
+            error: 'QR code unavailable. Copy the receiver link instead.',
+          });
       });
+    return () => {
+      active = false;
+    };
   }, [room, role]);
   useEffect(() => {
     if (!running && !connected) return;
@@ -226,7 +253,7 @@ export default function PixelGate() {
     wake.current = undefined;
     setConnected(false);
     setRoom(undefined);
-    setQr('');
+    setQr(undefined);
     setResponse('');
     setStatus('Not connected');
     setPaused(false);
@@ -823,19 +850,61 @@ export default function PixelGate() {
                           ) : role === 'receive' ? (
                             <>
                               <div className="qr-row">
-                                {qr && (
-                                  <img
-                                    src={qr}
-                                    width="144"
-                                    height="144"
-                                    alt="Scan this receiver link"
-                                  />
-                                )}
+                                {qr &&
+                                  qr.offer === room.offer &&
+                                  qr.url &&
+                                  qr.modules && (
+                                    <div className="qr-code">
+                                      <QrImage
+                                        src={qr.url}
+                                        modules={qr.modules}
+                                        alt="Scan this receiver link"
+                                      />
+                                      <button
+                                        className="text-button"
+                                        onClick={() =>
+                                          qrDialog.current?.showModal()
+                                        }
+                                      >
+                                        Enlarge QR code
+                                      </button>
+                                      <dialog
+                                        className="qr-dialog"
+                                        ref={qrDialog}
+                                        aria-label="Receiver QR code"
+                                      >
+                                        <button
+                                          className="text-button"
+                                          onClick={() =>
+                                            qrDialog.current?.close()
+                                          }
+                                        >
+                                          <X size={18} />
+                                          Close QR code
+                                        </button>
+                                        <QrImage
+                                          src={qr.url}
+                                          modules={qr.modules}
+                                          alt="Enlarged receiver QR code"
+                                        />
+                                        <p>
+                                          Scan with your sending device’s
+                                          camera. Keep the whole white border in
+                                          view.
+                                        </p>
+                                      </dialog>
+                                    </div>
+                                  )}
                                 <div>
                                   <strong>1. Share your receiver link</strong>
                                   <p className="hint">
-                                    Scan or copy to the sending device.
+                                    Scan with your sending device’s camera.
+                                    Enlarge the code if needed, or copy the
+                                    link.
                                   </p>
+                                  {qr &&
+                                    qr.offer === room.offer &&
+                                    qr.error && <p role="alert">{qr.error}</p>}
                                   <button
                                     className="text-button"
                                     onClick={() =>

@@ -41,7 +41,7 @@ PixelGate transfers files between computers, phones, and tablets through their b
 
 1. Open **[PixelGate](https://s4lmon778.github.io/PixelGate/)** on both devices. Keep them on the same trusted Wi-Fi network.
 2. On the destination device, choose **Receive files**, optionally choose a destination folder, and click **Create a connection**.
-3. On the sending device, scan the receiver QR code or paste its link. Click **Prepare sender response**.
+3. On the sending device, scan the receiver QR code or paste its link. Use **Enlarge QR code** on the receiver if the camera has trouble reading it; keep the entire white border visible. Click **Prepare sender response**.
 4. Copy that response back to the original receiver tab. Paste it and click **Approve sender**.
 5. Select files or folders on the sender, then click **Send files**. Keep both tabs open.
 6. Save the verified copies. For manual downloads, reselect the saved files through **Verify saved copies**.

@@ -1,5 +1,24 @@
 import { test, expect, chromium } from '@playwright/test';
 import { createHash } from 'node:crypto';
+import jsQR from 'jsqr';
+import { PNG } from 'pngjs';
+import type { Locator } from '@playwright/test';
+
+async function scanQr(image: Locator) {
+  await expect(image).toBeVisible();
+  await image.evaluate((element: HTMLImageElement) => element.decode());
+  const pixels = PNG.sync.read(await image.screenshot());
+  const decoded = jsQR(
+    new Uint8ClampedArray(pixels.data),
+    pixels.width,
+    pixels.height,
+  );
+  expect(
+    decoded,
+    'QR must decode independently at its displayed size',
+  ).not.toBeNull();
+  return decoded!.data;
+}
 
 test('real peer transfer, readback, manual export verification, and reconnect', async ({
   browser,
@@ -36,9 +55,36 @@ test('real peer transfer, readback, manual export verification, and reconnect', 
   await expect(
     receiver.getByLabel('Receiver link', { exact: true }),
   ).toBeVisible({ timeout: 20000 });
-  const pairLink = await receiver
+  const expectedLink = await receiver
     .getByLabel('Receiver link', { exact: true })
     .inputValue();
+  const pairLink = await scanQr(
+    receiver.getByAltText('Scan this receiver link', { exact: true }),
+  );
+  expect(pairLink).toBe(expectedLink);
+  await receiver
+    .getByRole('button', { name: 'Enlarge QR code', exact: true })
+    .click();
+  expect(
+    await scanQr(
+      receiver.getByAltText('Enlarged receiver QR code', { exact: true }),
+    ),
+  ).toBe(pairLink);
+  await receiver
+    .getByRole('button', { name: 'Close QR code', exact: true })
+    .click();
+  await receiver.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await scanQr(
+      receiver.getByAltText('Scan this receiver link', { exact: true }),
+    ),
+  ).toBe(pairLink);
+  expect(
+    await receiver.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await receiver.setViewportSize({ width: 1440, height: 1000 });
   // Links keep signaling in the URL fragment, which is not sent to the host.
   await sender.goto(pairLink);
   await sender
