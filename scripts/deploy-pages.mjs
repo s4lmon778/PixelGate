@@ -65,7 +65,7 @@ try {
   if (!existsSync(join(temp, 'index.html')))
     throw new Error('Static entrypoint is missing.');
   run(['git', 'add', '.'], temp);
-  if (run(['git', 'status', '--porcelain']))
+  if (run(['git', 'status', '--porcelain'], temp))
     run(
       ['git', 'commit', '-m', `Deploy PixelGate from ${source.slice(0, 7)}`],
       temp,

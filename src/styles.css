@@ -1297,7 +1297,7 @@ button.brand {
   resize: vertical;
   font-size: 0.8125rem;
   overflow-wrap: anywhere;
-  word-break: break-all;
+  word-break: normal;
 }
 .pairing-text:focus-visible,
 .pairing-input textarea:focus-visible {
