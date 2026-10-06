@@ -21,12 +21,13 @@
 
 PixelGate transfers files between computers, phones, and tablets through their browsers. File bytes travel directly over encrypted WebRTC. The receiver closes and rereads each completed file, then compares its SHA-256 hash with the source.
 
-**No account. No native app. No cloud media storage.** The public app is hosted on GitHub Pages. Pairing happens by exchanging a receiver link and sender response, so there is no signaling backend to operate.
+**No account. No native app. No cloud media storage.** The public app is hosted on GitHub Pages. Enter a six-digit code or scan a short QR link, then approve the sender. PeerJS’s public service exchanges connection details; files go directly between browsers.
 
 > **Experimental:** automated integrity and browser tests are included. Native Safari, iPhone, the first-generation Pixel XL, real files above 4 GB, and 100 GB sessions still require physical-device validation. See [the validation record](VALIDATION.md).
 
 ## Features
 
+- **Simple pairing:** six digit boxes, a short QR link, explicit receiver approval, and no copied sender response.
 - **Untouched file bytes:** no transcoding, resizing, or compression of media.
 - **Independent verification:** source, browser-staged, destination-folder, and reselected exported copies have distinct verification scopes.
 - **Resumable transfers:** 1 MiB durable checkpoints; reconnect and reselect the source files after interruption.
@@ -41,12 +42,14 @@ PixelGate transfers files between computers, phones, and tablets through their b
 
 1. Open **[PixelGate](https://s4lmon778.github.io/PixelGate/)** on both devices. Keep them on the same trusted Wi-Fi network.
 2. On the destination device, choose **Receive files**, optionally choose a destination folder, and click **Create a connection**.
-3. On the sending device, scan the receiver QR code or paste its link. Use **Enlarge QR code** on the receiver if the camera has trouble reading it; keep the entire white border visible. Click **Prepare sender response**.
-4. Copy that response back to the original receiver tab. Paste it and click **Approve sender**.
+3. On the sending device, enter the receiver’s **six-digit code**, or scan its QR code, then click **Connect**. Use **Enlarge QR code** if needed.
+4. On the receiver, click **Approve sender** when your sending device is waiting for approval. No response needs copying.
 5. Select files or folders on the sender, then click **Send files**. Keep both tabs open.
 6. Save the verified copies. For manual downloads, reselect the saved files through **Verify saved copies**.
 
-Pairing links expire after ten minutes. Share the link and response only between your own participating devices, through a trusted channel. Revoking closes the local peer connection immediately. Creating a new link makes old responses unusable.
+Codes expire after ten minutes and are released when approved. One sender is allowed; revoking closes the local peer connection immediately. Share a code only with your intended device and approve only its request. Leading zeroes are valid. Six digits are a convenient lookup, not proof of someone’s identity.
+
+**Copy/paste pairing** remains available before creating a connection. This advanced fallback exchanges connection descriptions without using PeerJS, but requires copying a longer response between devices.
 
 ### Saving modes
 
@@ -59,7 +62,7 @@ On Android, `DCIM/PixelGate` is a suggested destination. Google Photos visibilit
 
 ### Recover an interrupted transfer
 
-Create a new receiver link, pair again, reselect the same source files, and send. The receiver reconciles durable checkpoints and resumes retained partial copies. Changed source content receives a new identity. Previously verified files are skipped only after their available stored bytes are reread and match.
+Create a new receiver connection, pair again, reselect the same source files, and send. The receiver reconciles durable checkpoints and resumes retained partial copies. Changed source content receives a new identity. Previously verified files are skipped only after their available stored bytes are reread and match.
 
 ## How it works
 
@@ -67,8 +70,12 @@ Create a new receiver link, pair again, reselect the same source files, and send
 sequenceDiagram
     participant S as Sender browser
     participant R as Receiver browser
-    R->>S: Receiver link / QR (connection offer)
-    S->>R: Copied sender response
+    participant P as PeerJS signaling
+    R->>P: Register temporary six-digit code
+    R->>S: Six digits / short QR link
+    S->>P: Connect using code
+    P->>R: Exchange SDP / ICE connection details
+    P->>S: Exchange SDP / ICE connection details
     Note over R: User approves sender
     S->>R: Reliable ordered WebRTC: file manifest + raw bytes
     R->>R: Flush 1 MiB checkpoints into private staging
@@ -80,13 +87,14 @@ sequenceDiagram
 
 Incremental SHA-256 runs in a worker using bundled `hash-wasm`. One file transfers while one subsequent file hashes ahead. Transport frames are 16 KiB, with bounded sender buffering. IndexedDB stores local manifests and history; Origin Private File System (OPFS) stores partial and complete staged copies.
 
-Pairing tokens contain a version, random session ID, expiry, and WebRTC connection description. They are compressed to make links and QR codes practical; **media bytes are never compressed**. The receiver validates the response against its active offer before approving one sender.
+Code pairing uses bundled PeerJS with reliable ordered raw data channels. It keeps file reception disabled until receiver approval, then releases the code and disconnects both browsers from signaling while the direct channel stays open. Registration collisions are retried within a bound; failed connection attempts, expiry, and revocation close the session. The original compressed-envelope protocol remains available for copy/paste pairing; **media bytes are never compressed**.
 
 ## Privacy and network behavior
 
 - GitHub Pages serves the app and static assets. It receives normal website requests, including visitor network information; it receives no file bytes, filenames, hashes, transfer history, or pairing tokens from PixelGate.
-- Pairing data stays in the link’s URL fragment or copied response. Fragments are not part of the HTTP request. PixelGate removes an imported fragment from the address bar.
-- Pairing descriptions include network addresses and connection credentials. Treat links and responses as temporary secrets; do not post them publicly.
+- Six-digit pairing uses [PeerJS’s shared public signaling service](https://peerjs.com/client/faq). It receives temporary peer IDs, connection descriptions, ICE candidates, and ordinary network information, but no media, filenames, hashes, manifests, or transfer history. Its availability and service policies are controlled by PeerJS. You can configure your own PeerServer; see [deployment](docs/DEPLOYMENT.md).
+- QR links keep the code in a URL fragment. Fragments are not part of the HTTP request, and PixelGate removes the imported fragment from the address bar. Copy/paste pairing keeps the complete descriptions in fragments or copied responses and makes no PeerJS connection.
+- Pairing descriptions include network addresses and connection credentials. Treat codes, links, and responses as temporary secrets; do not post them publicly.
 - Cloudflare STUN helps discover network routes. No TURN relay is configured. STUN receives network information, not your files.
 - Browser storage is local to the site’s origin. Clearing site data or browser eviction can remove partials and local history. Switching from another host does not migrate its stored transfers.
 - There is no analytics, application account system, or cloud media store. See [SECURITY.md](SECURITY.md) for security assumptions and reporting guidance.

@@ -3,6 +3,10 @@ import { createHash } from 'node:crypto';
 import jsQR from 'jsqr';
 import { PNG } from 'pngjs';
 import type { Locator } from '@playwright/test';
+import { PeerServer } from 'peer';
+import WebSocket from 'ws';
+import type { Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 
 async function scanQr(image: Locator) {
   await expect(image).toBeVisible();
@@ -19,6 +23,184 @@ async function scanQr(image: Locator) {
   ).not.toBeNull();
   return decoded!.data;
 }
+
+test('six-digit pairing requires approval, transfers verified bytes, and consumes the code', async ({
+  browser,
+}, testInfo) => {
+  const publicSignaling = Boolean(process.env.PIXELGATE_TEST_PUBLIC_SIGNALING);
+  const server = publicSignaling
+    ? undefined
+    : await new Promise<Server>((resolve) =>
+        PeerServer(
+          { host: '127.0.0.1', port: 0, allow_discovery: false },
+          resolve,
+        ),
+      );
+  const port = (server?.address() as AddressInfo | undefined)?.port;
+  const receiverBrowser =
+    testInfo.project.name === 'webkit'
+      ? await chromium.launch({
+          args: ['--disable-features=WebRtcHideLocalIpsWithMdns'],
+        })
+      : browser;
+  const receiverContext = await receiverBrowser.newContext();
+  const senderContext = await browser.newContext();
+  const sockets = new Set<WebSocket>();
+  const signals: string[] = [];
+  const connections: string[] = [];
+  for (const context of [receiverContext, senderContext]) {
+    if (publicSignaling) {
+      context.on('page', (page) =>
+        page.on('websocket', (socket) => {
+          connections.push(socket.url());
+          socket.on('framesent', ({ payload }) =>
+            signals.push(String(payload)),
+          );
+          socket.on('framereceived', ({ payload }) =>
+            signals.push(String(payload)),
+          );
+        }),
+      );
+      continue;
+    }
+    await context.routeWebSocket('wss://0.peerjs.com/**', (route) => {
+      const remote = new WebSocket(
+        route.url().replace('wss://0.peerjs.com', `ws://127.0.0.1:${port}`),
+      );
+      sockets.add(remote);
+      const pending: (string | Buffer)[] = [];
+      connections.push(route.url());
+      route.onMessage((message) => {
+        signals.push(String(message));
+        if (remote.readyState === WebSocket.OPEN) remote.send(message);
+        else pending.push(message);
+      });
+      remote.on('open', () => {
+        for (const message of pending) remote.send(message);
+      });
+      remote.on('message', (message) => {
+        signals.push(String(message));
+        route.send(message.toString());
+      });
+      remote.on('error', () => route.close());
+      route.onClose(() => remote.close());
+    });
+  }
+  try {
+    const receiver = await receiverContext.newPage(),
+      sender = await senderContext.newPage();
+    await receiver.goto('./');
+    await sender.goto('./');
+    await receiver
+      .getByRole('button', { name: 'Receive files', exact: true })
+      .click();
+    await receiver
+      .getByRole('button', { name: 'Create a connection', exact: true })
+      .click();
+    const displayedCode = receiver.getByLabel('Pairing code', { exact: true });
+    await expect(displayedCode).toBeVisible();
+    const code = (await displayedCode.innerText()).replace(/\s/g, '');
+    expect(code).toMatch(/^\d{6}$/);
+    const link = await scanQr(
+      receiver.getByAltText('Scan this receiver link', { exact: true }),
+    );
+    expect(new URL(link).hash).toBe(`#connect=${code}`);
+    await expect(
+      receiver.getByLabel('2. Paste the sender response', { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      receiver.getByRole('button', { name: 'Approve sender', exact: true }),
+    ).toBeDisabled();
+    await sender.setViewportSize({ width: 390, height: 844 });
+    await sender
+      .getByLabel('Receiver’s six-digit code', { exact: true })
+      .fill(code);
+    await sender.getByRole('button', { name: 'Connect', exact: true }).click();
+    await expect(
+      receiver.getByRole('button', { name: 'Approve sender', exact: true }),
+    ).toBeEnabled({ timeout: 30000 });
+    await expect(sender.getByText('Connected', { exact: true })).toHaveCount(0);
+    await expect(
+      sender.getByLabel('Sender response', { exact: true }),
+    ).toHaveCount(0);
+    expect(
+      await sender.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    const bytes = Buffer.alloc(1024 * 1024 + 37, 0x7b);
+    const hash = createHash('sha256').update(bytes).digest('hex');
+    await sender.locator('input[aria-label="Choose files"]').setInputFiles({
+      name: 'code-transfer-é.bin',
+      mimeType: 'application/octet-stream',
+      buffer: bytes,
+    });
+    await expect(
+      sender.getByRole('button', { name: 'Send files', exact: true }).last(),
+    ).toBeDisabled();
+    await receiver.screenshot({
+      path: 'test-results/pixelgate-code-receiver.png',
+      fullPage: true,
+    });
+    await receiver
+      .getByRole('button', { name: 'Approve sender', exact: true })
+      .click();
+    await expect(sender.getByText('Connected', { exact: true })).toBeVisible();
+    await sender
+      .getByRole('button', { name: 'Send files', exact: true })
+      .last()
+      .click();
+    await expect(receiver.locator('.file-status').first()).toHaveText(
+      'Browser copy verified',
+      { timeout: 60000 },
+    );
+    const actualHash = await receiver.evaluate(async () => {
+      const directory = await (
+        await navigator.storage.getDirectory()
+      ).getDirectoryHandle('pixelbridge');
+      const entries = (
+        directory as FileSystemDirectoryHandle & {
+          entries(): AsyncIterableIterator<[string, FileSystemHandle]>;
+        }
+      ).entries();
+      for await (const [name, handle] of entries) {
+        if (handle.kind !== 'file' || name.startsWith('probe-')) continue;
+        const bytes = await (
+          await (handle as FileSystemFileHandle).getFile()
+        ).arrayBuffer();
+        return [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
+          .map((byte) => byte.toString(16).padStart(2, '0'))
+          .join('');
+      }
+    });
+    expect(actualHash).toBe(hash);
+    expect(signals.join('')).not.toContain(hash);
+    expect(signals.join('')).not.toContain('code-transfer-é');
+    expect(signals.every((message) => message.length < 32768)).toBe(true);
+    expect(signals.some((message) => message.includes('CANDIDATE'))).toBe(true);
+    // Try the consumed code from a new sender; it must not create another session.
+    const retry = await senderContext.newPage();
+    await retry.goto('./');
+    await retry
+      .getByLabel('Receiver’s six-digit code', { exact: true })
+      .fill(code);
+    await retry.getByRole('button', { name: 'Connect', exact: true }).click();
+    await expect(retry.getByRole('alert')).toContainText('unavailable', {
+      timeout: 15000,
+    });
+    expect(connections).toHaveLength(3);
+    await receiver
+      .getByRole('button', { name: 'Revoke connection', exact: true })
+      .click();
+  } finally {
+    await receiverContext.close();
+    await senderContext.close();
+    if (receiverBrowser !== browser) await receiverBrowser.close();
+    for (const socket of sockets) socket.terminate();
+    if (server)
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
 
 test('real peer transfer, readback, manual export verification, and reconnect', async ({
   browser,
@@ -48,6 +230,9 @@ test('real peer transfer, readback, manual export verification, and reconnect', 
   await sender.goto('./');
   await receiver
     .getByRole('button', { name: 'Receive files', exact: true })
+    .click();
+  await receiver
+    .getByRole('button', { name: 'Use copy/paste pairing', exact: true })
     .click();
   await receiver
     .getByRole('button', { name: 'Create a connection', exact: true })

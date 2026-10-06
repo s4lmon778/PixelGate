@@ -1,6 +1,6 @@
 # Deployment
 
-PixelGate is a static React/Vite app. It needs HTTPS and worker support; it has no backend or database. GitHub Pages hosts the public reference deployment.
+PixelGate is a static React/Vite app. It needs HTTPS and worker support; it has no application database or media backend. Six-digit pairing uses PeerJS’s shared signaling service by default. GitHub Pages hosts the public reference deployment.
 
 ## GitHub Pages
 
@@ -29,9 +29,23 @@ Run `npm run build` and upload the contents of `dist/`. The app uses relative as
 
 Do not route media through the host or add a public upload endpoint. Keep the Content Security Policy and bundled workers. When adding response headers, permit same-origin workers and WebAssembly (`wasm-unsafe-eval`), and retain `Referrer-Policy: no-referrer`.
 
+## Pairing service
+
+The default build uses [PeerJS’s public signaling service](https://peerjs.com/server/cloud), so no API key or backend account is required. It exchanges connection descriptions only. Shared-service availability and global limits are controlled by PeerJS; high-traffic deployments should operate their own PeerServer. No TURN service is configured.
+
+To use your own TLS-enabled PeerServer, keep its default `peerjs` key, disable peer discovery, and build with its HTTPS base URL:
+
+```sh
+VITE_PIXELGATE_SIGNAL_URL=https://pairing.example.org npm run build
+```
+
+The build adds the configured HTTPS/WSS origin to the Content Security Policy. Use the same environment variable when running `npm run deploy:pages`. If the server is mounted on a path, include that path in the URL. Restrict server request sizes, concurrent connections, and request rates; do not enable ID discovery or log connection payloads. Local HTTP is allowed only for localhost development.
+
+**Use copy/paste pairing** selects the backend-free fallback before opening a connection. It keeps the longer response exchange for deployments or networks where signaling is unavailable.
+
 ## Verify a deployment
 
-Check the deployment status, `index.html`, `build.json`, and the referenced JavaScript/CSS/worker assets. On two devices, exercise receiver link creation, sender response, explicit approval, a synthetic transfer, independent SHA-256 readback, download verification, and revocation. Repeat storage/permission checks on the actual supported devices.
+Check the deployment status, `index.html`, `build.json`, and the referenced JavaScript/CSS/worker assets. On two devices, exercise six-digit code creation, sender connection, explicit approval, code expiry/consumption, a synthetic transfer, independent SHA-256 readback, download verification, and revocation. Repeat storage/permission checks on the actual supported devices.
 
 ## Origin changes
 

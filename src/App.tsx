@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { QrImage } from './QrImage';
+import { CodeInput } from './CodeInput';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -26,6 +27,7 @@ import {
   X,
 } from 'lucide-react';
 import { Connection, type PairRoom } from '@/lib/bridge/connection';
+import { CodeConnection } from '@/lib/bridge/code-connection';
 import { pairingLink } from '@/lib/bridge/pairing';
 import { local } from '@/lib/bridge/database';
 import { Receiver, Sender } from '@/lib/bridge/transfer';
@@ -80,6 +82,7 @@ export default function PixelGate() {
     'transfer',
   );
   const [role, setRole] = useState<'send' | 'receive'>('send');
+  const [pairingMode, setPairingMode] = useState<'code' | 'manual'>('code');
   const [status, setStatus] = useState('Not connected');
   const [connected, setConnected] = useState(false);
   const [room, setRoom] = useState<PairRoom>();
@@ -105,7 +108,7 @@ export default function PixelGate() {
   const [visible, setVisible] = useState(50);
   const [historySession, setHistorySession] = useState('all');
   const [elapsed, setElapsed] = useState(0);
-  const connection = useRef<Connection | undefined>(undefined);
+  const connection = useRef<Connection | CodeConnection | undefined>(undefined);
   const sender = useRef<Sender | undefined>(undefined);
   const receiver = useRef<Receiver | undefined>(undefined);
   const folder = useRef<FileSystemDirectoryHandle | undefined>(undefined);
@@ -140,7 +143,10 @@ export default function PixelGate() {
       const params = new URLSearchParams(location.hash.slice(1));
       const pairing = params.get('connect');
       if (pairing && pairing.length <= 16004) {
-        queueMicrotask(() => setCode(pairing));
+        queueMicrotask(() => {
+          setPairingMode(/^\d{6}$/.test(pairing) ? 'code' : 'manual');
+          setCode(pairing);
+        });
         historyReplace();
       }
     };
@@ -311,7 +317,9 @@ export default function PixelGate() {
     receivedRecords.current.clear();
     setReceived([]);
     startTime.current = Date.now();
-    const conn = new Connection(role, {
+    const PairingConnection =
+      pairingMode === 'code' ? CodeConnection : Connection;
+    const conn = new PairingConnection(role, {
       room: setRoom,
       status: setStatus,
       connected: (channel) => {
@@ -651,12 +659,13 @@ export default function PixelGate() {
                     is required.
                   </li>
                   <li>
-                    On your Pixel, choose Receive and create a connection.
+                    On the receiving device, choose Receive and create a
+                    connection.
                   </li>
                   <li>
-                    On the sender, scan or paste the receiver link and prepare a
-                    response. Copy that response back to the receiver, paste it,
-                    and approve the sender.
+                    On the sender, enter the receiver’s six-digit code or scan
+                    its QR code and choose Connect. Approve the sender on the
+                    receiver. No response needs copying.
                   </li>
                   <li>
                     Select files or folders and send. Keep both browsers open on
@@ -722,11 +731,12 @@ export default function PixelGate() {
                   suspend transfers.
                 </p>
                 <p>
-                  Pairing links carry only connection details and expire after
-                  ten minutes. Share them only with your other device. No
-                  pairing server or TURN relay is used. Internet loads the site
-                  and helps discover network routes; file bytes use the direct
-                  encrypted peer connection.
+                  Six-digit codes expire after ten minutes and are released
+                  after one approval. PeerJS exchanges connection details for
+                  pairing; it receives no files, filenames, hashes, or history.
+                  Copy/paste pairing is also available. No TURN relay is
+                  configured; file bytes use the direct encrypted peer
+                  connection.
                 </p>
               </section>
             </div>
@@ -775,21 +785,42 @@ export default function PixelGate() {
                         <div className="pairing-start">
                           {role === 'send' ? (
                             <>
-                              <label htmlFor="pair-link">
-                                Receiver’s pairing link
+                              <label
+                                htmlFor={
+                                  pairingMode === 'code'
+                                    ? 'pair-code'
+                                    : 'pair-link'
+                                }
+                              >
+                                {pairingMode === 'code'
+                                  ? 'Receiver’s six-digit code'
+                                  : 'Receiver’s pairing link'}
                               </label>
                               <div className="pairing-input">
-                                <textarea
-                                  id="pair-link"
-                                  autoComplete="off"
-                                  placeholder="Paste the receiver link here, or scan its QR code."
-                                  maxLength={18048}
-                                  value={code}
-                                  onChange={(e) => setCode(e.target.value)}
-                                />
+                                {pairingMode === 'code' ? (
+                                  <CodeInput
+                                    value={code}
+                                    onChange={setCode}
+                                    disabled={busy}
+                                  />
+                                ) : (
+                                  <textarea
+                                    id="pair-link"
+                                    autoComplete="off"
+                                    placeholder="Paste the receiver link here, or scan its QR code."
+                                    maxLength={18048}
+                                    value={code}
+                                    onChange={(e) => setCode(e.target.value)}
+                                  />
+                                )}
                                 <button
                                   className="button primary"
-                                  disabled={busy || !code.trim()}
+                                  disabled={
+                                    busy ||
+                                    (pairingMode === 'code'
+                                      ? !/^\d{6}$/.test(code)
+                                      : !code.trim())
+                                  }
                                   onClick={() => void guarded(connect)}
                                 >
                                   {busy ? (
@@ -797,7 +828,9 @@ export default function PixelGate() {
                                   ) : (
                                     <Link size={16} />
                                   )}
-                                  Prepare sender response
+                                  {pairingMode === 'code'
+                                    ? 'Connect'
+                                    : 'Prepare sender response'}
                                 </button>
                               </div>
                               <p className="hint">
@@ -854,7 +887,12 @@ export default function PixelGate() {
                                   qr.offer === room.offer &&
                                   qr.url &&
                                   qr.modules && (
-                                    <div className="qr-code">
+                                    <div
+                                      className={
+                                        'qr-code' +
+                                        (room.code ? ' compact' : '')
+                                      }
+                                    >
                                       <QrImage
                                         src={qr.url}
                                         modules={qr.modules}
@@ -896,7 +934,41 @@ export default function PixelGate() {
                                     </div>
                                   )}
                                 <div>
-                                  <strong>1. Share your receiver link</strong>
+                                  <strong>
+                                    {room.code
+                                      ? '1. Enter this code on the sender'
+                                      : '1. Share your receiver link'}
+                                  </strong>
+                                  {room.code && (
+                                    <>
+                                      <div
+                                        className="code-slots code-display"
+                                        aria-label="Pairing code"
+                                      >
+                                        {room.code
+                                          .split('')
+                                          .map((digit, index) => (
+                                            <span key={index}>{digit}</span>
+                                          ))}
+                                      </div>
+                                      <button
+                                        className="text-button"
+                                        onClick={() =>
+                                          void guarded(async () => {
+                                            await navigator.clipboard.writeText(
+                                              room.code!,
+                                            );
+                                            setNotice(
+                                              'Six-digit pairing code copied.',
+                                            );
+                                          })
+                                        }
+                                      >
+                                        <Copy size={14} />
+                                        Copy code
+                                      </button>
+                                    </>
+                                  )}
                                   <p className="hint">
                                     Scan with your sending device’s camera.
                                     Enlarge the code if needed, or copy the
@@ -930,56 +1002,107 @@ export default function PixelGate() {
                                   </p>
                                 </div>
                               </div>
-                              <label
-                                className="pairing-label"
-                                htmlFor="receiver-link"
-                              >
-                                Receiver link
-                              </label>
-                              <textarea
-                                className="pairing-text"
-                                id="receiver-link"
-                                readOnly
-                                value={pairingLink(room.offer!)}
-                                onFocus={(e) => e.target.select()}
-                              />
-                              <div className="approval">
-                                <div>
+                              {!room.code && (
+                                <>
                                   <label
                                     className="pairing-label"
-                                    htmlFor="sender-response"
+                                    htmlFor="receiver-link"
                                   >
-                                    2. Paste the sender response
+                                    Receiver link
                                   </label>
-                                  <p>
-                                    Approve only the response from your sending
-                                    device.
+                                  <textarea
+                                    className="pairing-text"
+                                    id="receiver-link"
+                                    readOnly
+                                    value={pairingLink(room.offer!)}
+                                    onFocus={(e) => e.target.select()}
+                                  />
+                                </>
+                              )}
+                              {room.code ? (
+                                <div className="approval">
+                                  <strong>
+                                    {room.pending
+                                      ? '2. Your sender is ready'
+                                      : '2. Waiting for your sender'}
+                                  </strong>
+                                  <p className="hint">
+                                    {room.pending
+                                      ? 'Approve only if your sending device is waiting for approval. Files cannot arrive before you approve.'
+                                      : 'Open Send on the other device and enter the six digits above, or scan the QR code.'}
                                   </p>
+                                  <button
+                                    className="button primary"
+                                    disabled={busy || !room.pending}
+                                    onClick={() =>
+                                      void guarded(async () => {
+                                        await connection.current?.approve('');
+                                      })
+                                    }
+                                  >
+                                    <Check size={16} />
+                                    Approve sender
+                                  </button>
+                                  {room.pending && (
+                                    <button
+                                      className="text-button"
+                                      disabled={busy}
+                                      onClick={() => void guarded(disconnect)}
+                                    >
+                                      Decline sender
+                                    </button>
+                                  )}
                                 </div>
-                                <textarea
-                                  className="pairing-text"
-                                  id="sender-response"
-                                  placeholder="Paste the response copied on the sender."
-                                  maxLength={18048}
-                                  value={response}
-                                  onChange={(e) => setResponse(e.target.value)}
-                                />
-                                <button
-                                  className="button primary"
-                                  disabled={busy || !response.trim()}
-                                  onClick={() =>
-                                    void guarded(async () => {
-                                      await connection.current?.approve(
-                                        response,
-                                      );
-                                    })
-                                  }
-                                >
-                                  <Check size={16} />
-                                  Approve sender
-                                </button>
-                              </div>
+                              ) : (
+                                <div className="approval">
+                                  <div>
+                                    <label
+                                      className="pairing-label"
+                                      htmlFor="sender-response"
+                                    >
+                                      2. Paste the sender response
+                                    </label>
+                                    <p>
+                                      Approve only the response from your
+                                      sending device.
+                                    </p>
+                                  </div>
+                                  <textarea
+                                    className="pairing-text"
+                                    id="sender-response"
+                                    placeholder="Paste the response copied on the sender."
+                                    maxLength={18048}
+                                    value={response}
+                                    onChange={(e) =>
+                                      setResponse(e.target.value)
+                                    }
+                                  />
+                                  <button
+                                    className="button primary"
+                                    disabled={busy || !response.trim()}
+                                    onClick={() =>
+                                      void guarded(async () => {
+                                        await connection.current?.approve(
+                                          response,
+                                        );
+                                      })
+                                    }
+                                  >
+                                    <Check size={16} />
+                                    Approve sender
+                                  </button>
+                                </div>
+                              )}
                             </>
+                          ) : room.code ? (
+                            <div className="pairing-response">
+                              <strong>Waiting for receiver approval</strong>
+                              <p className="hint">
+                                On the receiving device, choose Approve sender.
+                                Keep this tab open. You don’t need to copy a
+                                response.
+                              </p>
+                            </div>
                           ) : (
                             <div className="pairing-response">
                               <strong>
@@ -1031,6 +1154,29 @@ export default function PixelGate() {
                               : 'Disconnect'}
                           </button>
                         </div>
+                      )}
+                      {!room && (
+                        <button
+                          className="text-button"
+                          disabled={busy}
+                          onClick={() => {
+                            setPairingMode(
+                              pairingMode === 'code' ? 'manual' : 'code',
+                            );
+                            setCode('');
+                            setResponse('');
+                          }}
+                        >
+                          {pairingMode === 'code'
+                            ? 'Use copy/paste pairing'
+                            : 'Use six-digit pairing'}
+                        </button>
+                      )}
+                      {!room && pairingMode === 'code' && (
+                        <p className="hint">
+                          Pairing uses PeerJS for connection details only. Files
+                          transfer directly between your devices.
+                        </p>
                       )}
                     </section>
                     <section className="panel files-panel">

@@ -1,18 +1,22 @@
 # Validation record
 
-## GitHub Pages edition · 0.2.1
+## GitHub Pages edition · 0.3.0
 
 Executed on **October 6, 2026**, with synthetic fixtures:
 
 - TypeScript, ESLint, and the production static build pass.
-- **56 unit/integration tests pass**: independent SHA-256, deliberate corruption, changed source content, durable checkpoint recovery, missing staged copies, duplicate/conflict handling, destination/export readback, denied access, quota exhaustion, safe/Unicode paths, 10,000 manifest paths, and 5 GB manifest sizes.
+- **66 unit/integration tests pass**: independent SHA-256, deliberate corruption, changed source content, durable checkpoint recovery, missing staged copies, duplicate/conflict handling, destination/export readback, denied access, quota exhaustion, safe/Unicode paths, 10,000 manifest paths, and 5 GB manifest sizes.
 - Isolated local Git remotes verify first-time Pages publication, deployment history preservation, and rejection of uncommitted source.
 - Serverless pairing tests cover bounded compression/decompression, invalid descriptions and extra fields, ten-minute expiry, wrong session responses, explicit approval, one-sender enforcement, immediate revocation, and copied offer/answer negotiation.
-- **9 Playwright browser checks pass**, exercising a real **2 MiB + 111 byte** peer transfer, independent Node/Web Crypto source/staging hashes, batch download, reselected export verification, damaged export rejection, history after refresh, URL-fragment import in an already-open tab, invalid response rejection, mobile layout, and 200% text sizing.
-- Request inspection checks that static hosting receives only GET asset/document requests and no application signaling calls, pairing tokens, filenames, hashes, or file data.
+- **12 Playwright browser checks pass**, exercising a real **2 MiB + 111 byte** peer transfer, independent Node/Web Crypto source/staging hashes, batch download, reselected export verification, damaged export rejection, history after refresh, URL-fragment import in an already-open tab, invalid response rejection, mobile layout, and 200% text sizing.
+- Request inspection checks that static hosting receives only GET asset/document requests and no pairing tokens, filenames, hashes, or file data. Code pairing exchanges signaling frames with PeerJS; copy/paste pairing makes no signaling-service connection.
 - QR regression checks decode the displayed SVG using the independent `jsQR` decoder at desktop, enlarged-dialog, and 390 px mobile sizes. The decoded link is then used for the real peer transfer. Physical phone-camera scanning still requires device testing.
 
-The GitHub Pages edition has no pairing API or cloud database. Tests from the earlier Sites edition’s room service are not claims about this release.
+The GitHub Pages edition has no application database or media API. Default pairing uses PeerJS; copy/paste pairing remains available. Tests from the earlier Sites edition’s room service are not claims about this release.
+
+Six-digit pairing tests cover cryptographic code sampling, leading zeroes, bounded collision retries, pre-approval media rejection, connection-bound approval, one-sender enforcement, code expiry, revocation, connection timeouts, and signaling disconnection after approval. Three browser scenarios use an isolated local PeerServer with real WebRTC, independently decode the short QR, transfer **1 MiB + 37 bytes**, independently hash staged bytes, and reject a consumed code. Captured signaling frames are bounded and contain no fixture filename or SHA-256.
+
+The Chromium six-digit scenario also passes against the real public PeerJS service. A custom signaling build verifies that the configured HTTPS/WSS origin replaces the default signaling origin in the Content Security Policy.
 
 ## Browser environment
 

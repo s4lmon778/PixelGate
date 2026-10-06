@@ -4,6 +4,8 @@ export interface PairRoom {
   expires: number;
   offer?: string;
   response?: string;
+  code?: string;
+  pending?: boolean;
 }
 
 export class Connection {
