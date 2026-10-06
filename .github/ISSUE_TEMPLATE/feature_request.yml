@@ -1,0 +1,17 @@
+name: Feature request
+description: Suggest a focused improvement to PixelGate.
+title: '[Feature]: '
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior and alternatives
+      description: Consider integrity, local privacy, and browser limits.
+    validations:
+      required: true

@@ -1,0 +1,28 @@
+name: Bug report
+description: Report a reproducible pairing, transfer, verification, or saving problem.
+title: '[Bug]: '
+body:
+  - type: markdown
+    attributes:
+      value: 'Use synthetic files. Do not share media, pairing links/responses, network addresses, or personal reports. See SECURITY.md for private vulnerability reporting.'
+  - type: input
+    id: environment
+    attributes:
+      label: Device, OS, and browser version
+      placeholder: Desktop / phone model, OS version, browser and version
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include transfer size, saving mode, and where the failure occurred.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: Include the exact error text, without private transfer details.
+    validations:
+      required: true

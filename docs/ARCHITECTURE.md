@@ -1,0 +1,42 @@
+# Architecture
+
+PixelGate 0.2 is a static TypeScript/React application. The UI runs in a browser; hashing and private staging run in dedicated workers. GitHub Pages serves only the application bundle.
+
+## Pairing
+
+The receiver creates a reliable ordered data channel and gathers an SDP offer. A versioned, compressed envelope contains the description, random session ID, and ten-minute expiry. The receiver’s link places this envelope in the URL fragment. The sender imports it, produces an answer envelope, and copies its response back to the receiver. Explicit approval validates kind, session, and expiry before setting the remote description.
+
+There is no room database or signaling API. Pairing descriptions are bounded and accept data-channel SDP only. Fixed-size decompression output prevents compressed inputs from allocating an unbounded buffer. No camera or microphone access is requested.
+
+WebRTC ICE uses Cloudflare STUN to discover routes. No TURN relay is configured. Browser host-address privacy and network isolation can prevent discovery or a direct connection.
+
+## Transfer protocol
+
+The version 1 ordered channel carries JSON controls and binary frames:
+
+| Control                       | Purpose                                                        |
+| ----------------------------- | -------------------------------------------------------------- |
+| `hello`                       | Negotiate protocol version                                     |
+| `start` / `ready`             | Send manifest; reconcile receiver offset or verified duplicate |
+| `ack`                         | Confirm a durable checkpoint                                   |
+| `finish` / `result`           | Close staging, independently hash it, report verification      |
+| `pause` / `resume` / `cancel` | Control the active queue/file                                  |
+| `error` / `complete`          | Report failures or completion                                  |
+
+Source hashes are computed incrementally. File IDs hash the source SHA-256 plus relative path. One active transfer uses 16 KiB frames and a 1 MiB receiver checkpoint buffer; one subsequent file hashes ahead. Sender buffering is bounded. Worker flush precedes the IndexedDB checkpoint commit, which precedes acknowledgment.
+
+After reconnect, the sender rehashes selected sources and the receiver owns the resume offset. Unacknowledged tails are truncated to the last stored checkpoint. Missing retained copies are retransferred. Verified destination/staged duplicates are reread before a skip is acknowledged.
+
+## Storage and verification
+
+IndexedDB stores receiver records, sender records, local sessions, and history. OPFS holds partial/staged file bytes; a dedicated worker owns synchronous access handles. The staged file is closed before reread and SHA-256 comparison.
+
+Direct folder saving validates paths, preserves directory structure, detects same-size/same-hash copies, preserves conflicts with numbered filenames, commits on close, and rereads the destination. Manual download initiation does not prove exported integrity; a reselected saved copy must hash-match.
+
+A record’s transfer phase and verification scope are separate. Scopes are `none`, `browser`, `destination`, or `exported`. Integrity failure blocks saving. Permission/quota failure pauses or preserves verified staging for retry.
+
+Internal `pixelbridge` storage/channel identifiers retain the original v1 namespace. Public branding is PixelGate. Because the GitHub deployment has a new origin, existing Sites storage is not migrated.
+
+## Boundaries
+
+No filesystem timestamp restoration, native atomic rename, background service, Android media-scanner control, source deletion, or Google Photos backup verification is included. Browser tabs must remain open. Photos picker output is the source of truth; original Photos-resource retrieval is not guaranteed.
