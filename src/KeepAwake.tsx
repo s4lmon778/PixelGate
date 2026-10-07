@@ -98,8 +98,46 @@ export function KeepAwake({ active }: { active: boolean }) {
             }
           }}
         >
-          <span />
-          {supported && enabled ? 'On' : 'Off'}
+          <span className="awake-scene" aria-hidden="true">
+            <svg className="awake-sky" viewBox="0 0 96 42" fill="none">
+              <g className="awake-halo" fill="white">
+                <circle cx="21" cy="21" r="59" opacity=".07" />
+                <circle cx="21" cy="21" r="45" opacity=".1" />
+                <circle cx="21" cy="21" r="31" opacity=".14" />
+              </g>
+              <g className="awake-clouds">
+                <path
+                  d="M27 44c0-8 9-14 16-10 1-10 12-15 20-9 3-8 13-10 20-4 0-8 6-13 13-12v35Z"
+                  fill="#b5d9f1"
+                />
+                <path
+                  d="M39 44c0-6 6-10 12-7 2-7 10-11 16-7 3-8 12-10 18-4 2-6 6-10 11-10v28Z"
+                  fill="#e4f2fa"
+                />
+              </g>
+              <g className="awake-stars" fill="#e3ebf5">
+                <path d="m16 8 1.2 3.2 3.3 1.1-3.3 1.2-1.2 3.2-1.1-3.2-3.3-1.2 3.3-1.1ZM34 26l.9 2.4 2.4.9-2.4.8-.9 2.4-.8-2.4-2.4-.8 2.4-.9Z" />
+                <circle cx="7" cy="23" r=".9" />
+                <circle cx="24" cy="34" r=".9" />
+                <circle cx="32" cy="10" r=".8" />
+                <circle cx="43" cy="20" r=".8" />
+              </g>
+            </svg>
+            <span className="awake-thumb">
+              <svg
+                className="awake-craters"
+                viewBox="0 0 34 34"
+                fill="currentColor"
+              >
+                <circle cx="11" cy="19" r="5.3" />
+                <circle cx="19" cy="9" r="3.2" />
+                <circle cx="25" cy="23" r="3.7" />
+              </svg>
+            </span>
+          </span>
+          <span className="awake-word" aria-hidden="true">
+            {supported && enabled ? 'On' : 'Off'}
+          </span>
         </button>
       </div>
       <p id="awake-status" role="status">

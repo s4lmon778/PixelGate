@@ -1,5 +1,13 @@
 # Validation record
 
+## GitHub Pages edition · 0.3.11
+
+Executed on **October 7, 2026**:
+
+- The screen-awake control now uses locally implemented SVG/CSS sky, clouds, stars, a sun, and a cratered moon, inspired by the user-provided design reference. The preference, actual lock status, retry logic, and transfer protocol are unchanged. On/Off labels and switch semantics remain; transitions honour the existing reduced-motion rule and do not loop.
+- Strict TypeScript, ESLint, production build, and **103 unit/integration tests** pass. All **15 targeted browser cases** pass across Chromium, Firefox, and WebKit for responsive layouts, 200% text enlargement, unsupported wake capability, release/reacquisition, denial/retry, persisted preference, and disposal of a late-resolving lock.
+- On/off appearances were visually inspected in light and dark themes at 390 pixels. A supplementary 320-pixel viewport with 200% text has no horizontal overflow. Wake APIs in the lifecycle fixtures are controlled; physical screen-power behavior remains a hardware check. The Safari storage fix from 0.3.10 remains included.
+
 ## GitHub Pages edition · 0.3.10
 
 Executed on **October 7, 2026**, with synthetic fixtures:

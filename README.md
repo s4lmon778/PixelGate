@@ -72,6 +72,10 @@ On Android, **Open in Chrome** provides a user-tapped link to the full Chrome ap
 
 The main-page **Keep screen awake** switch defaults on during pairing and connections, with the preference saved locally. Its status distinguishes a requested lock from an active lock, and reports denial or release. The app reacquires an enabled screen lock when the tab becomes visible again, releases it when switched off or disconnected, and provides a retry action. Unsupported browsers show device screen-timeout guidance.
 
+The sun/cloud and moon/star switch indicates the local **On/Off preference**; the status message beneath it confirms whether a wake lock is actually active. The transition honours reduced-motion settings. Its SVG/CSS artwork is implemented locally, inspired by [Day Night Switch Buttons by Ashish Shakya for Hogoco](https://dribbble.com/shots/15091716-Day-Night-Switch-Buttons), with PixelGate's blue/slate palette and compact controls; no third-party image assets are loaded.
+
+![PixelGate's screen-awake switch](docs/assets/awake-switch.png)
+
 Screen Wake Lock prevents automatic screen lock where supported; it does not keep a browser running after manual locking, app switching, or OS suspension. Power-saving policies may release it. Enable it on both devices and keep both tabs visible. Checkpoint-based reconnection remains the recovery path for interrupted transfers.
 
 In **History**, **Clear history** clears all displayed records or the selected session, with confirmation. It preserves staged bytes, saved copies, and receiver resume manifests. **Clear verified staging** is a separate storage action. Resuming, verifying, or saving retained files can create new history records.
@@ -217,7 +221,7 @@ The signaling broker is a trust dependency. A six-digit code and SHA-256 do not 
 
 ## Validation and boundaries
 
-Recorded through **0.3.10 on October 7, 2026** across full and targeted runs; these are completed checks, not a continuously updated CI badge. Historical fault-injection coverage is documented by release in [VALIDATION.md](VALIDATION.md).
+Recorded through **0.3.11 on October 7, 2026** across full and targeted runs; these are completed checks, not a continuously updated CI badge. Historical fault-injection coverage is documented by release in [VALIDATION.md](VALIDATION.md).
 
 | Evidence                                          | Coverage                                                                                                                                                                                                                                                                                        |
 | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
