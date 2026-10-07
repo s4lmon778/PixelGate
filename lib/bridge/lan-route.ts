@@ -1,4 +1,4 @@
-/** A user-supplied Wi-Fi IPv4 address, used only in this receiver tab. */
+/** A user-supplied local IPv4 address, used only in this receiver tab. */
 export function lanAddress(input: string) {
   const address = input.trim();
   if (!address) return '';
@@ -7,13 +7,13 @@ export function lanAddress(input: string) {
     parts.length !== 4 ||
     parts.some((part) => !/^(0|[1-9]\d{0,2})$/.test(part) || Number(part) > 255)
   )
-    throw new Error('Enter the sender’s Wi-Fi IPv4 address.');
+    throw new Error('Enter the sender’s local IPv4 address.');
   const [a, b] = parts.map(Number);
   // LANs can assign addresses outside RFC 1918, including shared addresses.
   // Keep those valid; reject loopback, multicast, unspecified, and link-local destinations.
   if (a === 0 || a === 127 || a >= 224 || (a === 169 && b === 254))
     throw new Error(
-      'Enter the sender’s Wi-Fi IPv4 address, not a loopback or multicast address.',
+      'Enter the sender’s local IPv4 address, not a loopback or multicast address.',
     );
   return address;
 }

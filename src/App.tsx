@@ -275,7 +275,7 @@ export default function PixelGate() {
       );
     if (!navigator.storage?.getDirectory)
       throw new Error(
-        'This browser cannot stage files safely. Use a recent Chrome, Firefox, or Safari.',
+        'This browser does not support the local file storage required for receiving. Try an updated browser with browser-private file storage support.',
       );
     await stagingDirectory();
     const probe = `probe-${crypto.randomUUID()}`;
@@ -380,7 +380,7 @@ export default function PixelGate() {
     const picker = (window as BrowserFolderWindow).showDirectoryPicker;
     if (!picker) {
       setNotice(
-        'Folder saving is unavailable in this browser. Download verified copies and move them into DCIM/PixelGate.',
+        'Folder saving is unavailable in this browser. Download verified copies, then move them to your preferred folder.',
       );
       return;
     }
@@ -681,16 +681,17 @@ export default function PixelGate() {
                   </li>
                   <li>
                     Select files or folders and send. Keep both browsers open on
-                    the same Wi-Fi.
+                    the same trusted local network or hotspot.
                   </li>
                   <li>
-                    Save verified copies into DCIM/PixelGate. If you download
-                    them, select the saved files again to verify their final
-                    bytes.
+                    Save verified copies to a folder of your choice, or download
+                    them. After downloading, select the saved files again to
+                    verify their final bytes.
                   </li>
                   <li>
-                    Open Google Photos and enable backup for that folder.
-                    Confirm backup there before freeing device space.
+                    If you use a photo library, document manager, or backup
+                    service, import or sync the saved files there. Confirm any
+                    backup in that service before removing source files.
                   </li>
                 </ol>
               </section>
@@ -710,16 +711,29 @@ export default function PixelGate() {
                 </p>
                 <p>
                   Downloads stay pending until checked. PixelGate does not
-                  verify Google Photos backup.
+                  verify backups made by other apps or services.
                 </p>
               </section>
               <section className="panel">
-                <h2>iPhone and browser limits</h2>
+                <h2>Browser and network limits</h2>
                 <p>
-                  Integrity covers the bytes supplied by your picker. A browser
-                  cannot guarantee original Apple Photos resources, paired Live
-                  Photos, or iCloud originals. For originals, export unmodified
-                  files through Apple’s tools before selection.
+                  Guest, campus, hotel, and workplace Wi-Fi may allow internet
+                  access while blocking local discovery or connections between
+                  devices. Use the same exact network on both devices; matching
+                  network names alone do not guarantee a direct route. PixelGate
+                  cannot change network access rules.
+                </p>
+                <p>
+                  Integrity covers the files supplied by your device’s picker.
+                  Photo libraries and cloud services may provide exported or
+                  converted copies rather than originals. Export unmodified
+                  originals through the source app when you need them.
+                </p>
+                <p>
+                  For example, Apple Photos originals, paired Live Photos, and
+                  iCloud-original retrieval are not guaranteed by a browser
+                  picker. PixelGate preserves the bytes it receives from the
+                  picker without further conversion.
                 </p>
                 <p>
                   Folder saving depends on browser support and permission. Use
@@ -738,8 +752,8 @@ export default function PixelGate() {
                 </p>
                 <p>
                   Estimated staging space is this browser’s remaining allowance
-                  for received copies. Safari and Arc can report different
-                  estimates; it is not a guarantee of free disk space or a limit
+                  for received copies. Estimates vary by browser, profile, and
+                  device; this is not a guarantee of free disk space or a limit
                   on the total you can transfer. Each file must fit alongside
                   copies still staged here. Save or download, verify, then clear
                   staged copies in batches to reuse the space. Saving to a
@@ -888,18 +902,18 @@ export default function PixelGate() {
                                   <p className="hint" id="lan-help">
                                     Connection details are collected
                                     automatically. For advanced diagnosis only,
-                                    you can supply the sender’s Wi-Fi IPv4
-                                    address before creating a code. On iPhone:
-                                    Settings → Wi-Fi → ⓘ beside the connected
-                                    network → IP Address. This can help when
-                                    local device discovery fails; it cannot
-                                    bypass a network that blocks devices.
+                                    you can supply the sender’s local IPv4
+                                    address before creating a code. Find it in
+                                    that device’s network settings for its
+                                    current Wi-Fi or wired connection. This can
+                                    help when local device discovery fails; it
+                                    cannot bypass a network that blocks devices.
                                   </p>
                                   <label
                                     className="pairing-label"
                                     htmlFor="sender-ip"
                                   >
-                                    Sender’s Wi-Fi IP (optional)
+                                    Sender’s local IPv4 (optional)
                                   </label>
                                   <input
                                     id="sender-ip"
@@ -1357,7 +1371,8 @@ export default function PixelGate() {
                             </span>
                             <h3>Drop files or folders here</h3>
                             <p>
-                              Your photos, videos, and everything in between.
+                              Documents, photos, videos, archives, and other
+                              files.
                             </p>
                             <div className="button-row">
                               <button
@@ -1456,15 +1471,16 @@ export default function PixelGate() {
                               <summary>How storage works</summary>
                               <p>
                                 This is the browser’s estimated remaining
-                                storage allowance for this site. Safari and Arc
-                                can show different amounts. Actual free disk
-                                space may be lower.
+                                storage allowance for this site. Estimates vary
+                                by browser, profile, and device. Actual free
+                                disk space may be lower.
                               </p>
                               <p>
                                 Each file must fit alongside copies still staged
-                                here. You can transfer more in total by saving
-                                or downloading a batch, verifying the saved
-                                copies, then choosing Clear verified staging.
+                                here. For larger collections, work in batches:
+                                save or download the files, verify the saved
+                                copies, then choose Clear verified staging to
+                                make room for the next batch.
                               </p>
                               <p>
                                 Folder saving also keeps a staged copy until you
@@ -1498,8 +1514,9 @@ export default function PixelGate() {
                             </button>
                           </div>
                           <p className="hint destination-hint">
-                            For Google Photos, choose or create DCIM/PixelGate.
-                            Folder access depends on your browser.
+                            Choose a folder for your files, such as Documents,
+                            Downloads, or a media folder. Folder access depends
+                            on your browser.
                           </p>
                           {folder.current && (
                             <button
@@ -1914,7 +1931,7 @@ export default function PixelGate() {
               >
                 Source on GitHub
               </a>{' '}
-              · Google Photos backup is confirmed separately.
+              · Confirm backups in your chosen app or service.
             </span>
           </footer>
         </main>

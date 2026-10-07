@@ -25,7 +25,7 @@ PixelGate transfers files between computers, phones, and tablets without a nativ
 
 The application is a static TypeScript/React build hosted on GitHub Pages. PeerJS exchanges connection metadata for six-digit pairing; file payloads travel over a direct encrypted WebRTC data channel. Manifests, filenames, hashes, file bytes, and transfer history stay on the participating devices.
 
-> **Status:** experimental, with reproducible integrity and browser tests. A user completed an iPhone-to-Mac transfer over a Personal Hotspot. This does not certify every browser/network combination, real files above 4 GB, or 100 GB sessions. See [validation and boundaries](#validation-and-boundaries).
+> **Status:** experimental, with reproducible integrity and browser tests. Compatibility depends on browser capabilities, device storage, and network conditions. Real files above 4 GB and 100 GB sessions require further hardware validation. See [validation and boundaries](#validation-and-boundaries).
 
 ## Contents
 
@@ -41,7 +41,7 @@ The application is a static TypeScript/React build hosted on GitHub Pages. PeerJ
 
 ## Quick start
 
-1. Open **[PixelGate](https://s4lmon778.github.io/PixelGate/)** on both devices, using the same trusted Wi-Fi network or a Personal Hotspot.
+1. Open **[PixelGate](https://s4lmon778.github.io/PixelGate/)** on both devices, using the same trusted local network or a hotspot.
 2. On the destination device, choose **Receive files**, optionally choose a destination folder, and click **Create a connection**.
 3. On the sender, enter the receiver's **six-digit code** or scan its QR code, then click **Connect**. Leading zeroes are valid; use **Enlarge QR code** if needed.
 4. On the receiver, click **Approve sender** for your intended device. No sender response needs copying.
@@ -57,7 +57,7 @@ Codes expire after ten minutes and are released when the approved connection act
 | Direct folder   | Copy verified staged bytes into a user-selected folder, where browser support permits. | Close the destination writer, reread the destination file, and compare size and SHA-256. |
 | Manual download | Download verified browser copies and move them to the desired folder.                  | Mark the downloaded copy as pending until the user reselects it for hash verification.   |
 
-On Android, `DCIM/PixelGate` is a suggested destination. Google Photos visibility and backup must be enabled and confirmed in Google Photos. PixelGate never reports backup success or deletes source media.
+Choose a destination that fits your workflow: a Documents folder, an archive directory, Downloads, or a media folder. If you use a photo library, document manager, or backup service, import or sync the saved files through that app and confirm backup there. For example, Android users importing photos can choose `DCIM/PixelGate` and configure that folder in Google Photos. PixelGate never reports backup success or deletes source files.
 
 ## Features
 
@@ -226,15 +226,17 @@ Full test conditions, browser versions, physical-device results, and remaining v
 
 Confirm both devices use the current app version. Connection details are exchanged automatically; normal six-digit pairing requires no IP lookup. Diagnostics expose candidate delivery and route states without exporting addresses.
 
-Try a Personal Hotspot or another trusted network. A user completed a transfer over a hotspot after the original Wi-Fi failed, supporting a network-dependent problem without identifying the responsible router policy. Same-Wi-Fi membership alone does not guarantee local discovery or direct device traffic. No TURN relay is configured.
+Use the same exact network on both devices. For example, a campus's guest and protected networks can have different routing and access policies. Guest, campus, hotel, and workplace Wi-Fi may allow internet access while blocking local discovery or connections between devices; sharing a network name does not guarantee reachability. A completed transfer on a hotspot but not on another network supports a network-dependent restriction, without identifying the exact policy.
 
-For advanced local-discovery diagnosis, the receiver can revoke the failed connection and enter the **sender's Wi-Fi IPv4 address** under **Advanced network settings** before creating a fresh code. On iPhone, find it in **Settings → Wi-Fi → ⓘ → IP Address**. The address is used locally to try the negotiated UDP application port; it is not added to pairing metadata, history, or exported reports. This optional route cannot bypass blocked device traffic or provide IPv6-only connectivity. Normal ICE signaling already exchanges network information.
+Timeout messages automatically distinguish incomplete description exchange, rejected candidates, and a failed direct route. If both configured STUN services report error 701 and no local server-reflexive candidate was gathered, the message also reports their unreachability. These observations cannot establish which router or firewall rule is responsible. Ask the network administrator whether local mDNS discovery and direct WebRTC UDP traffic between your devices are allowed, or use a trusted network that permits local connections. PixelGate cannot change network access rules. No TURN relay is configured. Specific hardware and network observations are recorded in [VALIDATION.md](VALIDATION.md).
+
+For advanced local-discovery diagnosis, the receiver can revoke the failed connection and enter the **sender's local IPv4 address** under **Advanced network settings** before creating a fresh code. Find the address in the sending device's network settings for its current Wi-Fi or wired connection. The address is used locally to try the negotiated UDP application port; it is not added to pairing metadata, history, or exported reports. This optional route cannot bypass blocked device traffic or provide IPv6-only connectivity. Normal ICE signaling already exchanges network information.
 
 ### What does “Estimated staging space” mean?
 
-It is the browser-reported quota minus estimated usage for the site's origin, not reserved free disk space. Safari and Arc keep separate storage and can report different estimates. Each file must fit alongside copies still staged in that browser, with headroom for checkpoints and records.
+It is the browser-reported quota minus estimated usage for the site's origin, not reserved free disk space. Estimates vary across browsers, profiles, and devices; actual free disk space may be lower. Each file must fit alongside copies still staged in that browser, with headroom for checkpoints and records.
 
-You can transfer more over time by saving or downloading a batch, verifying the saved copies, and choosing **Clear verified staging**. Direct folder mode retains staging until cleared, so allow disk space for both staged and destination copies. The estimate does not measure destination-folder free space or limit how much the sender can select. Clearing site data or browser eviction can remove staged files and history.
+For larger collections of documents, media, archives, or other files, work in batches: save or download the files, verify the saved copies, then choose **Clear verified staging** to make room for the next batch. Direct folder mode retains staging until cleared, so allow disk space for both staged and destination copies. The estimate does not measure destination-folder free space or limit how much the sender can select. Clearing site data or browser eviction can remove staged files and history.
 
 ### How do I resume an interrupted transfer?
 

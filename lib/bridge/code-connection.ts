@@ -6,7 +6,7 @@ import {
 } from 'peerjs';
 import type { PairRoom } from './connection';
 import { PAIR_TTL } from './pairing';
-import { RouteProbe } from './route-diagnostics';
+import { RouteProbe, routeFailureMessage } from './route-diagnostics';
 import { LanRoute, lanAddress } from './lan-route';
 import { CandidateInbox } from './candidate-inbox';
 
@@ -266,12 +266,7 @@ export class CodeConnection {
       );
     }
     this.routeTimer = setTimeout(
-      () =>
-        this.fail(
-          new Error(
-            'Pairing succeeded, but no direct route opened. The connection report records candidate delivery and browser errors. Local discovery or traffic between devices may be blocked, even on the same Wi-Fi.',
-          ),
-        ),
+      () => this.fail(new Error(routeFailureMessage(this.probe?.snapshot()))),
       45000,
     );
     data.on('error', () =>

@@ -6,7 +6,7 @@ Thank you for helping improve reliable, verifiable file transfers.
 
 Search existing issues and read the browser boundaries in the README. Include the OS, browser version, device model, transfer size, saving mode, and exact error message. Describe whether the failure occurred during pairing, transfer, verification, or saving. Use synthetic files in reproductions.
 
-Do not attach private photos, pairing links, sender responses, network addresses, or personal transfer reports. Report vulnerabilities through [SECURITY.md](SECURITY.md).
+Do not attach private files, pairing links, sender responses, network addresses, or personal transfer reports. Report vulnerabilities through [SECURITY.md](SECURITY.md).
 
 ## Local setup
 

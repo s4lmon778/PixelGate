@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { RouteProbe } from '../lib/bridge/route-diagnostics';
+import {
+  RouteProbe,
+  routeFailureMessage,
+  type RouteDiagnostics,
+} from '../lib/bridge/route-diagnostics';
 
 afterEach(() => vi.useRealTimers());
 function connection() {
@@ -95,5 +99,84 @@ describe('local route diagnostics', () => {
     expect(probe.snapshot().stunErrors).toHaveLength(16);
     probe.stop();
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('route failure explanations', () => {
+  const failed: RouteDiagnostics = {
+    elapsedSeconds: 45,
+    signaling: 'stable',
+    ice: 'disconnected',
+    gathering: 'complete',
+    connection: 'failed',
+    channel: 'not-created',
+    localDescription: true,
+    remoteDescription: true,
+    localCandidates: { host: 1, srflx: 0, prflx: 0, relay: 0 },
+    remoteCandidates: { host: 1, srflx: 1, prflx: 0, relay: 0 },
+    localMdns: 1,
+    remoteMdns: 1,
+    lanCandidatesAdded: 0,
+    candidateDelivery: {
+      received: 2,
+      queued: 1,
+      added: 2,
+      rejected: 0,
+      errors: {},
+    },
+    statsReads: 22,
+    statsErrors: 0,
+    candidatePairs: {},
+    stunErrors: [
+      { service: 'Cloudflare STUN', code: 701 },
+      { service: 'Google STUN', code: 701 },
+    ],
+  };
+
+  it('explains the reported Wi-Fi failure without asserting a specific network policy', () => {
+    const message = routeFailureMessage(failed);
+    expect(message).toContain('Pairing succeeded');
+    expect(message).toContain('could not reach either configured STUN');
+    expect(message).toContain('networks may block');
+    expect(message).not.toContain('is blocked');
+  });
+
+  it('distinguishes an absent answer from a failure after description exchange', () => {
+    const message = routeFailureMessage({
+      ...failed,
+      signaling: 'have-local-offer',
+      remoteDescription: false,
+    });
+    expect(message).toContain('setup is incomplete');
+    expect(message).not.toContain('Pairing succeeded');
+    expect(message).not.toContain('networks may block');
+  });
+
+  it('reports rejected candidates rather than attributing them to network isolation', () => {
+    const message = routeFailureMessage({
+      ...failed,
+      candidateDelivery: {
+        ...failed.candidateDelivery!,
+        rejected: 1,
+        errors: { OperationError: 1 },
+      },
+    });
+    expect(message).toContain('browser rejected');
+    expect(message).not.toContain('networks may block');
+  });
+
+  it('does not infer total STUN failure from partial failures or a gathered public route', () => {
+    for (const report of [
+      { ...failed, stunErrors: failed.stunErrors.slice(0, 1) },
+      {
+        ...failed,
+        localCandidates: { ...failed.localCandidates, srflx: 1 },
+      },
+      undefined,
+    ]) {
+      const message = routeFailureMessage(report);
+      expect(message).not.toContain('could not reach either');
+      expect(message).toContain('no direct route opened');
+    }
   });
 });

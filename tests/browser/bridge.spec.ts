@@ -159,12 +159,12 @@ for (const mode of ['automatic', 'blocked', 'explicit', 'early'])
             .getByText('Advanced network settings', { exact: true })
             .click();
           await receiver
-            .getByLabel('Sender’s Wi-Fi IP (optional)', { exact: true })
+            .getByLabel('Sender’s local IPv4 (optional)', { exact: true })
             .fill(lanAddress!);
           await receiver.locator('.connection-panel').screenshot({
             path: `test-results/pixelgate-lan-${browserName}.png`,
             mask: [
-              receiver.getByLabel('Sender’s Wi-Fi IP (optional)', {
+              receiver.getByLabel('Sender’s local IPv4 (optional)', {
                 exact: true,
               }),
             ],
@@ -310,6 +310,9 @@ for (const mode of ['automatic', 'blocked', 'explicit', 'early'])
             /direct route/,
             { timeout: 60000 },
           );
+          await expect(receiver.getByRole('alert')).toContainText(
+            'networks may block local discovery or connections between devices',
+          );
           await expect(
             sender.getByText('Connected', { exact: true }),
           ).toHaveCount(0);
@@ -320,7 +323,7 @@ for (const mode of ['automatic', 'blocked', 'explicit', 'early'])
         }
         await expect(
           sender.getByText('Connected', { exact: true }),
-        ).toBeVisible();
+        ).toBeVisible({ timeout: 45000 });
         await sender
           .getByRole('button', { name: 'Send files', exact: true })
           .last()
@@ -643,7 +646,7 @@ test('responsive screen exposes primary actions with no overflow', async ({
     .click();
   await page.getByText('Advanced network settings', { exact: true }).click();
   await expect(
-    page.getByLabel('Sender’s Wi-Fi IP (optional)', { exact: true }),
+    page.getByLabel('Sender’s local IPv4 (optional)', { exact: true }),
   ).toBeVisible();
   expect(
     await page.evaluate(
@@ -674,7 +677,7 @@ test('text enlargement keeps controls and page width usable', async ({
       .click();
     await page.getByText('Advanced network settings', { exact: true }).click();
     await expect(
-      page.getByLabel('Sender’s Wi-Fi IP (optional)', { exact: true }),
+      page.getByLabel('Sender’s local IPv4 (optional)', { exact: true }),
     ).toBeVisible();
     expect(
       await page.evaluate(

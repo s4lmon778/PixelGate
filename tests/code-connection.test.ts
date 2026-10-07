@@ -93,7 +93,7 @@ afterEach(() => {
 describe('six-digit code pairing', () => {
   it('rejects invalid LAN input before registering a code', async () => {
     const c = new CodeConnection('receive', events(), '192.168.1.2:4000');
-    await expect(c.start()).rejects.toThrow('Wi-Fi IPv4');
+    await expect(c.start()).rejects.toThrow('local IPv4');
     expect(state.peers).toHaveLength(0);
     await c.stop();
   });

@@ -26,6 +26,30 @@ export interface RouteDiagnostics {
   stunErrors: { service: string; code: number }[];
 }
 
+// Interpret only observed negotiation facts. Browser reports cannot identify
+// an SSID, campus policy, firewall rule, or the cause of failed discovery.
+export function routeFailureMessage(report?: RouteDiagnostics) {
+  if (report && (!report.localDescription || !report.remoteDescription))
+    return 'Connection setup is incomplete: both devices’ connection descriptions were not installed. Keep both browsers open and create a fresh code.';
+  if (report?.candidateDelivery?.rejected)
+    return 'The browser rejected a network candidate and no direct route opened. Create a fresh code; connection diagnostics include the rejection category.';
+
+  const stunUnavailable =
+    report?.localCandidates.srflx === 0 &&
+    ['Cloudflare STUN', 'Google STUN'].every((service) =>
+      report.stunErrors.some(
+        (error) => error.service === service && error.code === 701,
+      ),
+    );
+  return (
+    'Pairing succeeded, but no direct route opened. ' +
+    (stunUnavailable
+      ? 'This device could not reach either configured STUN service. '
+      : '') +
+    'Guest, campus, hotel, and workplace networks may block local discovery or connections between devices, even with the same Wi-Fi name. Try a trusted network that allows local connections, or ask the network administrator whether direct WebRTC traffic is allowed.'
+  );
+}
+
 function candidates(sdp = '') {
   const counts: CandidateCounts = { host: 0, srflx: 0, prflx: 0, relay: 0 };
   let mdns = 0;

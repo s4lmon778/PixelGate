@@ -38,7 +38,7 @@ export class Connection {
       if (this.pc?.connectionState === 'failed')
         this.events.error(
           new Error(
-            'Could not connect directly. Use the same Wi-Fi and check guest-network or VPN isolation.',
+            'Could not connect directly. Use the same trusted local network and check guest-network or VPN isolation.',
           ),
         );
       else if (this.pc?.connectionState === 'disconnected')
@@ -120,7 +120,7 @@ export class Connection {
         else
           reject(
             new Error(
-              'No direct network route was discovered. Check Wi-Fi isolation, VPN settings, or try another browser.',
+              'No direct network route was discovered. Check network isolation, VPN settings, or try another browser.',
             ),
           );
       }, 10000);
