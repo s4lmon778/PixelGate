@@ -88,6 +88,7 @@ export default function PixelGate() {
   const [connected, setConnected] = useState(false);
   const [room, setRoom] = useState<PairRoom>();
   const [code, setCode] = useState('');
+  const [senderAddress, setSenderAddress] = useState('');
   const [response, setResponse] = useState('');
   const [qr, setQr] = useState<{
     offer: string;
@@ -263,6 +264,7 @@ export default function PixelGate() {
     setRoom(undefined);
     setQr(undefined);
     setResponse('');
+    setSenderAddress('');
     setStatus('Not connected');
     setPaused(false);
   }
@@ -319,9 +321,7 @@ export default function PixelGate() {
     receivedRecords.current.clear();
     setReceived([]);
     startTime.current = Date.now();
-    const PairingConnection =
-      pairingMode === 'code' ? CodeConnection : Connection;
-    const conn = new PairingConnection(role, {
+    const events: ConstructorParameters<typeof CodeConnection>[1] = {
       room: setRoom,
       status: setStatus,
       connected: (channel) => {
@@ -360,7 +360,11 @@ export default function PixelGate() {
           setStatus('Reconnect to continue');
         }
       },
-    });
+    };
+    const conn =
+      pairingMode === 'code'
+        ? new CodeConnection(role, events, senderAddress)
+        : new Connection(role, events);
     connection.current = conn;
     try {
       await conn.start(code);
@@ -854,6 +858,46 @@ export default function PixelGate() {
                                   </p>
                                 </div>
                               </div>
+                              {pairingMode === 'code' && (
+                                <details className="lan-fallback">
+                                  <summary>Trouble connecting?</summary>
+                                  <p className="hint" id="lan-help">
+                                    If pairing succeeds but the connection times
+                                    out, enter the sender’s Wi-Fi IPv4 address
+                                    before creating a new code. On iPhone:
+                                    Settings → Wi-Fi → ⓘ beside the connected
+                                    network → IP Address. This can help when
+                                    local device discovery fails; it cannot
+                                    bypass a network that blocks devices.
+                                  </p>
+                                  <label
+                                    className="pairing-label"
+                                    htmlFor="sender-ip"
+                                  >
+                                    Sender’s Wi-Fi IP (optional)
+                                  </label>
+                                  <input
+                                    id="sender-ip"
+                                    className="lan-address"
+                                    type="text"
+                                    inputMode="decimal"
+                                    autoComplete="off"
+                                    spellCheck={false}
+                                    placeholder="192.168.1.20"
+                                    maxLength={15}
+                                    aria-describedby="lan-help"
+                                    value={senderAddress}
+                                    disabled={busy}
+                                    onChange={(event) =>
+                                      setSenderAddress(event.target.value)
+                                    }
+                                  />
+                                  <p className="hint">
+                                    Used only in this tab. No relay, microphone,
+                                    or camera access.
+                                  </p>
+                                </details>
+                              )}
                               <button
                                 className="button primary"
                                 disabled={busy}

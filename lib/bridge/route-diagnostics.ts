@@ -17,6 +17,7 @@ export interface RouteDiagnostics {
   remoteCandidates: CandidateCounts;
   localMdns: number;
   remoteMdns: number;
+  lanCandidatesAdded: number;
   candidatePairs: Record<string, number>;
   stunErrors: { service: string; code: number }[];
 }
@@ -46,6 +47,7 @@ export class RouteProbe {
     private pc: RTCPeerConnection,
     private channel: () => RTCDataChannel | undefined,
     private update: (report: RouteDiagnostics) => void,
+    private lanCandidates: () => number = () => 0,
   ) {
     pc.addEventListener('icecandidateerror', this.error);
     this.timer = setInterval(() => void this.poll(), 2000);
@@ -96,6 +98,7 @@ export class RouteProbe {
       remoteCandidates: remote.counts,
       localMdns: local.mdns,
       remoteMdns: remote.mdns,
+      lanCandidatesAdded: this.lanCandidates(),
       candidatePairs: { ...this.pairs },
       stunErrors: this.errors.map((error) => ({ ...error })),
     };

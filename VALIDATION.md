@@ -1,11 +1,11 @@
 # Validation record
 
-## GitHub Pages edition · 0.3.2
+## GitHub Pages edition · 0.3.3
 
 Executed on **October 6, 2026**, with synthetic fixtures:
 
 - TypeScript, ESLint, and the production static build pass.
-- **70 unit/integration tests pass**: independent SHA-256, deliberate corruption, changed source content, durable checkpoint recovery, missing staged copies, duplicate/conflict handling, destination/export readback, denied access, quota exhaustion, safe/Unicode paths, 10,000 manifest paths, and 5 GB manifest sizes.
+- **77 unit/integration tests pass**: independent SHA-256, deliberate corruption, changed source content, durable checkpoint recovery, missing staged copies, duplicate/conflict handling, destination/export readback, denied access, quota exhaustion, safe/Unicode paths, 10,000 manifest paths, and 5 GB manifest sizes.
 - Isolated local Git remotes verify first-time Pages publication, deployment history preservation, and rejection of uncommitted source.
 - Serverless pairing tests cover bounded compression/decompression, invalid descriptions and extra fields, ten-minute expiry, wrong session responses, explicit approval, one-sender enforcement, immediate revocation, and copied offer/answer negotiation.
 - **12 Playwright browser checks pass**, exercising a real **2 MiB + 111 byte** peer transfer, independent Node/Web Crypto source/staging hashes, batch download, reselected export verification, damaged export rejection, history after refresh, URL-fragment import in an already-open tab, invalid response rejection, mobile layout, and 200% text sizing.
@@ -44,3 +44,7 @@ Google Photos validation is separate: confirm visibility, capture dates, GPS whe
 Version 0.3.2 fixes approval being disabled during route negotiation, misleading sender approval instructions during connection attempts, and stale failed-room state. Consent-before-channel-open and failed-route cleanup have unit regressions. Cloudflare STUN has a Google STUN fallback; neither is a file relay. Physical iPhone Safari-to-Arc testing is still pending.
 
 Version 0.3.2 adds a local route report with states, candidate counts, and bounded STUN error codes. Privacy tests ensure that SDP, addresses, peer identifiers, and error text are not retained or exported. A user test on iPhone Safari to Mac Arc and Mac Safari still times out with Arc local-network permission enabled; the cause is not identified, and this release is diagnostic rather than a claim that this physical-device failure is fixed.
+
+Version 0.3.3 adds an optional receiver-side sender Wi-Fi IPv4 address. Five unit tests cover address validation, UDP/application-only candidates, preserving negotiated ports/credentials/mid, trickle/deduplication, 32-route bounds, rejection, and cancellation during pending work. Two integration regressions verify invalid input cannot register a room and the fallback does not enter signaling options or reports, bypass approval, or leave timers after activation.
+
+The browser fallback fixture disables STUN and replaces both devices’ host candidates with an unresolvable mDNS name through an isolated PeerServer. Chromium, Firefox, and WebKit-sender-to-Chromium-receiver each transfer **1 MiB + 37 bytes** through the explicit address, with independent Node/Web Crypto hashes, receiver consent, consumed-code rejection, and no supplied address/file information in the scrubbed signaling capture or exported report. A Chromium negative control without an explicit address times out without receiving any file. This establishes a discovery-failure fallback, not a bypass for network isolation. Native iPhone-to-Mac success remains unconfirmed.

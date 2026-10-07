@@ -90,6 +90,45 @@ afterEach(() => {
 });
 
 describe('six-digit code pairing', () => {
+  it('rejects invalid LAN input before registering a code', async () => {
+    const c = new CodeConnection('receive', events(), '192.168.1.2:4000');
+    await expect(c.start()).rejects.toThrow('Wi-Fi IPv4');
+    expect(state.peers).toHaveLength(0);
+    await c.stop();
+  });
+  it('tries a local address without signaling it or bypassing consent, then stops polling', async () => {
+    const e = events();
+    const address = '192.168.1.20';
+    const c = new CodeConnection('receive', e, address);
+    await c.start();
+    const pc = Object.assign(new EventTarget(), {
+      signalingState: 'stable',
+      iceConnectionState: 'checking',
+      iceGatheringState: 'complete',
+      connectionState: 'connecting',
+      localDescription: undefined,
+      remoteDescription: {
+        sdp: 'm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\na=mid:data\r\na=candidate:1 1 udp 2122260223 sender.local 50000 typ host\r\n',
+      },
+      addIceCandidate: vi.fn().mockResolvedValue(undefined),
+      getStats: vi.fn().mockResolvedValue(new Map()),
+    });
+    const data = Object.assign(new Data(), { peerConnection: pc });
+    state.peers[0].emit('connection', data);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(pc.addIceCandidate).toHaveBeenCalledOnce();
+    expect(e.connected).not.toHaveBeenCalled();
+    expect(data.dataChannel.send).not.toHaveBeenCalled();
+    expect(JSON.stringify(state.peers[0].options)).not.toContain(address);
+    data.emit('open');
+    expect(e.connected).not.toHaveBeenCalled();
+    await c.approve();
+    expect(e.connected).toHaveBeenCalledOnce();
+    expect(c.room?.diagnostics?.lanCandidatesAdded).toBe(1);
+    expect(JSON.stringify(c.room)).not.toContain(address);
+    expect(vi.getTimerCount()).toBe(0);
+    await c.stop();
+  });
   it('accepts six digits, leading zeroes, spaced input, and short fragment links', () => {
     for (const input of [
       '001234',

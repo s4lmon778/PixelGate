@@ -14,6 +14,8 @@ Copy/paste pairing remains an optional fallback. The receiver gathers an SDP off
 
 WebRTC ICE uses Cloudflare and Google STUN to discover routes. No TURN relay is configured. Browser host-address privacy and network isolation can prevent discovery or a direct connection.
 
+The receiver can optionally supply the sender’s Wi-Fi IPv4 address before creating a code. Only unambiguous unicast dotted IPv4 is accepted; loopback, multicast, unspecified, and link-local destinations are rejected. LAN addresses outside RFC 1918 remain valid, including shared-address networks. A local helper polls the negotiated remote description during connection setup, replacing only UDP application host candidates’ mDNS addresses with that explicit address, preserving their ports, mid, ICE credentials, and DTLS negotiation. At most 32 distinct candidates are tried, with no retries for rejected candidates. Polling stops on activation, failure, or revocation. The helper makes no signaling requests or metadata changes, and the supplied address is not persisted or exported in reports (normal ICE signaling already exchanges network information); reports include only the count of candidates added. Default discovery and receiver approval remain unchanged. This can bypass failed mDNS resolution, but cannot bypass blocked direct traffic or provide IPv6-only connectivity.
+
 ## Transfer protocol
 
 The version 1 ordered channel carries JSON controls and binary frames:

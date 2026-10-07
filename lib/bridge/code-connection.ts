@@ -7,6 +7,7 @@ import {
 import type { PairRoom } from './connection';
 import { PAIR_TTL } from './pairing';
 import { RouteProbe } from './route-diagnostics';
+import { LanRoute, lanAddress } from './lan-route';
 
 const PREFIX = 'pixelgate-v2-';
 const PROTOCOL = 'pixelgate-code-v1';
@@ -82,10 +83,12 @@ export class CodeConnection {
   private nonce = crypto.randomUUID();
   private requests = 0;
   private probe?: RouteProbe;
+  private lanRoute?: LanRoute;
 
   constructor(
     private role: 'send' | 'receive',
     private events: Events,
+    private senderAddress = '',
   ) {}
 
   private async register(id: string) {
@@ -143,6 +146,8 @@ export class CodeConnection {
   }
 
   async start(input = '') {
+    this.senderAddress =
+      this.role === 'receive' ? lanAddress(this.senderAddress) : '';
     this.events.status('Preparing six-digit pairing…');
     if (this.role === 'receive') {
       let code = '';
@@ -229,7 +234,9 @@ export class CodeConnection {
 
   private bind(data: DataConnection) {
     this.data = data;
-    if (data.peerConnection)
+    if (data.peerConnection) {
+      if (this.senderAddress)
+        this.lanRoute = new LanRoute(data.peerConnection, this.senderAddress);
       this.probe = new RouteProbe(
         data.peerConnection,
         () => data.dataChannel,
@@ -239,12 +246,14 @@ export class CodeConnection {
             this.events.room(this.room);
           }
         },
+        () => this.lanRoute?.added ?? 0,
       );
+    }
     this.routeTimer = setTimeout(
       () =>
         this.fail(
           new Error(
-            'The pairing request arrived, but the direct connection timed out. Create a new code. Check browser local-network permission, VPNs, or guest-network isolation even on the same Wi-Fi.',
+            'Pairing succeeded, but no direct route opened. On the receiver, revoke this connection and enter the sender’s Wi-Fi IP under “Trouble connecting?” before creating a new code. If that also fails, try a different network or hotspot; same Wi-Fi can still isolate devices.',
           ),
         ),
       45000,
@@ -252,7 +261,7 @@ export class CodeConnection {
     data.on('error', () =>
       this.fail(
         new Error(
-          'Could not connect directly. Use the same Wi-Fi and check guest-network or VPN isolation.',
+          'Could not open a direct route. On the receiver, revoke this connection and try the sender’s Wi-Fi IP under “Trouble connecting?” with a fresh code. If it still fails, try a different network or hotspot.',
         ),
       ),
     );
@@ -360,6 +369,8 @@ export class CodeConnection {
 
   private activate() {
     this.probe?.stop();
+    this.lanRoute?.stop();
+    this.senderAddress = '';
     this.approved = true;
     clearTimeout(this.timer);
     this.events.connected(this.channel!);
@@ -386,6 +397,8 @@ export class CodeConnection {
 
   async stop() {
     this.probe?.stop();
+    this.lanRoute?.stop();
+    this.senderAddress = '';
     this.stopped = true;
     clearTimeout(this.timer);
     clearTimeout(this.routeTimer);

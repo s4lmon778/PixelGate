@@ -51,6 +51,12 @@ Codes expire after ten minutes and are released when approved. One sender is all
 
 **Copy/paste pairing** remains available before creating a connection. This advanced fallback exchanges connection descriptions without using PeerJS, but requires copying a longer response between devices.
 
+### Pairing succeeds but the connection times out
+
+On the receiver, revoke the failed connection, expand **Trouble connecting?**, and enter the **sender’s Wi-Fi IPv4 address** before creating a fresh six-digit code. On iPhone, find it in **Settings → Wi-Fi → ⓘ beside the connected network → IP Address**. Pair and approve again.
+
+This optional fallback uses the supplied address to try the sender’s negotiated WebRTC port directly when local device discovery fails. The supplied address is used locally, without adding it to pairing metadata, history, or connection reports. Normal WebRTC signaling already exchanges network information. Approval, encrypted transport, and hash verification still apply. It cannot overcome network isolation, a firewall blocking direct traffic, or an IPv6-only network. If it fails too, test a different network or hotspot. No TURN relay is configured.
+
 ### Saving modes
 
 | Mode            | What happens                                                                    | Final verification                                           |
