@@ -9,6 +9,7 @@ import {
 } from './model';
 import { local } from './database';
 import { indexedFile, removeIndexed } from './indexed-staging';
+import { downloadType } from './save-options';
 
 export type StagingBackend = 'opfs' | 'indexeddb';
 let selectedBackend: StagingBackend | undefined;
@@ -330,13 +331,21 @@ export async function downloadStaged(record: RecordFile) {
   if (!(await storedCopyValid(record)))
     throw new Error('Staged copy is unavailable or failed verification.');
   const file = await stagedFile(record.id);
+  offerPreparedDownload(
+    new File([file], record.originalName, {
+      type: downloadType(record.originalName, record.mimeType),
+      lastModified: record.modified,
+    }),
+  );
+  await local.put({ ...record, downloaded: true, updated: Date.now() });
+}
+export function offerPreparedDownload(file: File) {
   const url = URL.createObjectURL(file);
   const link = document.createElement('a');
   link.href = url;
-  link.download = record.originalName;
+  link.download = file.name;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
-  await local.put({ ...record, downloaded: true, updated: Date.now() });
 }
 // Prepare separately from the tap that opens the native share sheet. Hashing
 // can outlive transient activation, especially on older phones and large files.
@@ -372,7 +381,7 @@ export async function prepareSharedFiles(
     names.add(uniqueName);
     files.push(
       new File([source], uniqueName, {
-        type: record.mimeType,
+        type: downloadType(uniqueName, record.mimeType),
         lastModified: record.modified,
       }),
     );

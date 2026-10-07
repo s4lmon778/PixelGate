@@ -1,5 +1,16 @@
 # Validation record
 
+## GitHub Pages edition · 0.3.9
+
+Executed on **October 7, 2026**, with synthetic fixtures:
+
+- Strict TypeScript, ESLint, production build, formatting, and **96 unit/integration tests** pass. New cases cover sanitized Android Chrome intents, omission of pairing/query data, unsupported URL/device rejection, and media MIME inference with independently hashed unchanged bytes.
+- **24 targeted browser cases pass** across Chromium, Firefox, and WebKit for save/awake/history plus the new appearance menu. Three deliberately skipped macOS WebKit nonpersistent Blob fixtures are not physical iOS share/download tests. The new download fallback compares an actual downloaded file against an independent Node SHA-256 and preserves browser verification scope and staging. Unsupported share payloads remain downloadable, while corrupted copies expose neither native sharing nor downloads.
+- Nine existing direct-pairing/QR/byte-verification and responsive/text-enlargement cases pass across all three modern engines. Actual Chromium **101.0.4951.15** passes ten targeted cases, including all new controls and a public PeerJS compatibility-storage transfer of **1 MiB + 37 bytes** with independent readback. These are browser-engine checks, not physical Android certification.
+- Six appearance checks cover Light/Dark overrides in either OS theme, System reacting live to OS changes, persistence after reload, unavailable preference storage, keyboard navigation/Escape/outside dismissal, 390-pixel mobile layout, and 200% text size. A mobile dark-menu screenshot was inspected.
+
+The Android intent and downloads provide browser-level alternatives; a physical Pixel Chrome launch, actual share targets, native file-manager actions, media indexing, and Google Photos album saving are not certified by these tests. Browser-private files cannot be attached to a native app intent. PixelGate cannot bypass a missing Web Share API or force a Google Photos destination.
+
 ## GitHub Pages edition · 0.3.8
 
 Executed on **October 6, 2026**, with synthetic fixtures:

@@ -4,6 +4,7 @@ import { QrImage } from './QrImage';
 import { CodeInput } from './CodeInput';
 import { KeepAwake } from './KeepAwake';
 import { SaveToApp } from './SaveToApp';
+import { ThemeMenu } from './ThemeMenu';
 import { version } from '../package.json';
 import {
   ArrowDownToLine,
@@ -607,10 +608,13 @@ export default function PixelGate() {
                 ? 'History'
                 : 'How it works'}
           </span>
-          <span className="local-badge">
-            <Wifi size={14} />
-            Direct device transfer
-          </span>
+          <div className="topbar-actions">
+            <span className="local-badge">
+              <Wifi size={14} />
+              Direct device transfer
+            </span>
+            <ThemeMenu />
+          </div>
         </header>
         <main>
           <div className="page-heading">

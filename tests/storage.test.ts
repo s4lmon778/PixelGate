@@ -135,6 +135,18 @@ describe('native app handoff preparation', () => {
   });
 });
 describe('stored and exported copies', () => {
+  it('infers media MIME for missing picker types without altering verified bytes', async () => {
+    const files = await prepareSharedFiles([
+      { ...record, relativePath: '旅行/IMG.JPG', mimeType: '' },
+    ]);
+    expect(files[0].type).toBe('image/jpeg');
+    expect(
+      createHash('sha256')
+        .update(new Uint8Array(await files[0].arrayBuffer()))
+        .digest('hex'),
+    ).toBe(sha);
+    expect(state.stored.size).toBe(0);
+  });
   it('finds a verified destination without requiring retained staging', async () => {
     state.bytes = new Uint8Array();
     const fs = filesystem();

@@ -1,8 +1,13 @@
 import { useRef, useState } from 'react';
-import { Share2, X } from 'lucide-react';
+import { Download, Share2, X } from 'lucide-react';
 import { formatBytes, isVerified, type RecordFile } from '@/lib/bridge/model';
 import { local } from '@/lib/bridge/database';
-import { prepareSharedFiles } from '@/lib/bridge/storage';
+import {
+  offerPreparedDownload,
+  prepareSharedFiles,
+} from '@/lib/bridge/storage';
+import { androidChromeLink } from '@/lib/bridge/save-options';
+import { version } from '../package.json';
 
 export function SaveToApp({
   records,
@@ -13,14 +18,18 @@ export function SaveToApp({
   disabled: boolean;
   changed: () => Promise<void>;
 }) {
-  const supported =
-    typeof navigator.share === 'function' &&
-    typeof navigator.canShare === 'function';
+  const supported = typeof navigator.share === 'function';
+  const chromeLink = androidChromeLink(
+    location.href,
+    navigator.userAgent,
+    version,
+  );
   const dialog = useRef<HTMLDialogElement>(null);
   const [choices, setChoices] = useState<RecordFile[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [limit, setLimit] = useState(50);
   const [prepared, setPrepared] = useState<File[]>();
+  const [shareAllowed, setShareAllowed] = useState(false);
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState('');
   const available = [
@@ -33,6 +42,7 @@ export function SaveToApp({
         .map((r) => [r.id, r]),
     ).values(),
   ];
+  const offered = (r: RecordFile) => !!(r.shared || r.downloaded);
 
   async function prepare() {
     setWorking(true);
@@ -41,13 +51,22 @@ export function SaveToApp({
       const files = await prepareSharedFiles(
         choices.filter((r) => selected.includes(r.id)),
       );
-      if (!navigator.canShare({ files }))
-        throw new Error(
-          'This browser cannot share these files together. Choose fewer files or use downloads; some file types are not supported by the device’s share sheet.',
-        );
       setPrepared(files);
+      let allowed = supported;
+      if (allowed && typeof navigator.canShare === 'function') {
+        try {
+          allowed = navigator.canShare({ files });
+        } catch {
+          allowed = false;
+        }
+      }
+      setShareAllowed(allowed);
       setMessage(
-        `${files.length} files ready. Tap Choose app or save location to open your device’s options.`,
+        allowed
+          ? `${files.length} files ready. Tap Choose app or save location to open your device’s options.`
+          : supported
+            ? 'This browser cannot share these files together. Download the verified files below, or choose fewer files to try sharing again.'
+            : 'Files checked and ready to download. Open your browser’s Downloads list afterward to use the phone’s file manager or app options.',
       );
     } catch (e) {
       setMessage(
@@ -61,7 +80,7 @@ export function SaveToApp({
   }
 
   async function share() {
-    if (!prepared || disabled) return;
+    if (!prepared || disabled || !shareAllowed) return;
     setWorking(true);
     let handedOff = false;
     // Invoke before any asynchronous work to preserve this tap’s activation.
@@ -96,14 +115,54 @@ export function SaveToApp({
     }
   }
 
+  async function download() {
+    if (!prepared || disabled) return;
+    setWorking(true);
+    let offeredDownloads = false;
+    try {
+      // Start downloads during this user tap, after preparation verified each file.
+      for (const file of prepared) offerPreparedDownload(file);
+      offeredDownloads = true;
+      const ids = selected.slice();
+      setPrepared(undefined);
+      setSelected([]);
+      for (const id of ids) {
+        const current = await local.get(id);
+        if (current)
+          await local.put({
+            ...current,
+            downloaded: true,
+            updated: Date.now(),
+          });
+      }
+      await changed();
+      setChoices((previous) =>
+        previous.map((r) =>
+          ids.includes(r.id) ? { ...r, downloaded: true } : r,
+        ),
+      );
+      setMessage(
+        'Downloads requested. Allow multiple downloads if your browser asks, then check its Downloads list. Use the downloaded file’s Share or Move options to choose an available app or folder. Verification pending: use Verify saved copies to check the final files. Browser copies are retained.',
+      );
+    } catch {
+      setMessage(
+        offeredDownloads
+          ? 'Downloads were requested, but the local receipt could not be updated. Check your Downloads list; saved-copy verification is pending.'
+          : 'Downloads could not be started. Browser copies are retained; try again or download files individually.',
+      );
+    } finally {
+      setWorking(false);
+    }
+  }
+
   return (
     <div className="app-save">
       <button
         className="button"
-        disabled={disabled || !supported || !available.length}
+        disabled={disabled || !available.length}
         onClick={() => {
-          const pending = available.filter((r) => !r.shared);
-          setChoices([...pending, ...available.filter((r) => r.shared)]);
+          const pending = available.filter((r) => !offered(r));
+          setChoices([...pending, ...available.filter(offered)]);
           setSelected(
             (pending.length ? pending : available)
               .slice(0, 20)
@@ -121,8 +180,21 @@ export function SaveToApp({
       <p className="hint">
         {supported
           ? 'After receiving, choose files and open your device’s save/share sheet. Available apps, photo-library actions, and folders depend on your device. Websites cannot choose a specific album automatically.'
-          : 'This browser does not offer file sharing to apps. Use downloads or folder access where available.'}
+          : 'File sharing is unavailable here. After receiving, this button prepares verified downloads. Your browser or file manager provides the available save and share options.'}
       </p>
+      {!supported && chromeLink && (
+        <div className="chrome-help">
+          <a className="button" href={chromeLink}>
+            Open in Chrome
+          </a>
+          <p className="hint">
+            An embedded browser may lack file sharing. Try the full Chrome app
+            before receiving. If it opens a different browser, its storage is
+            separate; receive the files there again. Downloading here remains
+            available.
+          </p>
+        </div>
+      )}
       <dialog
         className="save-dialog"
         aria-label="Save to an app or location"
@@ -147,7 +219,7 @@ export function SaveToApp({
         </div>
         <p>
           Select up to 20 files per batch. Your device chooses the available
-          destinations. Sharing uses filenames, without their source folder
+          destinations. Exports use filenames, without their source folder
           structure.
         </p>
         <div className="share-files" aria-label="Files to save">
@@ -176,6 +248,7 @@ export function SaveToApp({
                 <small>
                   {formatBytes(r.size)}
                   {r.shared ? ' · Previously handed to save/share sheet' : ''}
+                  {r.downloaded ? ' · Download previously requested' : ''}
                 </small>
               </span>
             </label>
@@ -201,14 +274,26 @@ export function SaveToApp({
         </p>
         <div className="button-row">
           {prepared ? (
-            <button
-              className="button primary"
-              disabled={working || disabled}
-              onClick={() => void share()}
-            >
-              <Share2 size={16} />
-              Choose app or save location
-            </button>
+            <>
+              {shareAllowed && (
+                <button
+                  className="button primary"
+                  disabled={working || disabled}
+                  onClick={() => void share()}
+                >
+                  <Share2 size={16} />
+                  Choose app or save location
+                </button>
+              )}
+              <button
+                className={`button${shareAllowed ? '' : ' primary'}`}
+                disabled={working || disabled}
+                onClick={() => void download()}
+              >
+                <Download size={16} />
+                Download verified files
+              </button>
+            </>
           ) : (
             <button
               className="button primary"
@@ -220,10 +305,10 @@ export function SaveToApp({
           )}
           <button
             className="button"
-            disabled={working || disabled || !choices.some((r) => !r.shared)}
+            disabled={working || disabled || !choices.some((r) => !offered(r))}
             onClick={() => {
-              const pending = choices.filter((r) => !r.shared);
-              setChoices([...pending, ...choices.filter((r) => r.shared)]);
+              const pending = choices.filter((r) => !offered(r));
+              setChoices([...pending, ...choices.filter(offered)]);
               setSelected(pending.slice(0, 20).map((r) => r.id));
               setLimit(50);
               setPrepared(undefined);

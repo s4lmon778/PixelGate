@@ -1,4 +1,6 @@
 import { test, expect, chromium, type Page } from '@playwright/test';
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { encodePair } from '../../lib/bridge/pairing';
 
 async function seed(page: Page, staging = true) {
@@ -373,8 +375,19 @@ test('corrupted stored files and unsupported share payloads prevent app handoff'
     });
     db.close();
   });
+  await expect(
+    dialog.getByRole('button', { name: 'Choose app or save location' }),
+  ).toHaveCount(0);
+  await expect(
+    dialog.getByRole('button', { name: 'Download verified files' }),
+  ).toBeEnabled();
+  await dialog.getByRole('button', { name: 'Clear selection' }).click();
+  await dialog.getByRole('checkbox').first().check();
   await dialog.getByRole('button', { name: 'Prepare selected files' }).click();
   await expect(dialog.getByRole('status')).toContainText('failed verification');
+  await expect(
+    dialog.getByRole('button', { name: 'Download verified files' }),
+  ).toHaveCount(0);
   expect(
     await page.evaluate(
       () => (window as unknown as { shareCalls: number }).shareCalls,
@@ -575,4 +588,70 @@ test('turning wake off while the request is pending releases the late lock', asy
       exact: true,
     }),
   ).toBeVisible();
+});
+
+test('unsupported sharing offers byte-exact verified downloads with pending destination verification', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName === 'webkit',
+    'Nonpersistent macOS WebKit cannot retain the Blob staging fixture.',
+  );
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'share', {
+      configurable: true,
+      value: undefined,
+    });
+    Object.defineProperty(Navigator.prototype, 'canShare', {
+      configurable: true,
+      value: undefined,
+    });
+  });
+  await seed(page);
+  await page
+    .getByRole('button', { name: 'Receive files', exact: true })
+    .click();
+  await page
+    .getByRole('button', { name: 'Save to app or location', exact: true })
+    .click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'Clear selection' }).click();
+  await dialog.getByRole('checkbox').first().check();
+  await dialog.getByRole('button', { name: 'Prepare selected files' }).click();
+  await expect(
+    dialog.getByRole('button', { name: 'Choose app or save location' }),
+  ).toHaveCount(0);
+  const result = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'Download verified files' }).click();
+  const download = await result;
+  expect(download.suggestedFilename()).toBe('photo-é.txt');
+  const bytes = await readFile((await download.path())!);
+  const hash = createHash('sha256').update(bytes).digest('hex');
+  const expected = createHash('sha256')
+    .update('Original Unicode bytes: 旅行 🐈')
+    .digest('hex');
+  expect(hash).toBe(expected);
+  await expect(dialog.getByRole('status')).toContainText(
+    'Verification pending',
+  );
+  const record = (
+    (await snapshot(page)).records as {
+      id: string;
+      downloaded?: boolean;
+      scope: string;
+      shared?: boolean;
+    }[]
+  ).find((r) => r.id === 'a'.repeat(64))!;
+  expect(record.downloaded).toBe(true);
+  expect(record.scope).toBe('browser');
+  expect(record.shared).toBeFalsy();
+  await dialog.getByRole('button', { name: 'Select next batch' }).click();
+  await expect(dialog.getByRole('checkbox').first()).toBeChecked();
+  await expect(dialog.getByRole('checkbox').nth(1)).not.toBeChecked();
+  // Preparation after downloading rereads retained staging, rather than clearing it.
+  await dialog.getByRole('button', { name: 'Prepare selected files' }).click();
+  await expect(
+    dialog.getByRole('button', { name: 'Download verified files' }),
+  ).toBeEnabled();
 });
