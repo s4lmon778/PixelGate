@@ -1,21 +1,44 @@
 import StorageWorker from './staging.worker?worker';
 import { hashFile } from './hash';
-import { collisionName, safePath, type RecordFile } from './model';
+import {
+  CHECKPOINT_BYTES,
+  collisionName,
+  safePath,
+  type RecordFile,
+} from './model';
 import { local } from './database';
+import { indexedFile, removeIndexed } from './indexed-staging';
+
+export type StagingBackend = 'opfs' | 'indexeddb';
+let selectedBackend: StagingBackend | undefined;
+function hasOpfs() {
+  return typeof navigator.storage?.getDirectory === 'function';
+}
+export function stagingBackend(): StagingBackend {
+  return selectedBackend ?? (hasOpfs() ? 'opfs' : 'indexeddb');
+}
+
 export class StagingWriter {
   private worker = new StorageWorker();
   private seq = 0;
   private failed?: Error;
+  private preferredBackend: StagingBackend;
   private jobs = new Map<
     number,
     { resolve: () => void; reject: (e: Error) => void }
   >();
-  constructor() {
+  constructor(private backend: StagingBackend = stagingBackend()) {
+    this.preferredBackend = backend;
     this.worker.onmessage = ({ data }) => {
       const j = this.jobs.get(data.id);
       if (!j) return;
       this.jobs.delete(data.id);
-      if (data.error) j.reject(new Error(data.error));
+      if (data.error)
+        j.reject(
+          Object.assign(new Error(data.error), {
+            name: data.errorName || 'Error',
+          }),
+        );
       else j.resolve();
     };
     this.worker.onerror = () => {
@@ -35,10 +58,19 @@ export class StagingWriter {
     const id = ++this.seq;
     return new Promise<void>((resolve, reject) => {
       this.jobs.set(id, { resolve, reject });
-      this.worker.postMessage({ id, action, ...extra }, transfers);
+      this.worker.postMessage(
+        { id, action, backend: this.backend, ...extra },
+        transfers,
+      );
     });
   }
-  open(fileId: string, offset: number) {
+  async open(fileId: string, offset: number) {
+    if (offset > 0) this.backend = (await locateStaged(fileId)).backend;
+    else {
+      this.backend = this.preferredBackend;
+      if (this.backend === 'opfs') await removeIndexed(fileId);
+      else if (hasOpfs()) await removeOpfs(fileId);
+    }
     return this.call('open', { fileId, offset });
   }
   write(offset: number, bytes: ArrayBuffer) {
@@ -62,12 +94,108 @@ export async function stagingDirectory() {
   );
 }
 export async function stagedFile(id: string) {
+  return (await locateStaged(id)).file;
+}
+async function opfsFile(id: string) {
   return (await (await stagingDirectory()).getFileHandle(id)).getFile();
 }
+async function locateStaged(id: string) {
+  const preferred = stagingBackend();
+  const modes: StagingBackend[] =
+    preferred === 'opfs' ? ['opfs', 'indexeddb'] : ['indexeddb', 'opfs'];
+  for (const backend of modes) {
+    if (backend === 'opfs' && !hasOpfs()) continue;
+    try {
+      return {
+        backend,
+        file: await (backend === 'opfs' ? opfsFile(id) : indexedFile(id)),
+      };
+    } catch (error) {
+      if (
+        (error as Error).name !== 'NotFoundError' &&
+        (error as Error).name !== 'NotSupportedError'
+      )
+        throw error;
+    }
+  }
+  throw new DOMException('Staged file is missing.', 'NotFoundError');
+}
+async function removeOpfs(id: string) {
+  try {
+    await (await stagingDirectory()).removeEntry(id);
+  } catch (error) {
+    if (!['NotFoundError', 'NotSupportedError'].includes((error as Error).name))
+      throw error;
+  }
+}
 export async function removeStaged(id: string) {
-  await (await stagingDirectory()).removeEntry(id).catch((e) => {
-    if (e.name !== 'NotFoundError') throw e;
-  });
+  await removeIndexed(id);
+  if (hasOpfs()) await removeOpfs(id);
+}
+export async function prepareStaging(): Promise<StagingBackend> {
+  const probe = `probe-${crypto.randomUUID()}`;
+  const test = async (backend: StagingBackend) => {
+    const writer = new StagingWriter(backend);
+    let failure: unknown;
+    try {
+      await writer.open(probe, 0);
+      const checkpoint = new Uint8Array(CHECKPOINT_BYTES);
+      checkpoint[0] = 23;
+      checkpoint[checkpoint.length - 1] = 90;
+      await writer.write(0, checkpoint.buffer);
+      await writer.close();
+      const file =
+        backend === 'opfs' ? await opfsFile(probe) : await indexedFile(probe);
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (
+        bytes.length !== CHECKPOINT_BYTES ||
+        bytes[0] !== 23 ||
+        bytes[bytes.length - 1] !== 90
+      )
+        throw new Error(
+          'Local storage readback failed. Receiving cannot start.',
+        );
+    } catch (error) {
+      failure = error;
+    } finally {
+      // Cleanup must not hide the original storage failure or prevent worker
+      // disposal. A healthy probe also has to clean up successfully.
+      try {
+        await writer.dispose();
+      } catch (error) {
+        failure ??= error;
+      }
+      try {
+        if (backend === 'indexeddb') await removeIndexed(probe);
+        else await removeOpfs(probe);
+      } catch (error) {
+        failure ??= error;
+      }
+    }
+    if (failure) {
+      if (backend === 'indexeddb') {
+        const error = failure as Error;
+        throw Object.assign(
+          new Error(
+            `Compatibility storage failed its write/read test. Receiving cannot start in this browser context. ${error.message}`,
+          ),
+          { name: error.name },
+        );
+      }
+      throw failure;
+    }
+  };
+  let backend = stagingBackend();
+  try {
+    await test(backend);
+  } catch (error) {
+    if (backend !== 'opfs' || (error as Error).name !== 'NotSupportedError')
+      throw error;
+    backend = 'indexeddb';
+    await test(backend);
+  }
+  selectedBackend = backend;
+  return backend;
 }
 export async function storedCopyValid(file: RecordFile) {
   try {
@@ -78,9 +206,9 @@ export async function storedCopyValid(file: RecordFile) {
   }
 }
 export async function capacity(required: number) {
-  const estimate = await navigator.storage.estimate();
+  const estimate = await navigator.storage?.estimate?.();
   if (
-    estimate.quota &&
+    estimate?.quota &&
     estimate.quota - (estimate.usage ?? 0) <
       required + Math.min(16 * 1024 * 1024, estimate.quota * 0.02)
   )

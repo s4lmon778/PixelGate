@@ -37,7 +37,11 @@ After reconnect, the sender rehashes selected sources and the receiver owns the 
 
 ## Storage and verification
 
-IndexedDB stores receiver records, sender records, local sessions, and history. OPFS holds partial/staged file bytes; a dedicated worker owns synchronous access handles. The staged file is closed before reread and SHA-256 comparison.
+IndexedDB stores receiver records, sender records, local sessions, and history. On capable browsers, OPFS holds partial/staged bytes and a dedicated worker owns synchronous access handles. Older browsers use a separate `pixelgate-staging-v1` IndexedDB database with file-length metadata and Blob checkpoints keyed by file ID and byte offset. Each chunk and length commit together in a strict transaction where supported; completion precedes the manifest checkpoint/history transaction and acknowledgment. No bytes are uploaded to a database service.
+
+Preflight writes and rereads a 1 MiB checkpoint. Missing file-system APIs or unsupported synchronous access select compatibility storage; other write/read failures block receiving. Resume reads retained chunks, reconciles the stored manifest offset, and transactionally removes an uncommitted tail, including a partial final chunk. Gaps and invalid sizes are rejected. Readback constructs a File from stored Blobs rather than a file-sized JavaScript ArrayBuffer, then uses the same incremental hash worker. Download, destination readback, exported-copy verification, and clearing verified staging share the storage facade. Retained copies in either backend remain discoverable after browser capability changes.
+
+The writer is closed before actual stored bytes are reread and SHA-256 compared. Browser quota and eviction apply to both backends. These transaction boundaries protect refresh/reconnect recovery; they do not certify OS power-loss durability or large-file behavior on untested hardware.
 
 Direct folder saving validates paths, preserves directory structure, detects same-size/same-hash copies, preserves conflicts with numbered filenames, commits on close, and rereads the destination. Manual download initiation does not prove exported integrity; a reselected saved copy must hash-match.
 

@@ -20,6 +20,7 @@ export default defineConfig({
       use: {
         browserName: 'chromium',
         launchOptions: {
+          executablePath: process.env.PIXELGATE_TEST_CHROMIUM_EXECUTABLE,
           args: ['--disable-features=WebRtcHideLocalIpsWithMdns'],
         },
       },

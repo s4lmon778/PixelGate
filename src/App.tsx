@@ -37,8 +37,9 @@ import {
   downloadStaged,
   removeStaged,
   saveToFolder,
-  stagingDirectory,
-  StagingWriter,
+  prepareStaging,
+  stagingBackend,
+  type StagingBackend,
   verifyExport,
 } from '@/lib/bridge/storage';
 import { downloadReport } from '@/lib/bridge/report';
@@ -106,6 +107,8 @@ export default function PixelGate() {
   const [problem, setProblem] = useState('');
   const [folderName, setFolderName] = useState('Manual download');
   const [capacityLabel, setCapacityLabel] = useState('Checking…');
+  const [storageMode, setStorageMode] =
+    useState<StagingBackend>(stagingBackend);
   const [dragging, setDragging] = useState(false);
   const [visible, setVisible] = useState(50);
   const [historySession, setHistorySession] = useState('all');
@@ -132,7 +135,7 @@ export default function PixelGate() {
   const refresh = useCallback(async () => {
     const records = await local.files();
     setHistory(records.sort((a, b) => b.updated - a.updated));
-    const estimate = await navigator.storage?.estimate();
+    const estimate = await navigator.storage?.estimate?.();
     setCapacityLabel(
       estimate?.quota
         ? `${formatBytes(Math.max(0, estimate.quota - (estimate.usage ?? 0)))} available`
@@ -273,21 +276,8 @@ export default function PixelGate() {
       throw new Error(
         'Open PixelGate over HTTPS in a browser with WebRTC support.',
       );
-    if (!navigator.storage?.getDirectory)
-      throw new Error(
-        'This browser does not support the local file storage required for receiving. Try an updated browser with browser-private file storage support.',
-      );
-    await stagingDirectory();
-    const probe = `probe-${crypto.randomUUID()}`;
-    const writer = new StagingWriter();
-    try {
-      await writer.open(probe, 0);
-      await writer.close();
-    } finally {
-      await writer.dispose();
-      await removeStaged(probe);
-    }
-    void navigator.storage.persist?.().catch(() => {});
+    setStorageMode(await prepareStaging());
+    void navigator.storage?.persist?.().catch(() => {});
     if (navigator.locks) {
       await new Promise<void>((resolve, reject) => {
         navigator.locks
@@ -740,6 +730,12 @@ export default function PixelGate() {
                   manual downloads if unavailable. Filesystem dates cannot
                   generally be preserved by browser writers; embedded metadata
                   remains unchanged.
+                </p>
+                <p>
+                  Older browsers can use compatibility storage when newer file
+                  APIs are unavailable. Received chunks stay in local browser
+                  storage and are reread for verification. Start with small
+                  batches on older or storage-constrained devices.
                 </p>
               </section>
               <section className="panel">
@@ -1467,6 +1463,17 @@ export default function PixelGate() {
                               Received files stay in this browser until you save
                               and clear their staged copies.
                             </p>
+                            {storageMode === 'indexeddb' && (
+                              <p
+                                className="hint"
+                                aria-label="Compatibility storage"
+                              >
+                                Compatibility storage is active. Files are
+                                stored locally in chunks and verified before
+                                download. Older browsers may be slower; use
+                                smaller batches.
+                              </p>
+                            )}
                             <details>
                               <summary>How storage works</summary>
                               <p>

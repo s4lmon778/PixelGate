@@ -71,7 +71,7 @@ Choose a destination that fits your workflow: a Documents folder, an archive dir
 
 ## Architecture
 
-The UI coordinates pairing and queue actions; the transfer engine owns protocol state; dedicated workers handle incremental hashing and synchronous OPFS writes.
+The UI coordinates pairing and queue actions; the transfer engine owns protocol state; dedicated workers handle incremental hashing and checkpoint writes through OPFS or local IndexedDB chunk storage.
 
 | Layer       | Implementation                               | Responsibility                                                                       |
 | ----------- | -------------------------------------------- | ------------------------------------------------------------------------------------ |
@@ -87,7 +87,7 @@ sequenceDiagram
     participant S as Sender browser
     participant P as PeerJS signaling
     participant R as Receiver browser
-    participant W as Staging worker / OPFS
+    participant W as Staging worker / local bytes
     participant D as IndexedDB
     R->>P: Register temporary receiver code
     S->>P: Connect using code
@@ -98,14 +98,14 @@ sequenceDiagram
     R->>S: Ready: receiver-owned resume offset
     loop Each checkpoint, up to 1 MiB
         S->>R: Raw binary frames, up to 16 KiB each
-        R->>W: Write checkpoint and flush
+        R->>W: Persist checkpoint (OPFS flush or chunk transaction)
         W-->>R: Write completed
         R->>D: Commit offset and history transaction
         D-->>R: Transaction completed
         R->>S: Acknowledge durable offset
     end
     S->>R: Finish
-    R->>W: Flush and close staged file
+    R->>W: Finish writes and close staging
     R->>R: Reread staged bytes and compare SHA-256
     opt Direct folder selected
         R->>R: Copy, close, and independently reread destination
@@ -138,13 +138,17 @@ These bounds concern payload processing, not total browser memory: queue metadat
 
 ### 2. Acknowledge persisted progress, not just received bytes
 
-Checkpoint acknowledgment follows this order:
+Checkpoint acknowledgment follows this order on browsers with synchronous OPFS:
 
 ```text
 OPFS write -> access-handle flush -> IndexedDB transaction commit -> ACK(offset)
 ```
 
 OPFS and IndexedDB are separate persistence systems, not a single atomic transaction. Writing bytes before committing metadata allows recovery to truncate an uncommitted tail to the last retained checkpoint. On reconnection, the sender reselects and rehashes its sources; the receiver checks the retained staged file and supplies the resume offset. Missing partials or files shorter than the committed offset restart instead of trusting a history entry. Complete-file readback still determines final integrity.
+
+Older browsers use a capability-selected IndexedDB fallback. The staging worker commits each checkpoint as a Blob with its stored byte length in one transaction, requesting `strict` durability when supported. Only after that transaction completes does the receiver commit the manifest offset/history and acknowledge it. The byte store is separate from manifest history; reconnection removes uncommitted tails in a transaction and rejects missing or noncontiguous chunks. Readback constructs a File from stored Blobs, then hashes 1 MiB slices; the application does not concatenate a whole file into a JavaScript byte array. Browser memory use and quota still require device testing.
+
+Preflight writes and independently rereads a full 1 MiB checkpoint before registering a receiver. An absent file-system API or unsupported synchronous access triggers compatibility storage; denied access, quota exhaustion, or failed readback blocks receiving rather than silently claiming a usable backend. Existing staged copies are found in either backend, including after a browser upgrade. Downloads and reselected-export verification work with both storage modes.
 
 File identity is derived from content and path:
 
@@ -154,7 +158,7 @@ fileId = SHA-256(UTF-8(sourceSha256 + "\n" + relativePath))
 
 Changed source bytes receive a different identity. A retained verified file is skipped only after its stored bytes are reread and match. Receiver file records and their corresponding history entries are written in the same IndexedDB transaction.
 
-**Code:** [identity derivation](lib/bridge/hash.ts), [staging worker](lib/bridge/staging.worker.ts), [IndexedDB transactions](lib/bridge/database.ts). **Regression evidence:** [interruption and resume tests](tests/transfer.test.ts).
+**Code:** [identity derivation](lib/bridge/hash.ts), [staging worker](lib/bridge/staging.worker.ts), [chunk storage](lib/bridge/indexed-staging.ts), [manifest transactions](lib/bridge/database.ts). **Regression evidence:** [interruption and resume tests](tests/transfer.test.ts), [real IndexedDB recovery and quota tests](tests/browser/indexed-staging.spec.ts).
 
 ### 3. Model integrity as a property of a specific copy
 
@@ -186,21 +190,22 @@ The copy/paste fallback uses a versioned compressed SDP envelope with matching s
 
 A Content Security Policy constrains scripts, workers, and signaling origins. Local diagnostics retain connection states, candidate counts, statistics-read outcomes, and fixed error categories; they exclude raw SDP, IP addresses, codes, filenames, and error text. No analytics or automatic diagnostics upload is configured.
 
-The signaling broker is a trust dependency. A six-digit code and SHA-256 do not authenticate a person, and OPFS is browser-private storage rather than an encrypted vault. Application-side bounds do not provide global rate limiting for the public PeerJS service. See [Security](SECURITY.md) for the full threat model.
+The signaling broker is a trust dependency. A six-digit code and SHA-256 do not authenticate a person, and local browser storage is not an encrypted vault. Application-side bounds do not provide global rate limiting for the public PeerJS service. See [Security](SECURITY.md) for the full threat model.
 
 **Code:** [pairing envelope](lib/bridge/pairing.ts), [SDP validation](lib/pairing-validation.ts), [privacy-limited diagnostics](lib/bridge/route-diagnostics.ts), [CSP](index.html).
 
 ## Validation and boundaries
 
-Recorded for **0.3.5 on October 6, 2026**; these are completed runs, not a continuously updated CI badge.
+Recorded for **0.3.7 on October 6, 2026** across full and targeted runs; these are completed checks, not a continuously updated CI badge.
 
-| Evidence                                         | Coverage                                                                                                                                                                                              |
-| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| TypeScript, ESLint, production build             | Strict type checks, linting, and deployable static assets                                                                                                                                             |
-| 81 unit/integration tests                        | Independent hashes, corruption, changed sources, resume checkpoints, duplicate conflicts, permission/quota failures, safe paths, pairing lifecycle, and publishing behavior                           |
-| 19 passing Playwright checks; 2 deliberate skips | Real WebRTC transfers, receiver consent, candidate-before-answer injection, blocked discovery, manual pairing/export verification, refresh recovery, QR decoding, mobile layout, and 200% text sizing |
-| Live GitHub Pages + public PeerJS check          | Code pairing, explicit approval, independently verified staged bytes, and consumed-code rejection                                                                                                     |
-| Physical-device report                           | User-confirmed completed iPhone-to-Mac transfer over a Personal Hotspot; original Wi-Fi still failed                                                                                                  |
+| Evidence                                         | Coverage                                                                                                                                                                                                 |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TypeScript, ESLint, production build             | Strict type checks, linting, and deployable static assets                                                                                                                                                |
+| 85 unit/integration tests                        | Independent hashes, corruption, changed sources, resume checkpoints, duplicate conflicts, permission/quota failures, safe paths, pairing lifecycle, and publishing behavior                              |
+| 25 passing browser scenarios; 5 deliberate skips | Real WebRTC transfers, consent, ICE race/discovery injection, compatibility storage, checkpoint rollback, corruption, export verification, refresh recovery, QR decoding, mobile layout, and text sizing |
+| Chromium 101 compatibility checks                | Actual older engine, public PeerJS pairing, local chunk storage, independently verified bytes, downloads, refresh, corruption rejection, and quota-failure rollback                                      |
+| Live GitHub Pages + public PeerJS check          | Code pairing, explicit approval, independently verified staged bytes, and consumed-code rejection                                                                                                        |
+| Physical-device report                           | User-confirmed completed iPhone-to-Mac transfer over a Personal Hotspot; original Wi-Fi still failed                                                                                                     |
 
 Browser tests compare synthetic source and staged bytes against independently computed Node/Web Crypto hashes. QR tests decode rendered output with `jsQR`, and request inspection checks that signaling contains no fixture filenames or hashes. Publishing tests use isolated local Git remotes to check committed-source requirements, deployment history preservation, and source-commit provenance.
 
@@ -212,9 +217,11 @@ Browser tests compare synthetic source and staged bytes against independently co
 | Desktop Firefox           | Automated sending/receiving; use downloads where folder access is unavailable                                                                       |
 | WebKit test engine        | Automated sender-to-Chromium interoperability; does not certify native Safari receiving                                                             |
 | iPhone Safari to Mac      | User-reported hotspot completion; exact iPhone version, final Mac browser, transfer size, and independently checked exported hash were not recorded |
-| First-generation Pixel XL | Physical-device validation pending                                                                                                                  |
+| First-generation Pixel XL | Receiving was blocked by missing newer storage APIs; the compatibility fix is engine-tested, with physical-device validation pending                |
 
-Receiving requires OPFS with synchronous worker access; unsupported environments are blocked before pairing. HTTPS is required except for trusted localhost development. Browser suspension, network isolation, host-address privacy, or NAT restrictions can prevent a direct connection.
+Receiving uses synchronous OPFS when available and IndexedDB Blob checkpoints otherwise. The receiver must pass a real local write/read test before pairing. Folder access is optional; use verified downloads and reselect the exported files for final verification where folder saving is unavailable. Compatibility storage may be slower, particularly on older devices; start with small batches and keep the browser open. Clearing site data or browser eviction can remove staged bytes in either mode.
+
+The production syntax target includes Chrome 92, Firefox 95, and Safari 15.4; this is not certification of every version or device. Chromium 101 engine testing is recorded in [VALIDATION.md](VALIDATION.md). The actual first-generation Pixel's browser version, transfer capacity, and saving behavior still require physical validation. HTTPS is required except for trusted localhost development. Browser suspension, network isolation, host-address privacy, or NAT restrictions can prevent a direct connection.
 
 A **5 GB manifest** test is not a **5 GB byte transfer**, and a **10,000-path manifest** test is not a completed 10,000-file session. Large sessions, files above 4 GB, actual quota exhaustion, and device-specific saving behavior require real hardware validation. Browser picker bytes are the source of truth: original Apple Photos resources, complete Live Photo pairing, iCloud-original retrieval, native media scanning, atomic rename, and filesystem timestamp restoration are outside this version.
 
@@ -267,7 +274,15 @@ Open `http://127.0.0.1:8787`. Use separate browser profiles for sender and recei
 | `npm start`            | Serve the production build locally                 |
 | `npm run format:check` | Check repository formatting                        |
 
-Install browser binaries with `npx playwright install chromium firefox webkit` before browser tests. Playwright starts a production preview when needed; build first. Automated six-digit fixtures use an isolated PeerServer and normal browser privacy defaults; older manual-pairing fixtures expose LAN candidates for reproducibility. Those test settings do not certify native browser networking.
+Install browser binaries with `npx playwright install chromium firefox webkit` before browser tests. Playwright starts a production preview when needed; build first. Automated six-digit connection fixtures use an isolated PeerServer and normal browser privacy defaults. Manual-pairing and compatibility-storage fixtures expose LAN candidates to separate persistence tests from mDNS discovery. Those test settings do not certify native browser networking.
+
+An existing older Chromium executable can be selected for compatibility checks. With public signaling, the pairing fixture retains normal host-address privacy and tests the browser's real storage capabilities rather than disabling OPFS artificially:
+
+```sh
+PIXELGATE_TEST_CHROMIUM_EXECUTABLE="/path/to/Chromium" \
+PIXELGATE_TEST_PUBLIC_SIGNALING=1 \
+npm run test:browser -- --project=chromium --grep compatibility
+```
 
 ### Repository map
 
@@ -280,7 +295,8 @@ lib/bridge/
   model.ts                   Protocol types, file states, path validation
   hash.ts / hash.worker.ts   Identity derivation and incremental hashing
   storage.ts                Staging API, destination/export readback
-  staging.worker.ts         Serialized synchronous OPFS access
+  staging.worker.ts         Serialized OPFS / chunk checkpoint writes
+  indexed-staging.ts        Transactional IndexedDB Blob fallback
   database.ts               IndexedDB checkpoints and local history
   route-diagnostics.ts      Local connection report without raw addresses
 lib/pairing-validation.ts    Bounded data-channel SDP validation

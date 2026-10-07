@@ -26,11 +26,11 @@ async function scanQr(image: Locator) {
   return decoded!.data;
 }
 
-for (const mode of ['automatic', 'blocked', 'explicit', 'early'])
+for (const mode of ['automatic', 'blocked', 'explicit', 'early', 'indexeddb'])
   test(
     mode === 'blocked'
       ? 'six-digit pairing with blocked discovery fails without transferring bytes'
-      : `six-digit pairing${mode === 'explicit' ? ' with explicit LAN fallback' : mode === 'early' ? ' with candidates before answer' : ''} requires approval, transfers verified bytes, and consumes the code`,
+      : `six-digit pairing${mode === 'explicit' ? ' with explicit LAN fallback' : mode === 'early' ? ' with candidates before answer' : mode === 'indexeddb' ? ' with compatibility storage' : ''} requires approval, transfers verified bytes, and consumes the code`,
     async ({ browserName }) => {
       const explicitLan = mode === 'explicit';
       const blockedLan = mode === 'blocked' || mode === 'explicit';
@@ -39,7 +39,7 @@ for (const mode of ['automatic', 'blocked', 'explicit', 'early'])
         'One negative control is sufficient for the injected route failure.',
       );
       test.skip(
-        mode !== 'automatic' &&
+        !['automatic', 'indexeddb'].includes(mode) &&
           Boolean(process.env.PIXELGATE_TEST_PUBLIC_SIGNALING),
         'Local discovery failure is injected only in the isolated fixture.',
       );
@@ -67,11 +67,39 @@ for (const mode of ['automatic', 'blocked', 'explicit', 'early'])
       // uses explicit LAN candidates for its headless fixtures.
       const senderBrowser = await { chromium, firefox, webkit }[
         browserName
-      ].launch();
+      ].launch(
+        browserName === 'chromium' &&
+          process.env.PIXELGATE_TEST_CHROMIUM_EXECUTABLE
+          ? { executablePath: process.env.PIXELGATE_TEST_CHROMIUM_EXECUTABLE }
+          : mode === 'indexeddb' && !publicSignaling
+            ? browserName === 'chromium'
+              ? { args: ['--disable-features=WebRtcHideLocalIpsWithMdns'] }
+              : browserName === 'firefox'
+                ? {
+                    firefoxUserPrefs: {
+                      'media.peerconnection.ice.obfuscate_host_addresses': false,
+                    },
+                  }
+                : {}
+            : {},
+      );
       const receiverBrowser =
         browserName === 'webkit' ? await chromium.launch() : senderBrowser;
       const receiverContext = await receiverBrowser.newContext();
       const senderContext = await senderBrowser.newContext();
+      if (
+        mode === 'indexeddb' &&
+        !process.env.PIXELGATE_TEST_CHROMIUM_EXECUTABLE
+      )
+        await receiverContext.addInitScript(() => {
+          Object.defineProperty(
+            Object.getPrototypeOf(navigator.storage),
+            'getDirectory',
+            {
+              value: undefined,
+            },
+          );
+        });
       const sockets = new Set<WebSocket>();
       const signals: string[] = [];
       const connections: string[] = [];
@@ -173,10 +201,14 @@ for (const mode of ['automatic', 'blocked', 'explicit', 'early'])
         await receiver
           .getByRole('button', { name: 'Create a connection', exact: true })
           .click();
+        if (mode === 'indexeddb')
+          await expect(
+            receiver.getByLabel('Compatibility storage', { exact: true }),
+          ).toBeVisible();
         const displayedCode = receiver.getByLabel('Pairing code', {
           exact: true,
         });
-        await expect(displayedCode).toBeVisible();
+        await expect(displayedCode).toBeVisible({ timeout: 20000 });
         const code = (await displayedCode.innerText()).replace(/\s/g, '');
         expect(code).toMatch(/^\d{6}$/);
         const link = await scanQr(
@@ -332,7 +364,36 @@ for (const mode of ['automatic', 'blocked', 'explicit', 'early'])
           'Browser copy verified',
           { timeout: 60000 },
         );
-        const actualHash = await receiver.evaluate(async () => {
+        const actualHash = await receiver.evaluate(async (indexed) => {
+          if (indexed) {
+            const d = await new Promise<IDBDatabase>((resolve, reject) => {
+              const request = indexedDB.open('pixelgate-staging-v1', 1);
+              request.onsuccess = () => resolve(request.result);
+              request.onerror = () => reject(request.error);
+            });
+            const chunks = await new Promise<{ bytes: Blob }[]>(
+              (resolve, reject) => {
+                const request = d
+                  .transaction('chunks')
+                  .objectStore('chunks')
+                  .getAll();
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+              },
+            );
+            d.close();
+            const stored = new Blob(chunks.map((chunk) => chunk.bytes));
+            return [
+              ...new Uint8Array(
+                await crypto.subtle.digest(
+                  'SHA-256',
+                  await stored.arrayBuffer(),
+                ),
+              ),
+            ]
+              .map((byte) => byte.toString(16).padStart(2, '0'))
+              .join('');
+          }
           const directory = await (
             await navigator.storage.getDirectory()
           ).getDirectoryHandle('pixelbridge');
@@ -352,8 +413,70 @@ for (const mode of ['automatic', 'blocked', 'explicit', 'early'])
               .map((byte) => byte.toString(16).padStart(2, '0'))
               .join('');
           }
-        });
+        }, mode === 'indexeddb');
         expect(actualHash).toBe(hash);
+        if (mode === 'indexeddb') {
+          const event = receiver.waitForEvent('download');
+          await receiver
+            .getByRole('button', { name: 'Export verified batch', exact: true })
+            .click();
+          expect((await event).suggestedFilename()).toBe('code-transfer-é.bin');
+          await receiver
+            .getByRole('button', { name: 'History', exact: true })
+            .click();
+          await expect(receiver.locator('.file-status').first()).toHaveText(
+            'Download verification pending',
+          );
+          await receiver
+            .locator('input[aria-label="Verify saved copies"]')
+            .setInputFiles({
+              name: 'exported.bin',
+              mimeType: 'application/octet-stream',
+              buffer: bytes,
+            });
+          await expect(receiver.locator('.file-status').first()).toHaveText(
+            'Exported copy verified',
+          );
+          await receiver
+            .getByRole('button', { name: 'Transfer', exact: true })
+            .click();
+          await receiver.evaluate(async () => {
+            const d = await new Promise<IDBDatabase>((resolve) => {
+              const r = indexedDB.open('pixelgate-staging-v1', 1);
+              r.onsuccess = () => resolve(r.result);
+            });
+            const chunk = await new Promise<{
+              fileId: string;
+              offset: number;
+              bytes: Blob;
+            }>((resolve) => {
+              const r = d
+                .transaction('chunks')
+                .objectStore('chunks')
+                .openCursor();
+              r.onsuccess = () => resolve(r.result!.value);
+            });
+            const damaged = new Uint8Array(await chunk.bytes.arrayBuffer());
+            damaged[0] ^= 1;
+            chunk.bytes = new Blob([damaged]);
+            await new Promise<void>((resolve, reject) => {
+              const tx = d.transaction('chunks', 'readwrite');
+              tx.objectStore('chunks').put(chunk);
+              tx.oncomplete = () => resolve();
+              tx.onabort = () => reject(tx.error);
+            });
+            d.close();
+          });
+          await receiver
+            .getByRole('button', {
+              name: 'Save code-transfer-é.bin',
+              exact: true,
+            })
+            .click();
+          await expect(receiver.getByRole('alert')).toContainText(
+            'unavailable or failed verification',
+          );
+        }
         if (mode === 'early' && browserName === 'chromium') {
           await receiver
             .getByText('Connection diagnostics', { exact: true })
@@ -405,6 +528,41 @@ for (const mode of ['automatic', 'blocked', 'explicit', 'early'])
         await receiver
           .getByRole('button', { name: 'Revoke connection', exact: true })
           .click();
+        if (mode === 'indexeddb') {
+          await receiver.reload();
+          await receiver
+            .getByRole('button', { name: 'History', exact: true })
+            .click();
+          await expect(receiver.locator('.file-status').first()).toHaveText(
+            'Exported copy verified',
+          );
+          // Clearing a verified exported batch must remove every stored chunk.
+          receiver.once('dialog', (dialog) => void dialog.accept());
+          await receiver
+            .getByRole('button', {
+              name: 'Clear verified staging',
+              exact: true,
+            })
+            .click();
+          await expect(receiver.getByRole('status')).toContainText(
+            '1 staged copies cleared',
+          );
+          const remaining = await receiver.evaluate(async () => {
+            const d = await new Promise<IDBDatabase>((resolve) => {
+              const r = indexedDB.open('pixelgate-staging-v1', 1);
+              r.onsuccess = () => resolve(r.result);
+            });
+            return new Promise<number>((resolve) => {
+              const tx = d.transaction('chunks');
+              const r = tx.objectStore('chunks').count();
+              tx.oncomplete = () => {
+                d.close();
+                resolve(r.result);
+              };
+            });
+          });
+          expect(remaining).toBe(0);
+        }
       } finally {
         await receiverContext.close();
         await senderContext.close();

@@ -29,5 +29,6 @@ export default defineConfig({
     },
   ],
   resolve: { alias: { '@': fileURLToPath(new URL('.', import.meta.url)) } },
-  build: { target: 'es2022' },
+  // Keep syntax usable on browsers that predate synchronous OPFS support.
+  build: { target: ['chrome92', 'firefox95', 'safari15.4'] },
 });
