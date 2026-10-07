@@ -1400,3 +1400,19 @@ button.brand {
     min-width: 0;
   }
 }
+.route-diagnostics {
+  margin-top: 20px;
+  max-width: 100%;
+  min-width: 0;
+}
+.route-diagnostics summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+}
+.route-diagnostics pre {
+  overflow: auto;
+  max-height: 340px;
+  font-size: 12px;
+  line-height: 1.5;
+}

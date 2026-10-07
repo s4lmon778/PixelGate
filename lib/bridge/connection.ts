@@ -1,4 +1,5 @@
 import { decodePair, encodePair, PAIR_TTL, type PairSignal } from './pairing';
+import type { RouteDiagnostics } from './route-diagnostics';
 export interface PairRoom {
   id: string;
   expires: number;
@@ -9,6 +10,7 @@ export interface PairRoom {
   routeReady?: boolean;
   approvalGranted?: boolean;
   failed?: boolean;
+  diagnostics?: RouteDiagnostics;
 }
 
 export class Connection {

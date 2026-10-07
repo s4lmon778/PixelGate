@@ -7,6 +7,7 @@ import { PeerServer } from 'peer';
 import WebSocket from 'ws';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { version } from '../../package.json';
 
 async function scanQr(image: Locator) {
   await expect(image).toBeVisible();
@@ -128,6 +129,21 @@ test('six-digit pairing requires approval, transfers verified bytes, and consume
     await expect(
       receiver.getByRole('button', { name: 'Approve sender', exact: true }),
     ).toBeEnabled({ timeout: 30000 });
+    await receiver.getByText('Connection diagnostics', { exact: true }).click();
+    const routeReport = await receiver
+      .getByLabel('Connection report', { exact: true })
+      .innerText();
+    const route = JSON.parse(routeReport);
+    expect(route.version).toBe(version);
+    expect(route.localCandidates).toHaveProperty('host');
+    expect(routeReport).not.toMatch(
+      /a=candidate:|\.local|(?:\d{1,3}\.){3}\d{1,3}/,
+    );
+    expect(routeReport).not.toContain(code);
+    await receiver.locator('.route-diagnostics').screenshot({
+      path: 'test-results/pixelgate-route-report.png',
+    });
+    await receiver.getByText('Connection diagnostics', { exact: true }).click();
     await expect(sender.getByText('Connected', { exact: true })).toHaveCount(0);
     await expect(
       sender.getByLabel('Sender response', { exact: true }),

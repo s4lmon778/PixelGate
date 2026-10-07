@@ -6,6 +6,7 @@ import {
 } from 'peerjs';
 import type { PairRoom } from './connection';
 import { PAIR_TTL } from './pairing';
+import { RouteProbe } from './route-diagnostics';
 
 const PREFIX = 'pixelgate-v2-';
 const PROTOCOL = 'pixelgate-code-v1';
@@ -80,6 +81,7 @@ export class CodeConnection {
   private approvalGranted = false;
   private nonce = crypto.randomUUID();
   private requests = 0;
+  private probe?: RouteProbe;
 
   constructor(
     private role: 'send' | 'receive',
@@ -227,6 +229,17 @@ export class CodeConnection {
 
   private bind(data: DataConnection) {
     this.data = data;
+    if (data.peerConnection)
+      this.probe = new RouteProbe(
+        data.peerConnection,
+        () => data.dataChannel,
+        (diagnostics) => {
+          if (this.room) {
+            this.room = { ...this.room, diagnostics };
+            this.events.room(this.room);
+          }
+        },
+      );
     this.routeTimer = setTimeout(
       () =>
         this.fail(
@@ -346,6 +359,7 @@ export class CodeConnection {
   }
 
   private activate() {
+    this.probe?.stop();
     this.approved = true;
     clearTimeout(this.timer);
     this.events.connected(this.channel!);
@@ -371,6 +385,7 @@ export class CodeConnection {
   }
 
   async stop() {
+    this.probe?.stop();
     this.stopped = true;
     clearTimeout(this.timer);
     clearTimeout(this.routeTimer);

@@ -1,11 +1,11 @@
 # Validation record
 
-## GitHub Pages edition · 0.3.1
+## GitHub Pages edition · 0.3.2
 
 Executed on **October 6, 2026**, with synthetic fixtures:
 
 - TypeScript, ESLint, and the production static build pass.
-- **68 unit/integration tests pass**: independent SHA-256, deliberate corruption, changed source content, durable checkpoint recovery, missing staged copies, duplicate/conflict handling, destination/export readback, denied access, quota exhaustion, safe/Unicode paths, 10,000 manifest paths, and 5 GB manifest sizes.
+- **70 unit/integration tests pass**: independent SHA-256, deliberate corruption, changed source content, durable checkpoint recovery, missing staged copies, duplicate/conflict handling, destination/export readback, denied access, quota exhaustion, safe/Unicode paths, 10,000 manifest paths, and 5 GB manifest sizes.
 - Isolated local Git remotes verify first-time Pages publication, deployment history preservation, and rejection of uncommitted source.
 - Serverless pairing tests cover bounded compression/decompression, invalid descriptions and extra fields, ten-minute expiry, wrong session responses, explicit approval, one-sender enforcement, immediate revocation, and copied offer/answer negotiation.
 - **12 Playwright browser checks pass**, exercising a real **2 MiB + 111 byte** peer transfer, independent Node/Web Crypto source/staging hashes, batch download, reselected export verification, damaged export rejection, history after refresh, URL-fragment import in an already-open tab, invalid response rejection, mobile layout, and 200% text sizing.
@@ -41,4 +41,6 @@ Exercise screen lock, backgrounding, Wi-Fi loss, refresh and reselection, real s
 
 Google Photos validation is separate: confirm visibility, capture dates, GPS where present, video playback, folder backup configuration, and completed backup in Google Photos. Live Photo recognition and Apple original-resource retrieval are outside the browser guarantee.
 
-Version 0.3.1 fixes approval being disabled during route negotiation, misleading sender approval instructions during connection attempts, and stale failed-room state. Consent-before-channel-open and failed-route cleanup have unit regressions. Cloudflare STUN has a Google STUN fallback; neither is a file relay. Physical iPhone Safari-to-Arc testing is still pending.
+Version 0.3.2 fixes approval being disabled during route negotiation, misleading sender approval instructions during connection attempts, and stale failed-room state. Consent-before-channel-open and failed-route cleanup have unit regressions. Cloudflare STUN has a Google STUN fallback; neither is a file relay. Physical iPhone Safari-to-Arc testing is still pending.
+
+Version 0.3.2 adds a local route report with states, candidate counts, and bounded STUN error codes. Privacy tests ensure that SDP, addresses, peer identifiers, and error text are not retained or exported. A user test on iPhone Safari to Mac Arc and Mac Safari still times out with Arc local-network permission enabled; the cause is not identified, and this release is diagnostic rather than a claim that this physical-device failure is fixed.

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { QrImage } from './QrImage';
 import { CodeInput } from './CodeInput';
+import { version } from '../package.json';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -169,11 +170,12 @@ export default function PixelGate() {
     if (folderInput.current)
       folderInput.current.setAttribute('webkitdirectory', '');
   }, [view, role]);
+  const pairingOffer = room?.offer;
   useEffect(() => {
-    if (!room?.offer || role !== 'receive') return;
+    if (!pairingOffer || role !== 'receive') return;
     let active = true;
-    const offer = room.offer;
-    const link = pairingLink(room.offer);
+    const offer = pairingOffer;
+    const link = pairingLink(pairingOffer);
     QRCode.toString(link, {
       type: 'svg',
       width: 1024,
@@ -201,7 +203,7 @@ export default function PixelGate() {
     return () => {
       active = false;
     };
-  }, [room, role]);
+  }, [pairingOffer, role]);
   useEffect(() => {
     if (!running && !connected) return;
     const tick = setInterval(
@@ -1200,6 +1202,48 @@ export default function PixelGate() {
                           Pairing uses PeerJS for connection details only. Files
                           transfer directly between your devices.
                         </p>
+                      )}
+                      {room?.diagnostics && (
+                        <details className="route-diagnostics">
+                          <summary>Connection diagnostics</summary>
+                          <p className="hint">
+                            Local connection states and route counts only. No IP
+                            addresses, pairing codes, filenames, or file data.
+                            This report is never uploaded automatically.
+                          </p>
+                          <pre aria-label="Connection report">
+                            {JSON.stringify(
+                              {
+                                version,
+                                role,
+                                ...room.diagnostics,
+                              },
+                              null,
+                              2,
+                            )}
+                          </pre>
+                          <button
+                            className="text-button"
+                            onClick={() =>
+                              void guarded(async () => {
+                                await navigator.clipboard.writeText(
+                                  JSON.stringify(
+                                    {
+                                      version,
+                                      role,
+                                      ...room.diagnostics,
+                                    },
+                                    null,
+                                    2,
+                                  ),
+                                );
+                                setNotice('Connection report copied.');
+                              })
+                            }
+                          >
+                            <Copy size={14} /> Copy connection report
+                          </button>
+                        </details>
                       )}
                     </section>
                     <section className="panel files-panel">

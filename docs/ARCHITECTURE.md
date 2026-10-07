@@ -44,3 +44,7 @@ Internal `pixelbridge` storage/channel identifiers retain the original v1 namesp
 ## Boundaries
 
 No filesystem timestamp restoration, native atomic rename, background service, Android media-scanner control, source deletion, or Google Photos backup verification is included. Browser tabs must remain open. Photos picker output is the source of truth; original Photos-resource retrieval is not guaranteed.
+
+## Local connection diagnostics
+
+Code pairing retains a report of connection states, counts of candidate types and candidate-pair states, and at most 16 STUN service labels/error codes. The probe runs every two seconds while negotiating and stops on connection, revocation, or failure. Raw SDP, IP addresses, peer IDs, pairing codes, error text, and file information are excluded. Reports stay in the current tab; copying one requires an explicit button click and makes no network request.
