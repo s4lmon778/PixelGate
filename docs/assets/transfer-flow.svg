@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="410" viewBox="0 0 1200 410" role="img" aria-labelledby="title desc">
+  <title id="title">PixelGate connection and transfer architecture</title>
+  <desc id="desc">Sender and receiver exchange connection metadata through PeerJS. After receiver approval, encrypted file bytes travel directly between devices, with hashing and storage local to each browser.</desc>
+  <defs>
+    <marker id="blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#0878ec"/></marker>
+    <marker id="slate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#6b8099"/></marker>
+  </defs>
+  <rect width="1200" height="410" rx="20" fill="#f4f7fb"/>
+  <g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif">
+    <text x="34" y="45" fill="#0878ec" font-size="15" font-weight="700" letter-spacing="2">DIRECT BETWEEN DEVICES</text>
+    <rect x="450" y="72" width="300" height="94" rx="14" fill="#fff" stroke="#d9e2ee"/>
+    <text x="600" y="111" text-anchor="middle" fill="#1d2c3f" font-size="23" font-weight="650">PeerJS signaling</text>
+    <text x="600" y="140" text-anchor="middle" fill="#52677f" font-size="17">Connection metadata only</text>
+    <path d="M327 168 Q385 112 442 112" fill="none" stroke="#6b8099" stroke-width="2.5" stroke-dasharray="6 6" marker-start="url(#slate)" marker-end="url(#slate)"/>
+    <path d="M758 112 Q815 112 873 168" fill="none" stroke="#6b8099" stroke-width="2.5" stroke-dasharray="6 6" marker-start="url(#slate)" marker-end="url(#slate)"/>
+    <rect x="38" y="141" width="282" height="141" rx="16" fill="#fff" stroke="#d9e2ee"/>
+    <rect x="880" y="141" width="282" height="141" rx="16" fill="#fff" stroke="#d9e2ee"/>
+    <g fill="none" stroke="#0878ec" stroke-width="3" stroke-linejoin="round">
+      <rect x="62" y="163" width="35" height="23" rx="3"/><path d="M57 192h45"/>
+      <rect x="905" y="161" width="22" height="36" rx="4"/><path d="M913 190h6"/>
+    </g>
+    <text x="111" y="185" fill="#1d2c3f" font-size="24" font-weight="650">Sender browser</text>
+    <text x="942" y="185" fill="#1d2c3f" font-size="23" font-weight="650">Receiver browser</text>
+    <text x="62" y="223" fill="#52677f" font-size="18">Select files · hash incrementally</text>
+    <text x="62" y="253" fill="#52677f" font-size="18">Source bytes stay unchanged</text>
+    <text x="905" y="223" fill="#52677f" font-size="18">Approve · stage locally</text>
+    <text x="905" y="253" fill="#52677f" font-size="18">Close · reread · verify SHA-256</text>
+    <path d="M331 223h538" fill="none" stroke="#0878ec" stroke-width="4" marker-end="url(#blue)"/>
+    <rect x="406" y="185" width="388" height="29" rx="7" fill="#f4f7fb"/>
+    <text x="600" y="205" text-anchor="middle" fill="#0878ec" font-size="19" font-weight="650">Encrypted WebRTC · file bytes</text>
+    <text x="600" y="254" text-anchor="middle" fill="#52677f" font-size="17">Receiver approval before transfer</text>
+    <rect x="294" y="317" width="612" height="54" rx="12" fill="#e8f5ed" stroke="#c9e6d5"/>
+    <circle cx="324" cy="344" r="11" fill="#168351"/>
+    <path d="m318 344 4 4 8-8" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+    <text x="347" y="351" fill="#21623f" font-size="19" font-weight="550">File bytes and transfer records stay on your devices</text>
+  </g>
+</svg>

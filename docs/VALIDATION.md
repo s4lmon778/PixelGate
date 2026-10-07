@@ -1,5 +1,10 @@
 # Validation record
 
+## README visuals · October 7, 2026
+
+- Recorded the real screen-awake preference and appearance menu in a fresh, empty Chromium profile. The locally hosted GIF contains 96 frames at 10 fps (9.6 seconds), is 960 × 353 pixels, and is approximately 145 KiB. The capture opens no pairing room and contains no transfer data or performance benchmark. Light, dark, and switch-off frames were visually inspected.
+- Added a local SVG connection diagram and a Mermaid flowchart distinguishing browser, destination, and exported-copy verification. The detailed protocol sequence remains available in an expandable section. The SVG was rendered and inspected, documentation links were checked, and formatting/lint pass. Runtime code and the application version are unchanged.
+
 ## Documentation refresh · October 7, 2026
 
 - Consolidated usage, troubleshooting, design rationale, development, deployment, and validation under `docs/`. The project README now provides a compact overview with technical implementation and regression links. Three unreferenced historical screenshots were removed; current desktop, mobile receiving, and screen-awake screenshots were regenerated from the 0.3.13 production preview with empty queues.

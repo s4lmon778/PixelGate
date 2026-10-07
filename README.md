@@ -25,6 +25,11 @@ The app is a static **TypeScript / React / Vite** build hosted on GitHub Pages. 
 
 > **Status:** experimental. The current app is **0.3.13**. Automated checks exercise integrity and recovery; browser capabilities, available storage, and network policies still determine usability. Large-file and physical-device boundaries are documented below.
 
+<div align="center">
+  <img src="docs/assets/controls-demo.gif" alt="PixelGate's screen-awake switch animates between sun and moon while the appearance menu switches between Light and Dark" width="960" />
+  <p><sub>Recorded from the app: the screen-awake preference and appearance controls.</sub></p>
+</div>
+
 ## Contents
 
 - [Quick start](#quick-start)
@@ -75,6 +80,8 @@ Screenshots show the 0.3.13 interface with empty queues, including paired saving
 
 React coordinates user actions; the transfer engine owns protocol state; workers handle hashing and staging. GitHub Pages serves static assets, while PeerJS handles temporary signaling.
 
+![Direct device transfer and separate metadata-only signaling](docs/assets/transfer-flow.svg)
+
 | Layer       | Implementation                             | Responsibility                                                       |
 | ----------- | ------------------------------------------ | -------------------------------------------------------------------- |
 | Interface   | React, strict TypeScript, CSS              | Pairing, approval, queues, progress, saving, appearance, and reports |
@@ -82,6 +89,9 @@ React coordinates user actions; the transfer engine owns protocol state; workers
 | Integrity   | Web Workers, `hash-wasm`                   | Incremental source hashing and independent copy readback             |
 | Persistence | OPFS, IndexedDB                            | Staged bytes, checkpoint metadata, local manifests, and history      |
 | Tooling     | Vite, ESLint, Prettier, Vitest, Playwright | Static builds, checks, and failure-injection fixtures                |
+
+<details>
+<summary><strong>Protocol exchange and checkpoint ordering</strong></summary>
 
 ```mermaid
 sequenceDiagram
@@ -108,11 +118,34 @@ sequenceDiagram
     R-->>S: Verification result with explicit scope
 ```
 
+</details>
+
 Signaling disconnects after activation; file transfer continues over the direct channel. STUN discovers potential routes. No TURN fallback is configured. See [Architecture](docs/ARCHITECTURE.md) for protocol controls, lifecycle limits, and compatibility storage.
 
 ## Engineering decisions
 
 The design treats persisted progress, completed transfer, and verified saved bytes as separate states.
+
+```mermaid
+flowchart TD
+    S["Source SHA-256"] --> R["Stage, close, reread, compare"]
+    R -->|Hash matches| B["Browser copy verified"]
+    R -->|Mismatch| X["Block saving · retry"]
+    B --> F["Folder save, close, reread"]
+    B --> M["Download or share requested"]
+    F -->|Hash matches| D["Destination copy verified"]
+    M --> P["Saved-copy verification pending"]
+    P --> E["Reselect saved file and hash"]
+    E -->|Hash matches| V["Exported copy verified"]
+    D --> C["Clear eligible staging"]
+    V --> C
+    classDef checked fill:#e8f5ed,stroke:#168351,color:#21623f
+    classDef pending fill:#fff6df,stroke:#b78513,color:#765611
+    classDef blocked fill:#fff0f0,stroke:#c84d4d,color:#973737
+    class B,D,V checked
+    class P pending
+    class X blocked
+```
 
 | Decision                    | Implementation and reason                                                                                                                                                                                | Evidence                                                                                                     |
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
