@@ -1,5 +1,13 @@
 # Validation record
 
+## GitHub Pages edition · 0.3.13
+
+Executed on **October 7, 2026**:
+
+- **Choose folder** and **Save to app or location** now share one action row, with equal-width and equal-height controls on mobile. Folder instructions and expandable saving help sit beneath them. Mobile file selection and batch export/verification use paired rows; staging cleanup stays on its own row. History controls align beneath a full-width session selector, while report actions wrap beneath their heading on smaller screens. Desktop action groups stay compact and wrap when needed.
+- Strict TypeScript, ESLint, and the production build pass. **18 targeted browser cases pass** across Chromium, Firefox, and WebKit, covering layout, enlarged text, history clearing, unsupported capabilities, app sharing, actual download bytes, and corruption rejection. Three existing WebKit Blob-seeding fixtures remain deliberate skips; no physical phone share-target claim follows from these tests.
+- Layouts were visually inspected in mobile light/dark themes and on desktop. Manual checks confirm saving buttons align at 320, 390, 768, and 1440 pixels. Additional 320-pixel / 200% text checks pass for Send, Receive, and History in all three engines after correcting a pre-existing connection-button overflow. The six existing modern layout cases pass again after that correction. Actual Chromium 101 also passes the three targeted responsive, enlarged-text, and unsupported-capability cases. Saving, transfer, integrity, and storage behavior are unchanged.
+
 ## GitHub Pages edition · 0.3.12
 
 Executed on **October 7, 2026**:

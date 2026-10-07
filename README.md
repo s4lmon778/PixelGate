@@ -88,7 +88,7 @@ In **History**, **Clear history** clears all displayed records or the selected s
 - **Saving and duplicate handling:** destination readback, verified duplicate detection, numbered filenames for conflicting content, and retained staged copies for retry.
 - **Session controls:** pause, resume, cancel, byte progress, a screen-awake switch, local history with session-aware clearing, and downloadable JSON, CSV, and text reports.
 - **Batch management:** export up to 50 pending verified files per click, select up to 20 for a native app handoff, verify saved copies, and clear eligible staging to reclaim space.
-- **Accessible interface:** responsive layouts, mobile-sized controls, keyboard focus, a top-bar Light / Dark / System appearance menu with a local preference, and reduced-motion support. Extended storage and saving explanations are available in collapsed help sections; operational instructions and status messages remain visible.
+- **Accessible interface:** responsive layouts, mobile-sized controls, keyboard focus, a top-bar Light / Dark / System appearance menu with a local preference, and reduced-motion support. Saving, file selection, and batch verification controls use paired mobile rows with comfortable tap targets. Extended storage and saving explanations are available in collapsed help sections; operational instructions and status messages remain visible.
 
 ## Architecture
 
@@ -221,7 +221,7 @@ The signaling broker is a trust dependency. A six-digit code and SHA-256 do not 
 
 ## Validation and boundaries
 
-Recorded through **0.3.12 on October 7, 2026** across full and targeted runs; these are completed checks, not a continuously updated CI badge. Historical fault-injection coverage is documented by release in [VALIDATION.md](VALIDATION.md).
+Recorded through **0.3.13 on October 7, 2026** across full and targeted runs; these are completed checks, not a continuously updated CI badge. Historical fault-injection coverage is documented by release in [VALIDATION.md](VALIDATION.md).
 
 | Evidence                                          | Coverage                                                                                                                                                                                                                                                                                        |
 | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

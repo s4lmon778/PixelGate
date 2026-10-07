@@ -394,6 +394,9 @@ h1 {
   white-space: nowrap;
   min-height: 42px;
 }
+.button > svg {
+  flex-shrink: 0;
+}
 .button:hover {
   background: var(--bg);
 }
@@ -489,6 +492,8 @@ h1 {
 }
 .send-footer {
   display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   justify-content: space-between;
   align-items: center;
   margin-top: 22px;
@@ -610,6 +615,8 @@ h1 {
 }
 .queue-panel .section-head {
   margin-bottom: 17px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 .count-tag {
   font-size: 0.75rem;
@@ -1119,6 +1126,20 @@ h1 {
 .app-save {
   margin: 18px 0;
 }
+.save-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: stretch;
+}
+.save-actions .button {
+  white-space: normal;
+  line-height: 1.4;
+}
+.save-actions .button > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .save-dialog {
   width: min(620px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
@@ -1215,6 +1236,7 @@ h1 {
 }
 .queue-controls {
   display: flex;
+  flex-wrap: wrap;
   gap: 9px;
   padding-top: 20px;
   border-top: 1px solid var(--line);
@@ -1537,6 +1559,8 @@ h1 {
   }
   .button {
     min-height: 44px;
+    max-width: 100%;
+    white-space: normal;
     font-size: 0.875rem;
   }
   .text-button {
@@ -1593,10 +1617,54 @@ h1 {
     grid-template-columns: auto minmax(0, 1fr);
     align-items: start;
   }
-  .destination .button {
-    grid-column: 2;
+  .save-actions,
+  .drop-zone .button-row,
+  .batch-actions .button-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+  }
+  .save-actions .button,
+  .drop-zone .button,
+  .batch-actions .button {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.4;
+    padding: 10px 9px;
+  }
+  .save-actions .button {
+    min-height: 52px;
+  }
+  .batch-actions .text-button {
+    grid-column: 1 / -1;
     justify-self: start;
-    margin-left: 0;
+  }
+  .queue-panel .report-actions {
+    width: 100%;
+  }
+  .history-toolbar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .history-toolbar label,
+  .history-toolbar select,
+  .history-toolbar .text-button {
+    grid-column: 1 / -1;
+  }
+  .history-toolbar .button {
+    white-space: normal;
+    line-height: 1.4;
+    min-width: 0;
+  }
+  .history-toolbar select {
+    width: 100%;
+    min-height: 44px;
+  }
+  .history-toolbar .text-button {
+    justify-self: start;
   }
   .code-input-row .button {
     padding: 10px;

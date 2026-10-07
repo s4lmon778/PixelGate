@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Download, Share2, X } from 'lucide-react';
 import { formatBytes, isVerified, type RecordFile } from '@/lib/bridge/model';
 import { local } from '@/lib/bridge/database';
@@ -12,11 +12,15 @@ import { version } from '../package.json';
 export function SaveToApp({
   records,
   folderAccessAvailable,
+  folderControl,
+  folderHint,
   disabled,
   changed,
 }: {
   records: RecordFile[];
   folderAccessAvailable: boolean;
+  folderControl: ReactNode;
+  folderHint: ReactNode;
   disabled: boolean;
   changed: () => Promise<void>;
 }) {
@@ -159,26 +163,30 @@ export function SaveToApp({
 
   return (
     <div className="app-save">
-      <button
-        className="button"
-        disabled={disabled || !available.length}
-        onClick={() => {
-          const pending = available.filter((r) => !offered(r));
-          setChoices([...pending, ...available.filter(offered)]);
-          setSelected(
-            (pending.length ? pending : available)
-              .slice(0, 20)
-              .map((r) => r.id),
-          );
-          setPrepared(undefined);
-          setMessage('');
-          setLimit(50);
-          dialog.current?.showModal();
-        }}
-      >
-        <Share2 size={16} />
-        Save to app or location
-      </button>
+      <div className="save-actions">
+        {folderControl}
+        <button
+          className="button"
+          disabled={disabled || !available.length}
+          onClick={() => {
+            const pending = available.filter((r) => !offered(r));
+            setChoices([...pending, ...available.filter(offered)]);
+            setSelected(
+              (pending.length ? pending : available)
+                .slice(0, 20)
+                .map((r) => r.id),
+            );
+            setPrepared(undefined);
+            setMessage('');
+            setLimit(50);
+            dialog.current?.showModal();
+          }}
+        >
+          <Share2 size={16} />
+          <span>Save to app or location</span>
+        </button>
+      </div>
+      {folderHint}
       <details className="help-details">
         <summary>Saving options</summary>
         {!folderAccessAvailable && (

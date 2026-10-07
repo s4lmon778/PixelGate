@@ -1532,28 +1532,33 @@ export default function PixelGate() {
                                   : 'Browser copies are verified before downloading.'}
                               </p>
                             </div>
-                            <button
-                              className="button"
-                              disabled={
-                                busy ||
-                                !!active ||
-                                typeof (window as BrowserFolderWindow)
-                                  .showDirectoryPicker !== 'function'
-                              }
-                              onClick={() => void guarded(selectFolder)}
-                            >
-                              Choose folder
-                            </button>
                           </div>
-                          {typeof (window as BrowserFolderWindow)
-                            .showDirectoryPicker === 'function' && (
-                            <p className="hint destination-hint">
-                              Choose a folder before receiving to save and
-                              verify files there automatically, preserving their
-                              folder structure.
-                            </p>
-                          )}
                           <SaveToApp
+                            folderControl={
+                              <button
+                                className="button"
+                                disabled={
+                                  busy ||
+                                  !!active ||
+                                  typeof (window as BrowserFolderWindow)
+                                    .showDirectoryPicker !== 'function'
+                                }
+                                onClick={() => void guarded(selectFolder)}
+                              >
+                                <Folder size={16} aria-hidden="true" />
+                                <span>Choose folder</span>
+                              </button>
+                            }
+                            folderHint={
+                              typeof (window as BrowserFolderWindow)
+                                .showDirectoryPicker === 'function' && (
+                                <p className="hint destination-hint">
+                                  Choose a folder before receiving to save and
+                                  verify files there automatically, preserving
+                                  their folder structure.
+                                </p>
+                              )
+                            }
                             folderAccessAvailable={
                               typeof (window as BrowserFolderWindow)
                                 .showDirectoryPicker === 'function'
