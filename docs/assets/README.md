@@ -31,7 +31,7 @@ The script opens a fresh profile against the localhost production preview, recor
 
 ## Quick-start walkthrough
 
-The 29-second walkthrough shows six steps: create a receiver code, connect the sender, approve, choose and send files, save a download, then verify that saved copy and clear staging. It uses genuine PixelGate 0.3.13 interface captures, smooth camera zooms/pans, click highlights, and explicit Sender/Receiver labels. The GIF is 960 × 640 at 10 fps; the MP4 is 20 fps at the same size.
+The 29-second walkthrough shows six steps: create a receiver code, connect the sender, approve, choose and send files, save a download, then verify that saved copy and clear staging. It uses genuine PixelGate 0.3.13 interface captures, stationary framing at a consistent scale, click highlights, and explicit Sender/Receiver labels. There are no zooms or pans within shots. The GIF is 960 × 640 at 10 fps; the MP4 is 20 fps at the same size.
 
 The recording performs an actual direct WebRTC transfer of a generated 144,000-byte text file between two fresh Chromium profiles. It independently compares the downloaded file's Node SHA-256 with the source, reselects that downloaded file for the app's exported-copy verification, and clears eligible staging. It also checks that captured signaling contains neither the fixture filename nor its hash.
 

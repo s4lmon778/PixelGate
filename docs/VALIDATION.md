@@ -3,7 +3,7 @@
 ## Quick-start walkthrough · October 7, 2026
 
 - Recorded a real 144,000-byte synthetic text-file transfer between fresh Chromium profiles through an isolated local PeerServer. Receiver consent, browser-copy verification, actual download, independent Node SHA-256 comparison, reselected exported-copy verification, and verified-staging cleanup complete successfully. Captured signaling contains neither the fixture filename nor its hash.
-- Composited 13 genuine interface views into a 29-second walkthrough with six steps, smooth camera zooms/pans, click highlights, and Sender/Receiver labels. The 960 × 640 GIF uses 10 fps; the MP4 uses 20 fps. Key frames for pairing, approval, saving, verification, and cleanup were visually inspected. Playback timing is instructional, not a throughput measurement; OS pickers are omitted. Local discovery overrides are limited to the recorder. Runtime code and the app version are unchanged.
+- Composited 13 genuine interface views into a 29-second walkthrough with six steps, click highlights, and Sender/Receiver labels. Revised the GIF and MP4 to use stationary framing at a consistent scale, removing zooms and pans as requested. The 960 × 640 GIF uses 10 fps; the MP4 uses 20 fps. Key frames for pairing, approval, saving, verification, and cleanup were visually inspected. Playback timing is instructional, not a throughput measurement; OS pickers are omitted. Local discovery overrides are limited to the recorder. Runtime code and the app version are unchanged.
 
 ## README visuals · October 7, 2026
 

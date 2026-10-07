@@ -316,22 +316,16 @@ try {
       ctx = canvas.getContext('2d');
     const viewport = { x: 24, y: 122, width: 912, height: 416 };
     const clamp = (v, a, b) => Math.max(a, Math.min(v, b));
-    const ease = (t) => t * t * (3 - 2 * t);
     window.paint = (index, progress) => {
       const s = loaded[index],
         r = s.box,
         ratio = viewport.width / viewport.height;
-      const zoom = ease(clamp(progress / 0.36, 0, 1));
-      const closeWidth = clamp(
-        Math.max(520, r.width * 1.3, r.height * ratio * 1.3),
-        520,
-        1440,
-      );
-      const sw = 1440 + (closeWidth - 1440) * zoom,
+      // Keep one scale throughout the guide. Each shot has a stationary frame;
+      // only click highlights animate, with no zoom or camera movement.
+      const sw = s.image.width,
         sh = sw / ratio;
-      const cx = 720 + (r.x + r.width / 2 - 720) * zoom;
-      const cy = 550 + (r.y + r.height / 2 - 550) * zoom;
-      const sx = clamp(cx - sw / 2, 0, s.image.width - sw);
+      const cy = r.y + r.height / 2;
+      const sx = 0;
       const sy = clamp(cy - sh / 2, 0, s.image.height - sh);
       ctx.fillStyle = '#f4f7fb';
       ctx.fillRect(0, 0, 960, 640);
@@ -502,7 +496,7 @@ try {
     join(root, 'docs/assets/quick-start.gif'),
   ]);
   console.log(
-    `Recorded ${scenes.length} real workflow views; rendered ${count} camera frames. Download SHA-256 matches the independent source hash; saved-copy verification and staging cleanup completed.`,
+    `Recorded ${scenes.length} real workflow views; rendered ${count} fixed-framing frames. Download SHA-256 matches the independent source hash; saved-copy verification and staging cleanup completed.`,
   );
 } finally {
   try {

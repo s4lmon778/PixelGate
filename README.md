@@ -45,7 +45,7 @@ The app is a static **TypeScript / React / Vite** build hosted on GitHub Pages. 
 
 <div align="center">
   <img src="docs/assets/quick-start.gif" alt="Six-step PixelGate walkthrough: create a receiver code, connect the sender, approve, send files, download, then verify the saved copy and clear staging" width="960" />
-  <p><sub>A real synthetic-file transfer, with camera zooms and click highlights. Playback is edited for instruction.</sub></p>
+  <p><sub>A real synthetic-file transfer, with step captions and click highlights. Playback is edited for instruction.</sub></p>
 </div>
 
 [Watch or download the 29-second video](docs/assets/quick-start.mp4) · [Recording details](docs/assets/README.md#quick-start-walkthrough)
