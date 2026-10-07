@@ -1483,8 +1483,9 @@ export default function PixelGate() {
                               >
                                 Compatibility storage is active. Files are
                                 stored locally in chunks and verified before
-                                download. Older browsers may be slower; use
-                                smaller batches.
+                                download. Save and verify copies before closing
+                                a temporary or Private browsing session. Use
+                                smaller batches if storage is limited.
                               </p>
                             )}
                             <details>
@@ -1501,6 +1502,11 @@ export default function PixelGate() {
                                 save or download the files, verify the saved
                                 copies, then choose Clear verified staging to
                                 make room for the next batch.
+                              </p>
+                              <p>
+                                Private browsing may discard staged files when
+                                its session closes. Save and verify the files
+                                before closing that session.
                               </p>
                               <p>
                                 Folder saving also keeps a staged copy until you

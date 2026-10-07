@@ -163,7 +163,7 @@ OPFS write -> access-handle flush -> IndexedDB transaction commit -> ACK(offset)
 
 OPFS and IndexedDB are separate persistence systems, not a single atomic transaction. Writing bytes before committing metadata allows recovery to truncate an uncommitted tail to the last retained checkpoint. On reconnection, the sender reselects and rehashes its sources; the receiver checks the retained staged file and supplies the resume offset. Missing partials or files shorter than the committed offset restart instead of trusting a history entry. Complete-file readback still determines final integrity.
 
-Older browsers use a capability-selected IndexedDB fallback. The staging worker commits each checkpoint as a Blob with its stored byte length in one transaction, requesting `strict` durability when supported. Only after that transaction completes does the receiver commit the manifest offset/history and acknowledge it. The byte store is separate from manifest history; reconnection removes uncommitted tails in a transaction and rejects missing or noncontiguous chunks. Readback constructs a File from stored Blobs, then hashes 1 MiB slices; the application does not concatenate a whole file into a JavaScript byte array. Browser memory use and quota still require device testing.
+Browsers with unavailable OPFS use a capability-selected IndexedDB fallback. The staging worker commits each checkpoint and its stored byte length in one transaction, requesting `strict` durability when supported. Blob checkpoints are preferred; if the browser rejects Blob cloning, the failed transaction must abort before one retry using an ArrayBuffer of at most 1 MiB. Quota and permission errors are not retried as format changes. Both formats are readable without a database migration. Only after that transaction completes does the receiver commit the manifest offset/history and acknowledge it. The byte store is separate from manifest history; reconnection removes uncommitted tails in a transaction and rejects missing or noncontiguous chunks. Readback wraps each stored buffer as a Blob before retaining it, constructs a File from those Blob references, then hashes 1 MiB slices; the application does not concatenate a whole file into a JavaScript byte array. Browser memory use and quota still require device testing.
 
 Preflight writes and independently rereads a full 1 MiB checkpoint before registering a receiver. An absent file-system API or unsupported synchronous access triggers compatibility storage; denied access, quota exhaustion, or failed readback blocks receiving rather than silently claiming a usable backend. Existing staged copies are found in either backend, including after a browser upgrade. Downloads and reselected-export verification work with both storage modes.
 
@@ -217,12 +217,12 @@ The signaling broker is a trust dependency. A six-digit code and SHA-256 do not 
 
 ## Validation and boundaries
 
-Recorded through **0.3.9 on October 7, 2026** across full and targeted runs; these are completed checks, not a continuously updated CI badge. Historical fault-injection coverage is documented by release in [VALIDATION.md](VALIDATION.md).
+Recorded through **0.3.10 on October 7, 2026** across full and targeted runs; these are completed checks, not a continuously updated CI badge. Historical fault-injection coverage is documented by release in [VALIDATION.md](VALIDATION.md).
 
 | Evidence                                          | Coverage                                                                                                                                                                                                                                                                                        |
 | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | TypeScript, ESLint, production build              | Strict type checks, linting, and deployable static assets                                                                                                                                                                                                                                       |
-| 96 unit/integration tests                         | Independent hashes, corruption, changed sources, resume checkpoints, duplicate conflicts, permission/quota failures, safe paths, pairing lifecycle, app-handoff preparation, and publishing behavior                                                                                            |
+| 103 unit/integration tests                        | Independent hashes, corruption, changed sources, resume checkpoints, duplicate conflicts, permission/quota failures, safe paths, pairing lifecycle, app-handoff preparation, and publishing behavior                                                                                            |
 | Mobile save / awake / history regression suite    | Byte-preserving file preparation, fresh-tap activation, cancellation, unsupported payloads, corruption rejection, late-lock cleanup, wake denial/reacquisition, preference persistence, and history clearing without losing recovery data. Native mobile share targets remain a hardware check. |
 | Targeted browser regressions (see validation log) | Real WebRTC transfers, consent, compatibility storage, corruption, export verification, refresh recovery, QR decoding, mobile layout, text sizing, save/awake/history controls, and persistent Light / Dark / System appearance; historical fault-injection coverage is recorded by release     |
 | Chromium 101 compatibility checks                 | Actual older engine, public PeerJS pairing, local chunk storage, independently verified bytes, downloads, refresh, corruption rejection, and quota-failure rollback                                                                                                                             |
@@ -237,11 +237,11 @@ Browser tests compare synthetic source and staged bytes against independently co
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Desktop Chromium            | Automated sending/receiving; folder-save readback is unit-tested and feature-detected                                                                   |
 | Desktop Firefox             | Automated sending/receiving; use downloads where folder access is unavailable                                                                           |
-| WebKit test engine          | Automated sender-to-Chromium interoperability; does not certify native Safari receiving                                                                 |
+| WebKit test engine          | Automated sending and receiving through compatibility storage, including independent stored/exported hashes; native iPhone validation remains required  |
 | iPhone Safari to Mac        | User-reported hotspot completion; exact iPhone version, final Mac browser, transfer size, and independently checked exported hash were not recorded     |
 | Older Pixel / iOS receivers | User reports receiving, downloads, and opening files working; exact OS/browser versions, batch sizes, and independent exported hashes were not recorded |
 
-Receiving uses synchronous OPFS when available and IndexedDB Blob checkpoints otherwise. The receiver must pass a real local write/read test before pairing. Folder access is optional; use verified downloads and reselect the exported files for final verification where folder saving is unavailable. Compatibility storage may be slower, particularly on older devices; start with small batches and keep the browser open. Clearing site data or browser eviction can remove staged bytes in either mode.
+Receiving uses synchronous OPFS when usable and IndexedDB checkpoints otherwise, with a bounded ArrayBuffer fallback for browser contexts that reject Blob storage. The receiver must pass a real local write/read test before pairing. Folder access is optional; use verified downloads and reselect the exported files for final verification where folder saving is unavailable. Compatibility storage may be slower, particularly on older devices; start with small batches and keep the browser open. Clearing site data or browser eviction can remove staged bytes in either mode.
 
 The production syntax target includes Chrome 92, Firefox 95, and Safari 15.4; this is not certification of every version or device. Chromium 101 engine testing is recorded in [VALIDATION.md](VALIDATION.md). The user reports phone receiving/downloads working, but exact versions, capacities, native save targets, and wake-lock behavior still need physical validation. HTTPS is required except for trusted localhost development. Browser suspension, network isolation, host-address privacy, or NAT restrictions can prevent a direct connection.
 
@@ -266,6 +266,12 @@ For advanced local-discovery diagnosis, the receiver can revoke the failed conne
 It is the browser-reported quota minus estimated usage for the site's origin, not reserved free disk space. Estimates vary across browsers, profiles, and devices; actual free disk space may be lower. Each file must fit alongside copies still staged in that browser, with headroom for checkpoints and records.
 
 For larger collections of documents, media, archives, or other files, work in batches: save or download the files, verify the saved copies, then choose **Clear verified staging** to make room for the next batch. Direct folder mode retains staging until cleared, so allow disk space for both staged and destination copies. The estimate does not measure destination-folder free space or limit how much the sender can select. Clearing site data or browser eviction can remove staged files and history.
+
+### Safari says the operation failed for an unknown transient reason
+
+This error can occur during the browser-storage check before a pairing code is created. PixelGate now tests compatibility storage automatically when OPFS is exposed but inaccessible, and retries unsupported Blob checkpoints as bounded byte buffers. If neither storage path works, the error identifies the receiving preflight and suggests a regular tab, allowing website storage, closing older PixelGate tabs, and checking device space. Existing staged files are not automatically deleted.
+
+A Private or temporary browser session may discard its stored files when the session closes. Save and independently verify received copies before closing it. The app tests usable storage; it does not identify, record, or upload a user's browsing mode. [WebKit's OPFS documentation](https://webkit.org/blog/12257/the-file-system-access-api-with-origin-private-file-system/).
 
 ### How do I resume an interrupted transfer?
 
@@ -318,7 +324,7 @@ lib/bridge/
   hash.ts / hash.worker.ts   Identity derivation and incremental hashing
   storage.ts                Staging API, destination/export readback
   staging.worker.ts         Serialized OPFS / chunk checkpoint writes
-  indexed-staging.ts        Transactional IndexedDB Blob fallback
+  indexed-staging.ts        Transactional IndexedDB checkpoint fallback
   database.ts               IndexedDB checkpoints and local history
   route-diagnostics.ts      Local connection report without raw addresses
 lib/pairing-validation.ts    Bounded data-channel SDP validation

@@ -1,5 +1,6 @@
 import { test, expect, chromium, firefox, webkit } from '@playwright/test';
 import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { networkInterfaces } from 'node:os';
 import jsQR from 'jsqr';
 import { PNG } from 'pngjs';
@@ -26,12 +27,24 @@ async function scanQr(image: Locator) {
   return decoded!.data;
 }
 
-for (const mode of ['automatic', 'blocked', 'explicit', 'early', 'indexeddb'])
+for (const mode of [
+  'automatic',
+  'blocked',
+  'explicit',
+  'early',
+  'indexeddb',
+  'safari-receiver',
+])
   test(
     mode === 'blocked'
       ? 'six-digit pairing with blocked discovery fails without transferring bytes'
-      : `six-digit pairing${mode === 'explicit' ? ' with explicit LAN fallback' : mode === 'early' ? ' with candidates before answer' : mode === 'indexeddb' ? ' with compatibility storage' : ''} requires approval, transfers verified bytes, and consumes the code`,
+      : `six-digit pairing${mode === 'explicit' ? ' with explicit LAN fallback' : mode === 'early' ? ' with candidates before answer' : mode === 'indexeddb' ? ' with compatibility storage' : mode === 'safari-receiver' ? ' into WebKit compatibility storage' : ''} requires approval, transfers verified bytes, and consumes the code`,
     async ({ browserName }) => {
+      const safariReceiver = mode === 'safari-receiver';
+      test.skip(
+        safariReceiver && browserName !== 'webkit',
+        'One actual WebKit receiving scenario.',
+      );
       const explicitLan = mode === 'explicit';
       const blockedLan = mode === 'blocked' || mode === 'explicit';
       test.skip(
@@ -39,7 +52,7 @@ for (const mode of ['automatic', 'blocked', 'explicit', 'early', 'indexeddb'])
         'One negative control is sufficient for the injected route failure.',
       );
       test.skip(
-        !['automatic', 'indexeddb'].includes(mode) &&
+        !['automatic', 'indexeddb', 'safari-receiver'].includes(mode) &&
           Boolean(process.env.PIXELGATE_TEST_PUBLIC_SIGNALING),
         'Local discovery failure is injected only in the isolated fixture.',
       );
@@ -66,7 +79,7 @@ for (const mode of ['automatic', 'blocked', 'explicit', 'early', 'indexeddb'])
       // Use native privacy defaults even though the older manual-pairing suite
       // uses explicit LAN candidates for its headless fixtures.
       const senderBrowser = await { chromium, firefox, webkit }[
-        browserName
+        safariReceiver ? 'chromium' : browserName
       ].launch(
         browserName === 'chromium' &&
           process.env.PIXELGATE_TEST_CHROMIUM_EXECUTABLE
@@ -83,8 +96,11 @@ for (const mode of ['automatic', 'blocked', 'explicit', 'early', 'indexeddb'])
                 : {}
             : {},
       );
-      const receiverBrowser =
-        browserName === 'webkit' ? await chromium.launch() : senderBrowser;
+      const receiverBrowser = safariReceiver
+        ? await webkit.launch()
+        : browserName === 'webkit'
+          ? await chromium.launch()
+          : senderBrowser;
       const receiverContext = await receiverBrowser.newContext();
       const senderContext = await senderBrowser.newContext();
       if (
@@ -201,7 +217,7 @@ for (const mode of ['automatic', 'blocked', 'explicit', 'early', 'indexeddb'])
         await receiver
           .getByRole('button', { name: 'Create a connection', exact: true })
           .click();
-        if (mode === 'indexeddb')
+        if (mode === 'indexeddb' || safariReceiver)
           await expect(
             receiver.getByLabel('Compatibility storage', { exact: true }),
           ).toBeVisible();
@@ -364,63 +380,75 @@ for (const mode of ['automatic', 'blocked', 'explicit', 'early', 'indexeddb'])
           'Browser copy verified',
           { timeout: 60000 },
         );
-        const actualHash = await receiver.evaluate(async (indexed) => {
-          if (indexed) {
-            const d = await new Promise<IDBDatabase>((resolve, reject) => {
-              const request = indexedDB.open('pixelgate-staging-v1', 1);
-              request.onsuccess = () => resolve(request.result);
-              request.onerror = () => reject(request.error);
-            });
-            const chunks = await new Promise<{ bytes: Blob }[]>(
-              (resolve, reject) => {
-                const request = d
-                  .transaction('chunks')
-                  .objectStore('chunks')
-                  .getAll();
+        const actualHash = await receiver.evaluate(
+          async (indexed) => {
+            if (indexed) {
+              const d = await new Promise<IDBDatabase>((resolve, reject) => {
+                const request = indexedDB.open('pixelgate-staging-v1', 1);
                 request.onsuccess = () => resolve(request.result);
                 request.onerror = () => reject(request.error);
-              },
-            );
-            d.close();
-            const stored = new Blob(chunks.map((chunk) => chunk.bytes));
-            return [
-              ...new Uint8Array(
-                await crypto.subtle.digest(
-                  'SHA-256',
-                  await stored.arrayBuffer(),
+              });
+              const chunks = await new Promise<{ bytes: Blob }[]>(
+                (resolve, reject) => {
+                  const request = d
+                    .transaction('chunks')
+                    .objectStore('chunks')
+                    .getAll();
+                  request.onsuccess = () => resolve(request.result);
+                  request.onerror = () => reject(request.error);
+                },
+              );
+              d.close();
+              const stored = new Blob(chunks.map((chunk) => chunk.bytes));
+              return [
+                ...new Uint8Array(
+                  await crypto.subtle.digest(
+                    'SHA-256',
+                    await stored.arrayBuffer(),
+                  ),
                 ),
-              ),
-            ]
-              .map((byte) => byte.toString(16).padStart(2, '0'))
-              .join('');
-          }
-          const directory = await (
-            await navigator.storage.getDirectory()
-          ).getDirectoryHandle('pixelbridge');
-          const entries = (
-            directory as FileSystemDirectoryHandle & {
-              entries(): AsyncIterableIterator<[string, FileSystemHandle]>;
+              ]
+                .map((byte) => byte.toString(16).padStart(2, '0'))
+                .join('');
             }
-          ).entries();
-          for await (const [name, handle] of entries) {
-            if (handle.kind !== 'file' || name.startsWith('probe-')) continue;
-            const bytes = await (
-              await (handle as FileSystemFileHandle).getFile()
-            ).arrayBuffer();
-            return [
-              ...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)),
-            ]
-              .map((byte) => byte.toString(16).padStart(2, '0'))
-              .join('');
-          }
-        }, mode === 'indexeddb');
+            const directory = await (
+              await navigator.storage.getDirectory()
+            ).getDirectoryHandle('pixelbridge');
+            const entries = (
+              directory as FileSystemDirectoryHandle & {
+                entries(): AsyncIterableIterator<[string, FileSystemHandle]>;
+              }
+            ).entries();
+            for await (const [name, handle] of entries) {
+              if (handle.kind !== 'file' || name.startsWith('probe-')) continue;
+              const bytes = await (
+                await (handle as FileSystemFileHandle).getFile()
+              ).arrayBuffer();
+              return [
+                ...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)),
+              ]
+                .map((byte) => byte.toString(16).padStart(2, '0'))
+                .join('');
+            }
+          },
+          mode === 'indexeddb' || safariReceiver,
+        );
         expect(actualHash).toBe(hash);
-        if (mode === 'indexeddb') {
+        if (mode === 'indexeddb' || safariReceiver) {
           const event = receiver.waitForEvent('download');
           await receiver
             .getByRole('button', { name: 'Export verified batch', exact: true })
             .click();
-          expect((await event).suggestedFilename()).toBe('code-transfer-é.bin');
+          const downloaded = await event;
+          // macOS/WebKit downloads may normalize a Unicode filename to NFD.
+          expect(downloaded.suggestedFilename().normalize('NFC')).toBe(
+            'code-transfer-é.bin',
+          );
+          expect(
+            createHash('sha256')
+              .update(await readFile((await downloaded.path())!))
+              .digest('hex'),
+          ).toBe(hash);
           await receiver
             .getByRole('button', { name: 'History', exact: true })
             .click();
@@ -448,7 +476,7 @@ for (const mode of ['automatic', 'blocked', 'explicit', 'early', 'indexeddb'])
             const chunk = await new Promise<{
               fileId: string;
               offset: number;
-              bytes: Blob;
+              bytes: Blob | ArrayBuffer;
             }>((resolve) => {
               const r = d
                 .transaction('chunks')
@@ -456,9 +484,14 @@ for (const mode of ['automatic', 'blocked', 'explicit', 'early', 'indexeddb'])
                 .openCursor();
               r.onsuccess = () => resolve(r.result!.value);
             });
-            const damaged = new Uint8Array(await chunk.bytes.arrayBuffer());
+            const damaged = new Uint8Array(
+              await new Blob([chunk.bytes]).arrayBuffer(),
+            );
             damaged[0] ^= 1;
-            chunk.bytes = new Blob([damaged]);
+            chunk.bytes =
+              chunk.bytes instanceof ArrayBuffer
+                ? damaged.buffer
+                : new Blob([damaged]);
             await new Promise<void>((resolve, reject) => {
               const tx = d.transaction('chunks', 'readwrite');
               tx.objectStore('chunks').put(chunk);
@@ -528,7 +561,7 @@ for (const mode of ['automatic', 'blocked', 'explicit', 'early', 'indexeddb'])
         await receiver
           .getByRole('button', { name: 'Revoke connection', exact: true })
           .click();
-        if (mode === 'indexeddb') {
+        if (mode === 'indexeddb' || safariReceiver) {
           await receiver.reload();
           await receiver
             .getByRole('button', { name: 'History', exact: true })

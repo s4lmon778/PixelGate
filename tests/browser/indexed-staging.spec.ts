@@ -8,12 +8,7 @@ const workerAsset = readdirSync('dist/assets').find((name) =>
 
 test('compatibility checkpoints survive refresh, reconcile tails, reject gaps, and roll back quota failures', async ({
   page,
-  browserName,
 }) => {
-  test.skip(
-    browserName === 'webkit',
-    'Nonpersistent macOS WebKit contexts cannot reliably store IndexedDB Blobs; receiving is blocked by preflight.',
-  );
   await page.goto('./');
   const workerURL = new URL(`assets/${workerAsset}`, page.url()).href;
   // Inject quota failure into this isolated worker's chunk transaction only.
@@ -26,7 +21,7 @@ test('compatibility checkpoints survive refresh, reconcile tails, reject gaps, a
         `
       const originalPut = IDBObjectStore.prototype.put;
       IDBObjectStore.prototype.put = function(value, ...args) {
-        if (this.name === 'chunks' && value.bytes?.size === 7)
+        if (this.name === 'chunks' && (value.bytes?.size ?? value.bytes?.byteLength) === 7)
           throw new DOMException('Injected quota exhaustion', 'QuotaExceededError');
         return Reflect.apply(originalPut, this, [value, ...args]);
       };
@@ -149,7 +144,7 @@ test('unavailable compatibility storage blocks receiving before pairing', async 
 }) => {
   test.skip(
     browserName !== 'webkit',
-    'Exercise the known nonpersistent WebKit Blob-storage restriction.',
+    'Exercise explicit permission denial in the WebKit receiver context.',
   );
   await page.addInitScript(() => {
     Object.defineProperty(
@@ -159,6 +154,20 @@ test('unavailable compatibility storage blocks receiving before pairing', async 
         value: undefined,
       },
     );
+  });
+  await page.route(`**/assets/${workerAsset}`, async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({
+      response,
+      body:
+        `
+      const originalPut = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function(value, ...args) {
+        if (this.name === 'chunks') throw new DOMException('Storage denied', 'SecurityError');
+        return Reflect.apply(originalPut, this, [value, ...args]);
+      };
+    ` + (await response.text()),
+    });
   });
   await page.goto('./');
   expect(await page.evaluate(() => typeof navigator.storage.getDirectory)).toBe(

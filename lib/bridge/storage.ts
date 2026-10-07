@@ -16,6 +16,13 @@ let selectedBackend: StagingBackend | undefined;
 function hasOpfs() {
   return typeof navigator.storage?.getDirectory === 'function';
 }
+function unavailableOpfs(error: unknown) {
+  // Safari may expose OPFS but reject access in the current browser context.
+  // Do not classify quota exhaustion or a busy/corrupt file as API absence.
+  return ['NotSupportedError', 'UnknownError', 'SecurityError'].includes(
+    (error as Error).name,
+  );
+}
 export function stagingBackend(): StagingBackend {
   return selectedBackend ?? (hasOpfs() ? 'opfs' : 'indexeddb');
 }
@@ -71,7 +78,7 @@ export class StagingWriter {
     else {
       this.backend = this.preferredBackend;
       if (this.backend === 'opfs') await removeIndexed(fileId);
-      else if (hasOpfs()) await removeOpfs(fileId);
+      else if (hasOpfs()) await removeOpfs(fileId, true);
     }
     return this.call('open', { fileId, offset });
   }
@@ -105,6 +112,7 @@ async function locateStaged(id: string) {
   const preferred = stagingBackend();
   const modes: StagingBackend[] =
     preferred === 'opfs' ? ['opfs', 'indexeddb'] : ['indexeddb', 'opfs'];
+  let opfsFailure: unknown;
   for (const backend of modes) {
     if (backend === 'opfs' && !hasOpfs()) continue;
     try {
@@ -113,6 +121,10 @@ async function locateStaged(id: string) {
         file: await (backend === 'opfs' ? opfsFile(id) : indexedFile(id)),
       };
     } catch (error) {
+      if (backend === 'opfs' && unavailableOpfs(error)) {
+        opfsFailure = error;
+        continue;
+      }
       if (
         (error as Error).name !== 'NotFoundError' &&
         (error as Error).name !== 'NotSupportedError'
@@ -120,19 +132,21 @@ async function locateStaged(id: string) {
         throw error;
     }
   }
+  if (opfsFailure) throw opfsFailure;
   throw new DOMException('Staged file is missing.', 'NotFoundError');
 }
-async function removeOpfs(id: string) {
+async function removeOpfs(id: string, allowUnavailable = false) {
   try {
     await (await stagingDirectory()).removeEntry(id);
   } catch (error) {
+    if (allowUnavailable && unavailableOpfs(error)) return;
     if (!['NotFoundError', 'NotSupportedError'].includes((error as Error).name))
       throw error;
   }
 }
 export async function removeStaged(id: string) {
-  await removeIndexed(id);
-  if (hasOpfs()) await removeOpfs(id);
+  const removedIndexed = await removeIndexed(id);
+  if (hasOpfs()) await removeOpfs(id, removedIndexed);
 }
 export async function prepareStaging(): Promise<StagingBackend> {
   const probe = `probe-${crypto.randomUUID()}`;
@@ -151,8 +165,10 @@ export async function prepareStaging(): Promise<StagingBackend> {
       const bytes = new Uint8Array(await file.arrayBuffer());
       if (
         bytes.length !== CHECKPOINT_BYTES ||
-        bytes[0] !== 23 ||
-        bytes[bytes.length - 1] !== 90
+        bytes.some(
+          (byte, i) =>
+            byte !== (i === 0 ? 23 : i === bytes.length - 1 ? 90 : 0),
+        )
       )
         throw new Error(
           'Local storage readback failed. Receiving cannot start.',
@@ -179,7 +195,9 @@ export async function prepareStaging(): Promise<StagingBackend> {
         const error = failure as Error;
         throw Object.assign(
           new Error(
-            `Compatibility storage failed its write/read test. Receiving cannot start in this browser context. ${error.message}`,
+            error.name === 'QuotaExceededError'
+              ? 'Browser storage is full. Free device space or save and clear a verified batch, then retry.'
+              : `Compatibility storage failed its write/read test. Try a regular (non-Private) browser tab, close other PixelGate tabs, and reload. Allow website storage and check device space. Existing staged files have not been cleared. (${error.name}: ${error.message})`,
           ),
           { name: error.name },
         );
@@ -191,8 +209,7 @@ export async function prepareStaging(): Promise<StagingBackend> {
   try {
     await test(backend);
   } catch (error) {
-    if (backend !== 'opfs' || (error as Error).name !== 'NotSupportedError')
-      throw error;
+    if (backend !== 'opfs' || !unavailableOpfs(error)) throw error;
     backend = 'indexeddb';
     await test(backend);
   }

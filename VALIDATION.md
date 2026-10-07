@@ -1,5 +1,17 @@
 # Validation record
 
+## GitHub Pages edition · 0.3.10
+
+Executed on **October 7, 2026**, with synthetic fixtures:
+
+- Strict TypeScript, ESLint, production build, and **103 unit/integration tests** pass. Seven new preflight cases cover unavailable OPFS recovery (`UnknownError`, unsupported APIs, and context security restrictions), selecting that backend for actual receiving, worker disposal, blocked compatibility storage, quota/lock failures that must not switch storage, and corrupted probe readback. The complete 1 MiB probe is compared byte for byte.
+- **14 targeted browser cases pass** across Chromium, Firefox, and WebKit; four deliberate project-selection skips avoid duplicating WebKit-only fixtures. A native nonpersistent **WebKit receiver** now creates a pairing code, requires approval, receives **1 MiB + 37 bytes**, independently verifies staged bytes and an actual downloaded file, checks a reselected export, rejects deliberately corrupted staging, refreshes its record, and clears the verified staged chunks. The complete receiver flow is rerun after the cleanup refinement. Tests inspect signaling for bounded frames and absence of fixture filenames/hashes.
+- The worker checkpoint recovery fixture now passes in WebKit as well as Chromium/Firefox: real IndexedDB checkpoints survive refresh, resume removes uncommitted tails, quota failure rolls back length/chunks, and gaps are rejected. Explicitly denying both checkpoint formats blocks receiving before code creation and shows actionable storage guidance. WebKit's real Blob-cloning restriction exercises the byte-buffer fallback; it is not replaced with an always-successful in-memory test store.
+- Actual **Chromium 101.0.4951.15** passes the public PeerJS compatibility-transfer/readback case and the transactional checkpoint/refresh/quota/gap fixture after these changes.
+- The first WebKit download assertion revealed that macOS normalizes its suggested Unicode filename to NFD. The fixture now compares canonical Unicode equivalence while independently checking exported bytes; application paths and filenames are not rewritten.
+
+**Physical iPhone report:** the user identified an iPhone 15 Safari **Private** tab when receiving failed with the unknown-transient error. A regular Safari tab successfully creates the receiver connection and reports an estimated 38.4 GB staging allowance. The exact iOS/browser version and final exported hash were not recorded. Private-session receiving with this release still needs a physical iPhone check; engine tests are not hardware certification. A temporary session can discard its storage when closed. No browsing-mode detector, cloud media service, or TURN relay was added.
+
 ## GitHub Pages edition · 0.3.9
 
 Executed on **October 7, 2026**, with synthetic fixtures:
@@ -47,15 +59,15 @@ The Chromium six-digit scenario also passes against the real public PeerJS servi
 
 ## Browser environment
 
-| Engine / device           | Version / setup                                                                                      | Result                                                               |
-| ------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Chromium                  | Playwright Chromium 141.0.7390.37; normal privacy for code pairing; explicit LAN for manual fixtures | Transfer and layout checks                                           |
-| Firefox                   | Playwright Firefox 142.0.1; normal privacy for code pairing; explicit LAN for manual fixtures        | Transfer and layout checks                                           |
-| WebKit                    | Playwright WebKit 26.0 sender to Chromium receiver                                                   | Interoperability and layout checks                                   |
-| Native desktop Safari     | Safari 26.5 on macOS 26.5.1                                                                          | User failure on original Wi-Fi; hotspot receiver browser unspecified |
-| Native Mac Arc            | Arc 1.166.0 on macOS 26.5.1                                                                          | User failure on original Wi-Fi; hotspot receiver browser unspecified |
-| iPhone Safari             | Actual iOS/browser versions not recorded                                                             | User-reported completed hotspot transfer with 0.3.4                  |
-| First-generation Pixel XL | Record actual Android/Chrome versions                                                                | Pending                                                              |
+| Engine / device           | Version / setup                                                                                      | Result                                                                |
+| ------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Chromium                  | Playwright Chromium 141.0.7390.37; normal privacy for code pairing; explicit LAN for manual fixtures | Transfer and layout checks                                            |
+| Firefox                   | Playwright Firefox 142.0.1; normal privacy for code pairing; explicit LAN for manual fixtures        | Transfer and layout checks                                            |
+| WebKit                    | Playwright WebKit 26.0; sender and 0.3.10 compatibility receiver                                     | Interoperability, compatibility receiving/readback, and layout checks |
+| Native desktop Safari     | Safari 26.5 on macOS 26.5.1                                                                          | User failure on original Wi-Fi; hotspot receiver browser unspecified  |
+| Native Mac Arc            | Arc 1.166.0 on macOS 26.5.1                                                                          | User failure on original Wi-Fi; hotspot receiver browser unspecified  |
+| iPhone Safari             | Actual iOS/browser versions not recorded                                                             | User-reported completed hotspot transfer with 0.3.4                   |
+| First-generation Pixel XL | Record actual Android/Chrome versions                                                                | Pending                                                               |
 
 Six-digit tests use normal browser host-address privacy, including WebKit-to-Chromium, and deliberately hold back answers/ICE candidates until the receiver approves: approval must become available before the route opens, and no transfer may start before it opens. The older manual-pairing fixtures use explicit LAN candidates; a separate run of Firefox manual pairing with normal mDNS privacy failed to open a direct channel. This limitation does not affect the six-digit regression results, but demonstrates why automated checks cannot certify all device/network combinations. `PIXELGATE_TEST_EXPLICIT_LAN=1` is an optional test diagnostic; production uses normal browser discovery. WebKit’s nonpersistent macOS test contexts do not provide reliable OPFS receiving, so this does not certify native Safari receiving.
 

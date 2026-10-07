@@ -1,9 +1,11 @@
 import { CHECKPOINT_BYTES } from './model';
 
-// Blob checkpoints stay in IndexedDB rather than accumulating byte arrays in
-// the page. Kept separate from manifests so older records need no migration.
+// Bounded checkpoints stay in IndexedDB. Prefer Blob storage; browser contexts
+// that reject Blob cloning can commit ArrayBuffers instead. Existing records
+// need no migration, and readback wraps each buffer before retaining it.
 const DATABASE = 'pixelgate-staging-v1';
 let opening: Promise<IDBDatabase> | undefined;
+let bufferChunks = false;
 function db() {
   return (opening ??= new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DATABASE, 1);
@@ -46,17 +48,19 @@ function checked(id: string, offset = 0) {
 function range(id: string) {
   return IDBKeyRange.bound([id, 0], [id, Number.MAX_SAFE_INTEGER]);
 }
-type Chunk = { fileId: string; offset: number; bytes: Blob };
+type Chunk = { fileId: string; offset: number; bytes: Blob | ArrayBuffer };
 function validChunk(chunk: Chunk, expected: number) {
-  if (
-    chunk.offset !== expected ||
-    !(chunk.bytes instanceof Blob) ||
-    chunk.bytes.size < 1 ||
-    chunk.bytes.size > CHECKPOINT_BYTES
-  )
+  const size =
+    chunk.bytes instanceof Blob
+      ? chunk.bytes.size
+      : chunk.bytes instanceof ArrayBuffer
+        ? chunk.bytes.byteLength
+        : 0;
+  if (chunk.offset !== expected || size < 1 || size > CHECKPOINT_BYTES)
     throw new Error(
       'Stored file has missing or invalid chunks. Retry this file.',
     );
+  return size;
 }
 function startTransaction(database: IDBDatabase, mode: IDBTransactionMode) {
   try {
@@ -159,9 +163,9 @@ export async function openIndexed(id: string, offset: number) {
             const chunk = item.value as Chunk;
             if (chunk.offset >= offset) item.delete();
             else {
-              validChunk(chunk, expected);
-              const end = Math.min(offset, chunk.offset + chunk.bytes.size);
-              if (end < chunk.offset + chunk.bytes.size)
+              const size = validChunk(chunk, expected);
+              const end = Math.min(offset, chunk.offset + size);
+              if (end < chunk.offset + size)
                 item.update({
                   ...chunk,
                   bytes: chunk.bytes.slice(0, end - chunk.offset),
@@ -192,31 +196,47 @@ export async function writeIndexed(
     throw new Error('Invalid staging checkpoint.');
   // Bytes and length commit atomically; acknowledgment waits for completion.
   const database = await db();
-  return new Promise<void>((resolve, reject) => {
-    const tx = startTransaction(database, 'readwrite');
-    let error: unknown;
-    tx.oncomplete = () => resolve();
-    tx.onabort = () =>
-      reject(error ?? tx.error ?? new Error('Unable to write stored file.'));
-    const files = tx.objectStore('files');
-    const request = files.get(id);
-    request.onsuccess = callback(
-      tx,
-      () => {
-        if (!request.result || request.result.size !== offset)
-          throw new Error('Stored offset changed. Reconnect to resume.');
-        tx.objectStore('chunks').put({
-          fileId: id,
-          offset,
-          bytes: new Blob([bytes]),
-        });
-        files.put({ id, size: offset + bytes.byteLength });
-      },
-      (value) => {
-        error = value;
-      },
-    );
-  });
+  const commit = (data: Blob | ArrayBuffer) =>
+    new Promise<void>((resolve, reject) => {
+      const tx = startTransaction(database, 'readwrite');
+      let error: unknown;
+      tx.oncomplete = () => resolve();
+      tx.onabort = () =>
+        reject(error ?? tx.error ?? new Error('Unable to write stored file.'));
+      const files = tx.objectStore('files');
+      const request = files.get(id);
+      request.onsuccess = callback(
+        tx,
+        () => {
+          if (!request.result || request.result.size !== offset)
+            throw new Error('Stored offset changed. Reconnect to resume.');
+          tx.objectStore('chunks').put({
+            fileId: id,
+            offset,
+            bytes: data,
+          });
+          files.put({ id, size: offset + bytes.byteLength });
+        },
+        (value) => {
+          error = value;
+        },
+      );
+    });
+  if (bufferChunks) return commit(bytes);
+  try {
+    await commit(new Blob([bytes]));
+  } catch (error) {
+    // The first transaction must abort before retrying. Retry once only for
+    // unsupported/failed Blob cloning, never quota or permission failures.
+    if (
+      !['UnknownError', 'DataCloneError', 'NotSupportedError'].includes(
+        (error as Error).name,
+      )
+    )
+      throw error;
+    await commit(bytes);
+    bufferChunks = true;
+  }
 }
 
 export async function indexedFile(id: string): Promise<File> {
@@ -259,13 +279,16 @@ export async function indexedFile(id: string): Promise<File> {
               return;
             }
             const chunk = item.value as Chunk;
-            validChunk(chunk, expected);
-            expected += chunk.bytes.size;
+            expected += validChunk(chunk, expected);
             if (expected > size)
               throw new Error(
                 'Stored file has unexpected bytes. Retry this file.',
               );
-            parts.push(chunk.bytes);
+            parts.push(
+              chunk.bytes instanceof Blob
+                ? chunk.bytes
+                : new Blob([chunk.bytes]),
+            );
             item.continue();
           },
           fail,
@@ -278,9 +301,13 @@ export async function indexedFile(id: string): Promise<File> {
 
 export async function removeIndexed(id: string) {
   checked(id);
-  await transaction<void>('readwrite', (tx, result) => {
-    tx.objectStore('chunks').delete(range(id));
-    tx.objectStore('files').delete(id);
-    result(undefined);
+  return transaction<boolean>('readwrite', (tx, result) => {
+    const files = tx.objectStore('files');
+    const request = files.get(id);
+    request.onsuccess = () => {
+      tx.objectStore('chunks').delete(range(id));
+      files.delete(id);
+      result(!!request.result);
+    };
   });
 }
