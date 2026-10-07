@@ -960,10 +960,19 @@ h1 {
   margin: 8px 0;
   line-height: 1.65;
 }
-.storage-card summary {
+.storage-card summary,
+.help-details summary {
   color: var(--accent);
   cursor: pointer;
-  padding: 5px 0;
+  padding: 10px 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+.help-details {
+  margin-top: 6px;
+}
+.help-details > .hint {
+  margin: 8px 0;
 }
 .saving-heading {
   margin: 0 0 14px;

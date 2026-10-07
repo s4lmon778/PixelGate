@@ -11,10 +11,12 @@ import { version } from '../package.json';
 
 export function SaveToApp({
   records,
+  folderAccessAvailable,
   disabled,
   changed,
 }: {
   records: RecordFile[];
+  folderAccessAvailable: boolean;
   disabled: boolean;
   changed: () => Promise<void>;
 }) {
@@ -177,24 +179,33 @@ export function SaveToApp({
         <Share2 size={16} />
         Save to app or location
       </button>
-      <p className="hint">
-        {supported
-          ? 'After receiving, choose files and open your device’s save/share sheet. Available apps, photo-library actions, and folders depend on your device. Websites cannot choose a specific album automatically.'
-          : 'File sharing is unavailable here. After receiving, this button prepares verified downloads. Your browser or file manager provides the available save and share options.'}
-      </p>
-      {!supported && chromeLink && (
-        <div className="chrome-help">
-          <a className="button" href={chromeLink}>
-            Open in Chrome
-          </a>
+      <details className="help-details">
+        <summary>Saving options</summary>
+        {!folderAccessAvailable && (
           <p className="hint">
-            An embedded browser may lack file sharing. Try the full Chrome app
-            before receiving. If it opens a different browser, its storage is
-            separate; receive the files there again. Downloading here remains
-            available.
+            Direct folder access is unavailable in this browser. Use your
+            device’s save/share options or downloads.
           </p>
-        </div>
-      )}
+        )}
+        <p className="hint">
+          {supported
+            ? 'After receiving, choose files and open your device’s save/share sheet. Available apps, photo-library actions, and folders depend on your device. Websites cannot choose a specific album automatically.'
+            : 'File sharing is unavailable here. After receiving, this button prepares verified downloads. Your browser or file manager provides the available save and share options.'}
+        </p>
+        {!supported && chromeLink && (
+          <div className="chrome-help">
+            <a className="button" href={chromeLink}>
+              Open in Chrome
+            </a>
+            <p className="hint">
+              An embedded browser may lack file sharing. Try the full Chrome app
+              before receiving. If it opens a different browser, its storage is
+              separate; receive the files there again. Downloading here remains
+              available.
+            </p>
+          </div>
+        )}
+      </details>
       <dialog
         className="save-dialog"
         aria-label="Save to an app or location"
@@ -334,11 +345,14 @@ export function SaveToApp({
             {message}
           </p>
         )}
-        <p className="hint">
-          A handoff does not confirm a saved file or cloud backup. Apps may
-          convert media. Reselect saved copies to check their final bytes before
-          clearing staging.
-        </p>
+        <details className="help-details">
+          <summary>About saved-copy verification</summary>
+          <p className="hint">
+            A handoff does not confirm a saved file or cloud backup. Apps may
+            convert media. Reselect saved copies to check their final bytes
+            before clearing staging.
+          </p>
+        </details>
       </dialog>
     </div>
   );

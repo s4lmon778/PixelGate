@@ -1,5 +1,12 @@
 # Validation record
 
+## GitHub Pages edition · 0.3.12
+
+Executed on **October 7, 2026**:
+
+- Long staging and compatibility-storage explanations now live inside **How storage works**. Folder-access limitations, device save/share options, and the optional Chrome workaround are grouped under **Saving options**. The save dialog has an expandable saved-copy verification explanation. Operational instructions, status messages, errors, and the **How it works** page remain visible as before. Transfer and storage behavior are unchanged.
+- Strict TypeScript, ESLint, and the production build pass. All nine existing targeted layout, 200% text enlargement, and unsupported-capability browser cases pass across Chromium, Firefox, and WebKit. Manual browser checks in each engine confirm help starts collapsed, opens with the keyboard, preserves the expanded guide, and fits a 390-pixel viewport.
+
 ## GitHub Pages edition · 0.3.11
 
 Executed on **October 7, 2026**:

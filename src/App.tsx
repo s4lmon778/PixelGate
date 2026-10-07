@@ -1472,24 +1472,25 @@ export default function PixelGate() {
                               <span>Estimated staging space</span>
                               <strong>{capacityLabel}</strong>
                             </div>
-                            <p>
-                              Received files stay in this browser until you save
-                              and clear their staged copies.
-                            </p>
-                            {storageMode === 'indexeddb' && (
-                              <p
-                                className="hint"
-                                aria-label="Compatibility storage"
-                              >
-                                Compatibility storage is active. Files are
-                                stored locally in chunks and verified before
-                                download. Save and verify copies before closing
-                                a temporary or Private browsing session. Use
-                                smaller batches if storage is limited.
-                              </p>
-                            )}
                             <details>
                               <summary>How storage works</summary>
+                              <p>
+                                Received files stay in this browser until you
+                                save and clear their staged copies.
+                              </p>
+                              {storageMode === 'indexeddb' && (
+                                <p
+                                  className="hint"
+                                  aria-label="Compatibility storage"
+                                >
+                                  Compatibility storage is active. Files are
+                                  stored locally in chunks and verified before
+                                  download. Save and verify copies before
+                                  closing a temporary or Private browsing
+                                  session. Use smaller batches if storage is
+                                  limited.
+                                </p>
+                              )}
                               <p>
                                 This is the browser’s estimated remaining
                                 storage allowance for this site. Estimates vary
@@ -1544,13 +1545,19 @@ export default function PixelGate() {
                               Choose folder
                             </button>
                           </div>
-                          <p className="hint destination-hint">
-                            {typeof (window as BrowserFolderWindow)
-                              .showDirectoryPicker === 'function'
-                              ? 'Choose a folder before receiving to save and verify files there automatically, preserving their folder structure.'
-                              : 'Direct folder access is unavailable in this browser. Use your device’s save/share options below or downloads.'}
-                          </p>
+                          {typeof (window as BrowserFolderWindow)
+                            .showDirectoryPicker === 'function' && (
+                            <p className="hint destination-hint">
+                              Choose a folder before receiving to save and
+                              verify files there automatically, preserving their
+                              folder structure.
+                            </p>
+                          )}
                           <SaveToApp
+                            folderAccessAvailable={
+                              typeof (window as BrowserFolderWindow)
+                                .showDirectoryPicker === 'function'
+                            }
                             records={storedReceived}
                             disabled={busy || !!active}
                             changed={async () => {
