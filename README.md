@@ -2,12 +2,12 @@
   <img src="docs/assets/logo.svg" alt="PixelGate" width="80" height="80" />
   <h1>PixelGate</h1>
   <p><strong>Move files. Keep every byte.</strong></p>
-  <p>Direct browser-to-browser file transfers with resumable checkpoints and independent SHA-256 readback.</p>
+  <p>Direct browser-to-browser transfers with resumable checkpoints and independent SHA-256 verification.</p>
   <p>
     <a href="https://s4lmon778.github.io/PixelGate/">Live app</a> ·
     <a href="#quick-start">Quick start</a> ·
     <a href="#engineering-decisions">Engineering decisions</a> ·
-    <a href="VALIDATION.md">Validation record</a> ·
+    <a href="docs/README.md">Documentation</a> ·
     <a href="https://github.com/s4lmon778/PixelGate/issues">Report an issue</a>
   </p>
   <p>
@@ -19,13 +19,11 @@
   </p>
 </div>
 
-![PixelGate desktop interface](docs/assets/screenshot.png)
+PixelGate moves files between computers, phones, and tablets using their browsers. File bytes travel over a direct encrypted WebRTC data channel. The receiver closes and rereads each stored file before comparing its SHA-256 with the source. Filenames, manifests, hashes, file bytes, and transfer history remain on the participating devices.
 
-PixelGate transfers files between computers, phones, and tablets without a native app or account. The receiver writes the original bytes, closes the stored file, and independently rereads it before comparing SHA-256 hashes. Transfer progress, persisted checkpoints, and verification of the final saved copy are tracked separately.
+The app is a static **TypeScript / React / Vite** build hosted on GitHub Pages. **PeerJS** exchanges connection metadata for six-digit pairing; it carries no file payloads. No native app, account, cloud media storage, or TURN relay is required.
 
-The application is a static TypeScript/React build hosted on GitHub Pages. PeerJS exchanges connection metadata for six-digit pairing; file payloads travel over a direct encrypted WebRTC data channel. Manifests, filenames, hashes, file bytes, and transfer history stay on the participating devices.
-
-> **Status:** experimental, with reproducible integrity and browser tests. Compatibility depends on browser capabilities, device storage, and network conditions. Real files above 4 GB and 100 GB sessions require further hardware validation. See [validation and boundaries](#validation-and-boundaries).
+> **Status:** experimental. The current app is **0.3.13**. Automated checks exercise integrity and recovery; browser capabilities, available storage, and network policies still determine usability. Large-file and physical-device boundaries are documented below.
 
 ## Contents
 
@@ -34,258 +32,125 @@ The application is a static TypeScript/React build hosted on GitHub Pages. PeerJ
 - [Architecture](#architecture)
 - [Engineering decisions](#engineering-decisions)
 - [Validation and boundaries](#validation-and-boundaries)
-- [Troubleshooting](#troubleshooting)
-- [Local development](#local-development)
+- [Development](#development)
 - [Deployment](#deployment)
-- [Contributing and security](#contributing-and-security)
+- [Documentation and contributing](#documentation-and-contributing)
 
 ## Quick start
 
-1. Open **[PixelGate](https://s4lmon778.github.io/PixelGate/)** on both devices, using the same trusted local network or a hotspot.
+1. Open **[PixelGate](https://s4lmon778.github.io/PixelGate/)** on both devices, using a trusted network that permits connections between them.
 2. On the destination device, choose **Receive files**, optionally choose a destination folder, and click **Create a connection**.
-3. On the sender, enter the receiver's **six-digit code** or scan its QR code, then click **Connect**. Leading zeroes are valid; use **Enlarge QR code** if needed.
-4. On the receiver, click **Approve sender** for your intended device. No sender response needs copying.
-5. Select files or folders on the sender and click **Send files**. Keep both browsers open and foregrounded.
-6. Save the verified copies: choose a destination folder before receiving where supported, or use **Save to app or location** afterward. Select a batch, prepare it, then tap **Choose app or save location** to open the device's native options, or **Download verified files** when sharing is unavailable. Reselect files saved through apps or downloads using **Verify saved copies** to confirm their final bytes.
+3. On the sender, enter the receiver's **six-digit code** or scan its QR code, then click **Connect**.
+4. On the receiver, **Approve sender** for your intended device.
+5. Select files or folders on the sender and click **Send files**. Keep both browsers open and foregrounded; enable **Keep screen awake** where supported.
+6. Save the verified files through a selected folder, **Save to app or location**, or downloads. Reselect downloaded/app-saved copies with **Verify saved copies** to confirm their final bytes.
 
-Codes expire after ten minutes and are released when the approved connection activates. One sender is accepted per receiver. Six digits are a convenient lookup, not identity authentication: share a code only with your intended device and approve only its request.
+Codes expire after ten minutes and accept one sender. A code is a temporary lookup, not identity authentication. Same-network-name Wi-Fi can still block local connections; use a permitted network or hotspot if necessary.
 
-### Saving options
+For large collections, receive a batch, save it, verify the saved copies, and choose **Clear verified staging** before the next batch. This frees eligible browser storage while keeping downloaded/saved files and transfer records. **Clear history** is a separate action that preserves staging and resume data.
 
-| Mode              | Storage workflow                                                                                                                | Verification of the saved copy                                                                             |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Direct folder     | Copy verified staged bytes into a user-selected folder, where browser support permits.                                          | Close the destination writer, reread the destination file, and compare size and SHA-256.                   |
-| Native save/share | Select up to 20 verified browser copies, prepare them, then choose an available app or save action in the device's share sheet. | A handoff is recorded separately; the final saved copy remains pending until reselected and hash-verified. |
-| Manual download   | Download verified browser copies and move them to the desired folder.                                                           | Mark the downloaded copy as pending until the user reselects it for hash verification.                     |
+See the [usage guide](docs/USAGE.md) for saving modes and storage behavior, or [troubleshooting](docs/TROUBLESHOOTING.md) for network and browser issues.
 
-Choose a destination that fits your workflow: a Documents folder, an archive directory, Downloads, or a media folder. If you use a photo library, document manager, or backup service, import or sync the saved files through that app and confirm backup there. For example, Android users importing photos can choose `DCIM/PixelGate` and configure that folder in Google Photos. PixelGate never reports backup success or deletes source files.
+<details>
+<summary><strong>Interface previews — desktop and mobile</strong></summary>
 
-Mobile browsers do not universally expose folder writers or photo-album access. The save dialog stays available after verified files arrive even without native sharing. It rereads and hashes selected copies, then offers downloads with original filenames and media MIME types; missing generic MIME types are inferred from common file extensions without transcoding. In the browser's Downloads list, use the file manager's Share or Move actions where available. Some browsers require permission for multiple downloads. A download request is not proof that saving completed.
+Screenshots show the 0.3.13 interface with empty queues, including paired saving controls and expandable help.
 
-On Android, **Open in Chrome** provides a user-tapped link to the full Chrome app when sharing is unavailable. Embedded browsers may lack APIs available in full Chrome. Only the application page is passed; pairing fragments, transfer metadata, and files are excluded. If the browser changes, receive again there because browser storage is separate. This does not add file-sharing support to an unsupported Chrome version or select Google Photos automatically. [Android browser intents](https://developer.chrome.com/docs/android/intents), [Web Share API](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/share).
+![PixelGate desktop interface](docs/assets/desktop.png)
 
-**Save to app or location** uses Web Share file support when present; your OS and installed apps determine the available destinations and save actions. PixelGate cannot preselect an app or album, remember a share target, or guarantee a specific Photos action. Unsupported types or oversized batches may be rejected by the browser or target app; choose fewer files or use downloads. App sharing flattens paths to filenames, numbers collisions, and passes unchanged staged bytes without transcoding. The selected app can subsequently transform or upload files under its own settings.
+<img src="docs/assets/mobile.png" alt="PixelGate mobile receiving and saving controls" width="390" />
 
-**Google Photos albums:** this release does not connect to a Google account or upload through Google's API. Google's Library API can manage albums created by the integrating app, rather than save into arbitrary existing albums; its Picker API selects existing media for reading, not an upload destination. A Google Photos account integration would be a separate, explicit cloud-upload option requiring OAuth configuration. [Google's album restrictions](https://developers.google.com/photos/library/guides/manage-albums), [API changes](https://developers.google.com/photos/support/updates).
-
-### Screen awake and local history
-
-The main-page **Keep screen awake** switch defaults on during pairing and connections, with the preference saved locally. Its status distinguishes a requested lock from an active lock, and reports denial or release. The app reacquires an enabled screen lock when the tab becomes visible again, releases it when switched off or disconnected, and provides a retry action. Unsupported browsers show device screen-timeout guidance.
-
-The sun/cloud and moon/star switch indicates the local **On/Off preference**; the status message beneath it confirms whether a wake lock is actually active. The transition honours reduced-motion settings. Its SVG/CSS artwork is implemented locally, inspired by [Day Night Switch Buttons by Ashish Shakya for Hogoco](https://dribbble.com/shots/15091716-Day-Night-Switch-Buttons), with PixelGate's blue/slate palette and compact controls; no third-party image assets are loaded.
-
-![PixelGate's screen-awake switch](docs/assets/awake-switch.png)
-
-Screen Wake Lock prevents automatic screen lock where supported; it does not keep a browser running after manual locking, app switching, or OS suspension. Power-saving policies may release it. Enable it on both devices and keep both tabs visible. Checkpoint-based reconnection remains the recovery path for interrupted transfers.
-
-In **History**, **Clear history** clears all displayed records or the selected session, with confirmation. It preserves staged bytes, saved copies, and receiver resume manifests. **Clear verified staging** is a separate storage action. Resuming, verifying, or saving retained files can create new history records.
+</details>
 
 ## Features
 
-- **Pairing and consent:** six-digit entry, short QR links, explicit receiver approval, expiry, and immediate revocation. Optional copy/paste pairing works without PeerJS.
-- **File and folder queues:** multiple selection, recursive folder drops where supported, preserved relative paths and Unicode names, and rejection of unsafe destination paths.
-- **Integrity and recovery:** incremental hashing, independent stored-file readback, durable checkpoints, and resume after source reselection and rehashing.
-- **Saving and duplicate handling:** destination readback, verified duplicate detection, numbered filenames for conflicting content, and retained staged copies for retry.
-- **Session controls:** pause, resume, cancel, byte progress, a screen-awake switch, local history with session-aware clearing, and downloadable JSON, CSV, and text reports.
-- **Batch management:** export up to 50 pending verified files per click, select up to 20 for a native app handoff, verify saved copies, and clear eligible staging to reclaim space.
-- **Accessible interface:** responsive layouts, mobile-sized controls, keyboard focus, a top-bar Light / Dark / System appearance menu with a local preference, and reduced-motion support. Saving, file selection, and batch verification controls use paired mobile rows with comfortable tap targets. Extended storage and saving explanations are available in collapsed help sections; operational instructions and status messages remain visible.
+- **Pairing and approval:** six-digit entry, QR links, receiver consent, expiry, and revocation. Copy/paste pairing is available when signaling is unavailable.
+- **Files and folders:** multiple selection, recursive drops where supported, Unicode filenames, preserved relative paths, and destination-path validation.
+- **Integrity and recovery:** incremental worker hashing, independent stored-file readback, durable checkpoints, and resume after source reselection and rehashing.
+- **Saving:** direct folder writes with destination readback, native save/share where supported, verified downloads, duplicate checks, and numbered conflicting filenames.
+- **Batch controls:** pause/resume/cancel, progress, export and saved-copy verification, staging cleanup, local history, and JSON/CSV/text reports.
+- **Accessible interface:** responsive paired action rows, keyboard controls, Light / Dark / System appearance, reduced-motion support, expandable help, and an optional screen-awake switch.
 
 ## Architecture
 
-The UI coordinates pairing and queue actions; the transfer engine owns protocol state; dedicated workers handle incremental hashing and checkpoint writes through OPFS or local IndexedDB chunk storage.
+React coordinates user actions; the transfer engine owns protocol state; workers handle hashing and staging. GitHub Pages serves static assets, while PeerJS handles temporary signaling.
 
-| Layer       | Implementation                               | Responsibility                                                                       |
-| ----------- | -------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Interface   | React, strict TypeScript, CSS                | Send/Receive modes, approval, progress, saving, history, and reports                 |
-| Connection  | WebRTC, bundled PeerJS                       | SDP/ICE signaling, ordered raw data channels, connection lifecycle, and consent gate |
-| Integrity   | Web Workers, bundled `hash-wasm`, Web Crypto | Incremental SHA-256 and content/path identities                                      |
-| Persistence | OPFS, synchronous access handles, IndexedDB  | Staged bytes, committed offsets, local records, and session history                  |
-| Tooling     | Vite, ESLint, Prettier, Vitest, Playwright   | Static builds, code checks, failure fixtures, and browser integration tests          |
-| Hosting     | GitHub Pages                                 | HTTPS delivery of the application and worker bundles                                 |
+| Layer       | Implementation                             | Responsibility                                                       |
+| ----------- | ------------------------------------------ | -------------------------------------------------------------------- |
+| Interface   | React, strict TypeScript, CSS              | Pairing, approval, queues, progress, saving, appearance, and reports |
+| Connection  | WebRTC, bundled PeerJS                     | SDP/ICE exchange, reliable ordered data channels, and lifecycle      |
+| Integrity   | Web Workers, `hash-wasm`                   | Incremental source hashing and independent copy readback             |
+| Persistence | OPFS, IndexedDB                            | Staged bytes, checkpoint metadata, local manifests, and history      |
+| Tooling     | Vite, ESLint, Prettier, Vitest, Playwright | Static builds, checks, and failure-injection fixtures                |
 
 ```mermaid
 sequenceDiagram
-    participant S as Sender browser
+    participant S as Sender
     participant P as PeerJS signaling
-    participant R as Receiver browser
-    participant W as Staging worker / local bytes
-    participant D as IndexedDB
-    R->>P: Register temporary receiver code
-    S->>P: Connect using code
-    P->>S: Receiver SDP / ICE
-    P->>R: Sender SDP / ICE
-    Note over S,R: Receiver approval + open direct channel required
-    S->>R: Protocol hello + file manifest
-    R->>S: Ready: receiver-owned resume offset
+    participant R as Receiver
+    participant W as Local staging worker
+    S->>P: Connect using receiver code
+    P-->>R: Connection request and SDP/ICE
+    Note over S,R: Receiver approval and open channel required
+    S->>R: Manifest and source SHA-256
+    R-->>S: Receiver-owned resume offset
     loop Each checkpoint, up to 1 MiB
-        S->>R: Raw binary frames, up to 16 KiB each
-        R->>W: Persist checkpoint (OPFS flush or chunk transaction)
-        W-->>R: Write completed
-        R->>D: Commit offset and history transaction
-        D-->>R: Transaction completed
-        R->>S: Acknowledge durable offset
+        S->>R: Binary frames, up to 16 KiB
+        R->>W: Persist bytes
+        W-->>R: Write/flush or chunk transaction complete
+        R->>R: Commit manifest checkpoint
+        R-->>S: Acknowledge durable offset
     end
-    S->>R: Finish
-    R->>W: Finish writes and close staging
-    R->>R: Reread staged bytes and compare SHA-256
+    R->>R: Close staging, reread, and compare SHA-256
     opt Direct folder selected
-        R->>R: Copy, close, and independently reread destination
+        R->>R: Copy, close, and hash saved destination
     end
-    R->>S: Verification result with explicit scope
+    R-->>S: Verification result with explicit scope
 ```
 
-Signaling disconnects after activation while the direct channel remains open. The static host and pairing service do not carry the transfer protocol or file payloads. Cloudflare and Google STUN discover network routes; no TURN relay is configured.
-
-For the detailed connection lifecycle and storage model, see [Architecture](docs/ARCHITECTURE.md).
+Signaling disconnects after activation; file transfer continues over the direct channel. STUN discovers potential routes. No TURN fallback is configured. See [Architecture](docs/ARCHITECTURE.md) for protocol controls, lifecycle limits, and compatibility storage.
 
 ## Engineering decisions
 
-### 1. Bound the transfer pipeline and apply backpressure
+The design treats persisted progress, completed transfer, and verified saved bytes as separate states.
 
-The versioned `Control` discriminated union separates JSON control messages from binary file frames. A `hello` handshake precedes manifests and payloads; the sender validates receiver offsets and checkpoint acknowledgments before advancing.
+| Decision                    | Implementation and reason                                                                                                                                                                                | Evidence                                                                                                     |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Bounded pipeline            | One active file, one hash ahead, 16 KiB frames, 1 MiB checkpoints, and 512 KiB sender backpressure constrain payload work.                                                                               | [Transfer engine](lib/bridge/transfer.ts), [protocol types](lib/bridge/model.ts)                             |
+| Acknowledge persisted bytes | Worker write/flush or chunk transaction completes before manifest commit and ACK. Resume truncates uncommitted tails rather than trusting a progress counter.                                            | [Recovery fixtures](tests/transfer.test.ts), [real chunk-store tests](tests/browser/indexed-staging.spec.ts) |
+| Capability-tested storage   | A full 1 MiB write/read probe selects usable OPFS or IndexedDB. Blob-cloning restrictions permit a bounded buffer retry after transaction abort; quota and integrity failures do not trigger that retry. | [Preflight tests](tests/staging-preflight.test.ts), [checkpoint store](lib/bridge/indexed-staging.ts)        |
+| Copy-specific verification  | Transfer `phase` is distinct from `scope`: `none`, `browser`, `destination`, or `exported`. Download/share initiation leaves final-copy verification pending.                                            | [Record model](lib/bridge/model.ts), [saved-copy tests](tests/storage.test.ts)                               |
+| Serialized ICE delivery     | A bounded candidate inbox waits for remote SDP, deduplicates candidates, and serializes additions, preventing an answer/candidate race.                                                                  | [Candidate inbox](lib/bridge/candidate-inbox.ts), [browser fault injection](tests/browser/bridge.spec.ts)    |
+| Explicit trust boundaries   | Approval gates the transfer engine; pairing inputs and queues are bounded; path validation rejects unsafe destinations; diagnostics omit raw addresses and file information.                             | [Connection lifecycle](lib/bridge/code-connection.ts), [Security](SECURITY.md)                               |
 
-| Mechanism           | Current behavior                                                  | Reason                                                                               |
-| ------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| File concurrency    | One active transfer; one subsequent file hashes ahead             | Overlap preparation with transfer while limiting payload work                        |
-| Hashing reads       | Incremental 1 MiB slices in a worker                              | Hash large sources without allocating the entire file on the UI thread               |
-| Transport frames    | Maximum 16 KiB                                                    | Bound each data-channel message and validate incoming frame sizes                    |
-| Sender backpressure | Wait while `bufferedAmount` exceeds 512 KiB                       | Avoid continuously feeding a slower receiver or network                              |
-| Durable checkpoints | Up to 1 MiB, with acknowledgment before the next block            | Bound unacknowledged payload and make restart offsets explicit                       |
-| Receiver dispatch   | Serialized processing; close if more than 160 messages are queued | Prevent asynchronous writes from reordering the receive stream and bound queued work |
+OPFS and manifest metadata are separate persistence systems. Their ordering supports refresh/reconnect recovery; it does not establish OS power-loss durability. File identity includes both content hash and relative path, and retained verified copies must pass readback before they can be skipped.
 
-These bounds concern payload processing, not total browser memory: queue metadata, runtime overhead, and browser-managed buffers still consume resources. Throughput depends on hashing, storage, the browser, and the network; the repository does not claim an unmeasured performance target.
+Native sharing uses a fresh user tap after file preparation so hashing does not consume transient activation. History clearing affects only the presentation log, preserving recovery records and staged bytes.
 
-**Code:** [protocol types and constants](lib/bridge/model.ts), [sender/receiver engine](lib/bridge/transfer.ts), [incremental hash worker](lib/bridge/hash.worker.ts).
-
-### 2. Acknowledge persisted progress, not just received bytes
-
-Checkpoint acknowledgment follows this order on browsers with synchronous OPFS:
-
-```text
-OPFS write -> access-handle flush -> IndexedDB transaction commit -> ACK(offset)
-```
-
-OPFS and IndexedDB are separate persistence systems, not a single atomic transaction. Writing bytes before committing metadata allows recovery to truncate an uncommitted tail to the last retained checkpoint. On reconnection, the sender reselects and rehashes its sources; the receiver checks the retained staged file and supplies the resume offset. Missing partials or files shorter than the committed offset restart instead of trusting a history entry. Complete-file readback still determines final integrity.
-
-Browsers with unavailable OPFS use a capability-selected IndexedDB fallback. The staging worker commits each checkpoint and its stored byte length in one transaction, requesting `strict` durability when supported. Blob checkpoints are preferred; if the browser rejects Blob cloning, the failed transaction must abort before one retry using an ArrayBuffer of at most 1 MiB. Quota and permission errors are not retried as format changes. Both formats are readable without a database migration. Only after that transaction completes does the receiver commit the manifest offset/history and acknowledge it. The byte store is separate from manifest history; reconnection removes uncommitted tails in a transaction and rejects missing or noncontiguous chunks. Readback wraps each stored buffer as a Blob before retaining it, constructs a File from those Blob references, then hashes 1 MiB slices; the application does not concatenate a whole file into a JavaScript byte array. Browser memory use and quota still require device testing.
-
-Preflight writes and independently rereads a full 1 MiB checkpoint before registering a receiver. An absent file-system API or unsupported synchronous access triggers compatibility storage; denied access, quota exhaustion, or failed readback blocks receiving rather than silently claiming a usable backend. Existing staged copies are found in either backend, including after a browser upgrade. Downloads and reselected-export verification work with both storage modes.
-
-File identity is derived from content and path:
-
-```text
-fileId = SHA-256(UTF-8(sourceSha256 + "\n" + relativePath))
-```
-
-Changed source bytes receive a different identity. A retained verified file is skipped only after its stored bytes are reread and match. Receiver file records and their corresponding history entries are written in the same IndexedDB transaction.
-
-**Code:** [identity derivation](lib/bridge/hash.ts), [staging worker](lib/bridge/staging.worker.ts), [chunk storage](lib/bridge/indexed-staging.ts), [manifest transactions](lib/bridge/database.ts). **Regression evidence:** [interruption and resume tests](tests/transfer.test.ts), [real IndexedDB recovery and quota tests](tests/browser/indexed-staging.spec.ts).
-
-### 3. Model integrity as a property of a specific copy
-
-`RecordFile` separates transfer `phase` from verification `scope`: `none`, `browser`, `destination`, or `exported`. Receiving all bytes is not enough to mark a copy verified.
-
-- **Browser scope:** flush and close the staged file, reread its actual bytes, and compare size and SHA-256 against the source manifest. A mismatch removes the invalid staged copy and blocks saving.
-- **Destination scope:** revalidate staged bytes, copy them through a destination writer, close it, and independently hash the saved file. A destination failure retains verified staging for retry.
-- **Exported scope:** download initiation leaves verification pending. A reselected saved file must match before the exported copy is marked verified.
-
-Native app handoff prepares `File` objects from staged Blobs after a fresh size/SHA-256 check, without a file-sized JavaScript buffer. Preparation and sharing use separate taps so a long hash does not consume the Web Share API's transient user activation. `navigator.canShare({files})` gates the payload before a synchronous `navigator.share({files})` invocation in the click handler. Cancellation and unsupported payloads retain staging. A successful API result sets local `shared` metadata, never destination verification; reports explicitly distinguish the handoff from the saved-copy check. User-selected batches cap preparation at 20 files and render the list in pages of 50.
-
-History clearing targets only the IndexedDB `history` store, in one transaction. Session clearing uses a cursor rather than deleting receiver manifests or staging chunks; interruption recovery does not depend on the presentation log.
-
-Incoming manifests cannot assign their own verification status: receiver validation resets phase, scope, offsets, and destination state. Existing destination files are skipped only after size/hash readback; conflicting content receives a numbered filename. Relative paths reject traversal, absolute paths, control characters, and ambiguous separators before filesystem access.
-
-**Code:** [record validation](lib/bridge/model.ts), [saving and readback](lib/bridge/storage.ts). **Regression evidence:** [corruption and path tests](tests/core.test.ts), [destination/export tests](tests/storage.test.ts).
-
-### 4. Make asynchronous connection failures reproducible
-
-An ICE candidate can arrive before the peer's remote description is installed. In PeerJS 1.5.5, independently dispatched `ANSWER` and `CANDIDATE` messages could cause an early `addIceCandidate()` rejection to abort negotiation.
-
-The per-connection `CandidateInbox` queues candidates until SDP is ready, deduplicates them, serializes additions, and accepts at most 64 distinct candidates. An unusable route records a fixed error category while subsequent routes continue. Activation, failure, and revocation clear queued work and remove listeners.
-
-A browser fixture deliberately delivers candidates before the answer. It reproduced the 0.3.3 failure (`have-local-offer`, missing remote description), then verified that the corrected flow connects, transfers hash-checked bytes, and consumes the code in Chromium, Firefox, and WebKit-to-Chromium. This is a regression for a specific race, not a claim that every network failure is recoverable.
-
-**Code:** [candidate queue](lib/bridge/candidate-inbox.ts), [PeerJS integration](lib/bridge/code-connection.ts). **Regression evidence:** [queue lifecycle tests](tests/candidate-inbox.test.ts), [browser fault injection](tests/browser/bridge.spec.ts), [baseline reproduction](VALIDATION.md).
-
-### 5. Keep trust boundaries and resource limits explicit
-
-Code pairing validates protocol metadata and reliable ordering, admits one sender, and gates the transfer engine behind receiver consent and a connection-bound nonce. Registration retries, inbound pairing requests, route attempts, and candidate queues are bounded. Codes expire after ten minutes; route setup times out after 45 seconds; revocation destroys the local peer.
-
-The copy/paste fallback uses a versioned compressed SDP envelope with matching session/expiry checks, bounded token length, a fixed decompression output buffer, and data-channel-only SDP validation. Only connection descriptions are compressed; media bytes remain untouched.
-
-A Content Security Policy constrains scripts, workers, and signaling origins. Local diagnostics retain connection states, candidate counts, statistics-read outcomes, and fixed error categories; they exclude raw SDP, IP addresses, codes, filenames, and error text. No analytics or automatic diagnostics upload is configured.
-
-The signaling broker is a trust dependency. A six-digit code and SHA-256 do not authenticate a person, and local browser storage is not an encrypted vault. Application-side bounds do not provide global rate limiting for the public PeerJS service. See [Security](SECURITY.md) for the full threat model.
-
-**Code:** [pairing envelope](lib/bridge/pairing.ts), [SDP validation](lib/pairing-validation.ts), [privacy-limited diagnostics](lib/bridge/route-diagnostics.ts), [CSP](index.html).
+The [engineering guide](docs/ENGINEERING.md) explains these tradeoffs with source entry points and regression evidence. The [architecture reference](docs/ARCHITECTURE.md) describes the runtime model.
 
 ## Validation and boundaries
 
-Recorded through **0.3.13 on October 7, 2026** across full and targeted runs; these are completed checks, not a continuously updated CI badge. Historical fault-injection coverage is documented by release in [VALIDATION.md](VALIDATION.md).
+Recorded through **0.3.13 on October 7, 2026** across full and targeted runs. These are executed checks, not a continuously updated CI badge.
 
-| Evidence                                          | Coverage                                                                                                                                                                                                                                                                                        |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| TypeScript, ESLint, production build              | Strict type checks, linting, and deployable static assets                                                                                                                                                                                                                                       |
-| 103 unit/integration tests                        | Independent hashes, corruption, changed sources, resume checkpoints, duplicate conflicts, permission/quota failures, safe paths, pairing lifecycle, app-handoff preparation, and publishing behavior                                                                                            |
-| Mobile save / awake / history regression suite    | Byte-preserving file preparation, fresh-tap activation, cancellation, unsupported payloads, corruption rejection, late-lock cleanup, wake denial/reacquisition, preference persistence, and history clearing without losing recovery data. Native mobile share targets remain a hardware check. |
-| Targeted browser regressions (see validation log) | Real WebRTC transfers, consent, compatibility storage, corruption, export verification, refresh recovery, QR decoding, mobile layout, text sizing, save/awake/history controls, and persistent Light / Dark / System appearance; historical fault-injection coverage is recorded by release     |
-| Chromium 101 compatibility checks                 | Actual older engine, public PeerJS pairing, local chunk storage, independently verified bytes, downloads, refresh, corruption rejection, and quota-failure rollback                                                                                                                             |
-| Live GitHub Pages + public PeerJS check           | Code pairing, explicit approval, independently verified staged bytes, and consumed-code rejection                                                                                                                                                                                               |
-| Physical-device report                            | User-confirmed completed iPhone-to-Mac transfer over a Personal Hotspot; original Wi-Fi still failed                                                                                                                                                                                            |
+| Evidence                        | What was checked                                                                                                                                                |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **103 unit/integration tests**  | Independent hashes, corruption, changed sources, checkpoints, duplicates, unsafe paths, permission/quota failures, pairing lifecycle, and deployment provenance |
+| Browser integration             | Real WebRTC transfers, approval, QR decoding, independent stored/exported hashes, interruption and refresh recovery, and corruption rejection                   |
+| Interface and capability checks | Mobile/desktop layouts, enlarged text, appearance, native-share fixtures, download bytes, wake-lock lifecycle, and history preservation                         |
+| Legacy engine                   | Actual Chromium 101 compatibility storage, public signaling, downloads, checkpoint recovery, and current layout controls                                        |
+| Physical-device reports         | Completed iPhone-to-Mac hotspot transfer; receiving, downloading, and opening files on older Pixel/iOS devices                                                  |
 
-Browser tests compare synthetic source and staged bytes against independently computed Node/Web Crypto hashes. QR tests decode rendered output with `jsQR`, and request inspection checks that signaling contains no fixture filenames or hashes. Publishing tests use isolated local Git remotes to check committed-source requirements, deployment history preservation, and source-commit provenance.
+Browser tests use synthetic files and independent Node/Web Crypto hashes. Hardware reports lack complete device/version/capacity measurements and are recorded separately from automated engine evidence in [the validation record](docs/VALIDATION.md).
 
-### Supported environments
+- Receiving must pass a local write/read preflight. Folder access and native share targets depend on the browser and device; downloads remain the fallback.
+- Browsers must stay open. Wake lock can prevent automatic screen sleep where supported, but cannot guarantee background execution or survive manual locking and OS suspension.
+- Guest, campus, hotel, or workplace networks may block direct connections even when both devices use the same Wi-Fi name. No relay is available to bypass that restriction.
+- Browser quotas are estimates, and temporary sessions can discard local data. Real files over 4 GB, 10,000-file sessions, and 100 GB reliability require further hardware validation.
+- Picker-supplied bytes are the source of truth. Original Photos resources, complete Live Photo pairing, iCloud-original retrieval, native media scanning, and filesystem timestamp restoration are outside this version.
+- PixelGate cannot select an arbitrary photo album or verify external backup. It never reports Google Photos backup success or deletes source media.
 
-| Environment                 | Evidence and remaining limits                                                                                                                           |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Desktop Chromium            | Automated sending/receiving; folder-save readback is unit-tested and feature-detected                                                                   |
-| Desktop Firefox             | Automated sending/receiving; use downloads where folder access is unavailable                                                                           |
-| WebKit test engine          | Automated sending and receiving through compatibility storage, including independent stored/exported hashes; native iPhone validation remains required  |
-| iPhone Safari to Mac        | User-reported hotspot completion; exact iPhone version, final Mac browser, transfer size, and independently checked exported hash were not recorded     |
-| Older Pixel / iOS receivers | User reports receiving, downloads, and opening files working; exact OS/browser versions, batch sizes, and independent exported hashes were not recorded |
-
-Receiving uses synchronous OPFS when usable and IndexedDB checkpoints otherwise, with a bounded ArrayBuffer fallback for browser contexts that reject Blob storage. The receiver must pass a real local write/read test before pairing. Folder access is optional; use verified downloads and reselect the exported files for final verification where folder saving is unavailable. Compatibility storage may be slower, particularly on older devices; start with small batches and keep the browser open. Clearing site data or browser eviction can remove staged bytes in either mode.
-
-The production syntax target includes Chrome 92, Firefox 95, and Safari 15.4; this is not certification of every version or device. Chromium 101 engine testing is recorded in [VALIDATION.md](VALIDATION.md). The user reports phone receiving/downloads working, but exact versions, capacities, native save targets, and wake-lock behavior still need physical validation. HTTPS is required except for trusted localhost development. Browser suspension, network isolation, host-address privacy, or NAT restrictions can prevent a direct connection.
-
-A **5 GB manifest** test is not a **5 GB byte transfer**, and a **10,000-path manifest** test is not a completed 10,000-file session. Large sessions, files above 4 GB, actual quota exhaustion, and device-specific saving behavior require real hardware validation. Browser picker bytes are the source of truth: original Apple Photos resources, complete Live Photo pairing, iCloud-original retrieval, native media scanning, atomic rename, and filesystem timestamp restoration are outside this version.
-
-Full test conditions, browser versions, physical-device results, and remaining validation work are in [VALIDATION.md](VALIDATION.md).
-
-## Troubleshooting
-
-### Pairing succeeds but the direct connection times out
-
-Confirm both devices use the current app version. Connection details are exchanged automatically; normal six-digit pairing requires no IP lookup. Diagnostics expose candidate delivery and route states without exporting addresses.
-
-Use the same exact network on both devices. For example, a campus's guest and protected networks can have different routing and access policies. Guest, campus, hotel, and workplace Wi-Fi may allow internet access while blocking local discovery or connections between devices; sharing a network name does not guarantee reachability. A completed transfer on a hotspot but not on another network supports a network-dependent restriction, without identifying the exact policy.
-
-Timeout messages automatically distinguish incomplete description exchange, rejected candidates, and a failed direct route. If both configured STUN services report error 701 and no local server-reflexive candidate was gathered, the message also reports their unreachability. These observations cannot establish which router or firewall rule is responsible. Ask the network administrator whether local mDNS discovery and direct WebRTC UDP traffic between your devices are allowed, or use a trusted network that permits local connections. PixelGate cannot change network access rules. No TURN relay is configured. Specific hardware and network observations are recorded in [VALIDATION.md](VALIDATION.md).
-
-For advanced local-discovery diagnosis, the receiver can revoke the failed connection and enter the **sender's local IPv4 address** under **Advanced network settings** before creating a fresh code. Find the address in the sending device's network settings for its current Wi-Fi or wired connection. The address is used locally to try the negotiated UDP application port; it is not added to pairing metadata, history, or exported reports. This optional route cannot bypass blocked device traffic or provide IPv6-only connectivity. Normal ICE signaling already exchanges network information.
-
-### What does “Estimated staging space” mean?
-
-It is the browser-reported quota minus estimated usage for the site's origin, not reserved free disk space. Estimates vary across browsers, profiles, and devices; actual free disk space may be lower. Each file must fit alongside copies still staged in that browser, with headroom for checkpoints and records.
-
-For larger collections of documents, media, archives, or other files, work in batches: save or download the files, verify the saved copies, then choose **Clear verified staging** to make room for the next batch. Direct folder mode retains staging until cleared, so allow disk space for both staged and destination copies. The estimate does not measure destination-folder free space or limit how much the sender can select. Clearing site data or browser eviction can remove staged files and history.
-
-### Safari says the operation failed for an unknown transient reason
-
-This error can occur during the browser-storage check before a pairing code is created. PixelGate now tests compatibility storage automatically when OPFS is exposed but inaccessible, and retries unsupported Blob checkpoints as bounded byte buffers. If neither storage path works, the error identifies the receiving preflight and suggests a regular tab, allowing website storage, closing older PixelGate tabs, and checking device space. Existing staged files are not automatically deleted.
-
-A Private or temporary browser session may discard its stored files when the session closes. Save and independently verify received copies before closing it. The app tests usable storage; it does not identify, record, or upload a user's browsing mode. [WebKit's OPFS documentation](https://webkit.org/blog/12257/the-file-system-access-api-with-origin-private-file-system/).
-
-### How do I resume an interrupted transfer?
-
-Create a fresh receiver connection, pair again, reselect the same source files, and send. The receiver reconciles retained checkpoints. Changed sources start a separate transfer; verified files are skipped only when their stored copies remain available and pass readback.
-
-### What if the pairing service is unavailable?
-
-Choose **Use copy/paste pairing** before creating a connection. This exchanges complete SDP descriptions through links and a copied sender response without PeerJS. It still requires a working direct WebRTC route.
-
-## Local development
+## Development
 
 Requires **Node.js 22.13+** and npm.
 
@@ -296,80 +161,55 @@ npm ci
 npm run dev
 ```
 
-Open `http://127.0.0.1:8787`. Use separate browser profiles for sender and receiver tests.
-
-| Command                | Purpose                                            |
-| ---------------------- | -------------------------------------------------- |
-| `npm run check`        | TypeScript, ESLint, and unit/integration tests     |
-| `npm run build`        | Production static build                            |
-| `npm run test:browser` | Real peer transfers and browser integration checks |
-| `npm start`            | Serve the production build locally                 |
-| `npm run format:check` | Check repository formatting                        |
-
-Install browser binaries with `npx playwright install chromium firefox webkit` before browser tests. Playwright starts a production preview when needed; build first. Automated six-digit connection fixtures use an isolated PeerServer and normal browser privacy defaults. Manual-pairing and compatibility-storage fixtures expose LAN candidates to separate persistence tests from mDNS discovery. Those test settings do not certify native browser networking.
-
-An existing older Chromium executable can be selected for compatibility checks. With public signaling, the pairing fixture retains normal host-address privacy and tests the browser's real storage capabilities rather than disabling OPFS artificially:
+Open `http://127.0.0.1:8787`. Use separate browser profiles for local sender/receiver checks.
 
 ```sh
-PIXELGATE_TEST_CHROMIUM_EXECUTABLE="/path/to/Chromium" \
-PIXELGATE_TEST_PUBLIC_SIGNALING=1 \
-npm run test:browser -- --project=chromium --grep compatibility
+npm run check                  # TypeScript, ESLint, unit/integration tests
+npm run build                  # Production assets in dist/
+npx playwright install chromium firefox webkit
+npm run test:browser           # Real peer and browser fixtures
+npm run format:check           # Formatting
 ```
 
-### Repository map
+Playwright starts a production preview when needed; build first. See [Development and testing](docs/DEVELOPMENT.md) for fixture assumptions, targeted runs, and selecting an older Chromium executable.
 
 ```text
-src/                         React UI, QR/code controls, responsive styles
-lib/bridge/
-  code-connection.ts         PeerJS pairing, approval gate, lifecycle
-  candidate-inbox.ts         Bounded ICE queue and serialized delivery
-  transfer.ts                Sender/receiver protocol and backpressure
-  model.ts                   Protocol types, file states, path validation
-  hash.ts / hash.worker.ts   Identity derivation and incremental hashing
-  storage.ts                Staging API, destination/export readback
-  staging.worker.ts         Serialized OPFS / chunk checkpoint writes
-  indexed-staging.ts        Transactional IndexedDB checkpoint fallback
-  database.ts               IndexedDB checkpoints and local history
-  route-diagnostics.ts      Local connection report without raw addresses
-lib/pairing-validation.ts    Bounded data-channel SDP validation
-scripts/deploy-pages.mjs     Static publishing and source provenance
-tests/                      Unit/integration and real browser fixtures
-docs/                       Architecture, deployment, and screenshots
+src/                 React components, appearance, responsive styles
+lib/bridge/          Pairing, protocol, hashing workers, storage, and reports
+lib/                 Shared pairing validation and worker declarations
+tests/               Unit/integration fixtures and tests/browser/ scenarios
+scripts/             Static publishing and source provenance
+docs/                Usage, design, development, deployment, and validation
+docs/assets/         Current interface screenshots and project artwork
+.github/             Issue forms and pull request template
 ```
+
+Build output, dependencies, browser reports, and environment files are ignored. Legacy internal `pixelbridge` storage identifiers remain unchanged to preserve compatibility; the public app is PixelGate.
 
 ## Deployment
 
-Any HTTPS static host can serve `dist/`. The default code-pairing service requires no API key or backend account; deployments still depend on its availability. Relative asset paths include worker bundles, allowing project subpaths such as `/PixelGate/`.
+The app can run on any HTTPS static host. For GitHub Pages:
 
-For GitHub Pages:
-
-1. Fork or clone the repository and configure your `origin` remote.
-2. Install dependencies, run checks, and commit your source.
+1. Fork or clone the repository and configure your Git `origin`.
+2. Install dependencies, run checks, and commit the source.
 3. Run `npm run deploy:pages`.
-4. In **Settings → Pages**, select **Deploy from a branch**, branch **gh-pages**, folder **/(root)**.
+4. Select **Settings → Pages → Deploy from a branch → gh-pages → /(root)**.
 
-The publisher builds locally, preserves `gh-pages` history without force-pushing, and records the source commit and application version in `build.json`. Source pushes to `main` alone do not publish the app.
+The publisher preserves deployment history and writes the app version/source commit to `build.json`. Pushing `main` alone does not publish the site. Relative asset paths support project subpaths such as `/PixelGate/`.
 
-A custom TLS-enabled PeerServer can be selected with `VITE_PIXELGATE_SIGNAL_URL` at build time; Vite updates the allowed HTTPS/WSS signaling origins in the CSP. There is no cloud media backend. Moving to another origin does not migrate stored transfers or history. See [Deployment](docs/DEPLOYMENT.md) for configuration and verification steps.
+Default pairing uses PeerJS's public signaling service without an API key; shared-service availability and limits remain external dependencies. A TLS-enabled PeerServer can be selected with `VITE_PIXELGATE_SIGNAL_URL`. No application database, media backend, analytics, or TURN service is deployed.
 
-### External services and privacy
+Moving to another origin does not migrate browser files, history, or permissions. See [Deployment](docs/DEPLOYMENT.md) for custom signaling, hosting constraints, and verification steps, and [Security](SECURITY.md) for the trust model.
 
-| Service                        | Information it receives                                                                                                    |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| GitHub Pages / static host     | Ordinary website and asset requests; PixelGate sends no file payloads, manifests, hashes, history, or pairing tokens to it |
-| PeerJS / configured PeerServer | Temporary peer IDs, SDP, ICE candidates, and ordinary network information; no transfer manifests or file payloads          |
-| Cloudflare / Google STUN       | Connection and network information used to discover routes; no file payloads                                               |
+## Documentation and contributing
 
-QR links place the code in a URL fragment, which is excluded from the HTTP request and removed after import. Copied connection descriptions contain network addresses and credentials; treat active codes, links, and responses as temporary secrets. Shared-service logs, availability, and global limits are outside this application's control.
+The [documentation index](docs/README.md) links the full usage, troubleshooting, architecture, engineering, development, deployment, and validation guides.
 
-## Contributing and security
-
-Focused issues and pull requests are welcome. Include device/browser versions, reproducible steps using synthetic files, and the failing stage: pairing, transfer, verification, or saving. Integrity and recovery changes should include independent readback or fault-injection evidence.
+Issues and focused pull requests are welcome. Include device/browser versions, synthetic reproduction steps, the failing stage, and relevant validation. Keep private files, pairing secrets, and network addresses out of public reports.
 
 - [Contributing guide](CONTRIBUTING.md)
 - [Security assumptions and vulnerability reporting](SECURITY.md)
-- [Detailed architecture](docs/ARCHITECTURE.md)
-- [Deployment guide](docs/DEPLOYMENT.md)
+- [Report a bug](https://github.com/s4lmon778/PixelGate/issues/new?template=bug_report.yml)
 
 ## License
 

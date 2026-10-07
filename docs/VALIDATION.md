@@ -1,5 +1,10 @@
 # Validation record
 
+## Documentation refresh · October 7, 2026
+
+- Consolidated usage, troubleshooting, design rationale, development, deployment, and validation under `docs/`. The project README now provides a compact overview with technical implementation and regression links. Three unreferenced historical screenshots were removed; current desktop, mobile receiving, and screen-awake screenshots were regenerated from the 0.3.13 production preview with empty queues.
+- Strict TypeScript, ESLint, all **103 unit/integration tests**, the production build, and formatting pass. Local documentation paths and anchors resolve, and GitHub’s Markdown renderer accepts the README. No runtime code or application version was changed in this documentation refresh.
+
 ## GitHub Pages edition · 0.3.13
 
 Executed on **October 7, 2026**:

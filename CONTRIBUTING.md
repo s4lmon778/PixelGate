@@ -26,7 +26,7 @@ npx playwright install chromium firefox webkit
 npm run test:browser
 ```
 
-The browser test configuration starts a production preview automatically. Discovery preferences in headless tests expose LAN candidates; they do not certify native browsers or physical phones. Record new hardware results in `VALIDATION.md` with versions and independent hashes.
+The browser test configuration starts a production preview automatically. Six-digit pairing fixtures use an isolated PeerServer; some manual-pairing and persistence fixtures expose LAN candidates to separate recovery checks from discovery. Engine tests do not certify native browsers or physical phones. See [Development and testing](docs/DEVELOPMENT.md) for targeted and legacy-engine runs. Record new hardware results in [the validation record](docs/VALIDATION.md) with versions and independent hashes.
 
 ## Pull requests
 
