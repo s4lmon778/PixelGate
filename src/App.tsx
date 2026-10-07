@@ -135,8 +135,8 @@ export default function PixelGate() {
     const estimate = await navigator.storage?.estimate();
     setCapacityLabel(
       estimate?.quota
-        ? `${formatBytes(Math.max(0, estimate.quota - (estimate.usage ?? 0)))} browser space`
-        : 'Browser quota unavailable',
+        ? `${formatBytes(Math.max(0, estimate.quota - (estimate.usage ?? 0)))} available`
+        : 'Estimate unavailable',
     );
   }, []);
   useEffect(() => {
@@ -560,20 +560,24 @@ export default function PixelGate() {
             <i />
             <i />
           </span>
-          PixelGate<span className="version">01</span>
+          PixelGate
         </button>
         <div className="workspace-label">YOUR WORKSPACE</div>
         <nav aria-label="Main navigation">
           <button
             className={view === 'transfer' ? 'nav-item selected' : 'nav-item'}
             aria-label="Transfer"
+            aria-current={view === 'transfer' ? 'page' : undefined}
+            title="Transfer"
             onClick={() => setView('transfer')}
           >
             <Link size={19} />
-            Transfer<span className="nav-key">1</span>
+            Transfer
           </button>
           <button
             className={view === 'history' ? 'nav-item selected' : 'nav-item'}
+            aria-current={view === 'history' ? 'page' : undefined}
+            title="History"
             onClick={() => {
               setView('history');
               void guarded(refresh);
@@ -584,6 +588,8 @@ export default function PixelGate() {
           </button>
           <button
             className={view === 'guide' ? 'nav-item selected' : 'nav-item'}
+            aria-current={view === 'guide' ? 'page' : undefined}
+            title="How it works"
             onClick={() => setView('guide')}
           >
             <CircleHelp size={19} />
@@ -620,14 +626,14 @@ export default function PixelGate() {
               </div>
               <h1>
                 {view === 'transfer'
-                  ? 'Move files. Keep every byte.'
+                  ? 'Transfer files between devices'
                   : view === 'history'
                     ? 'Transfer history'
                     : 'A better way across.'}
               </h1>
               <p>
                 {view === 'transfer'
-                  ? 'Connect your devices and send a verified copy.'
+                  ? 'Choose Send on one device and Receive on the other. Keep both browsers open.'
                   : view === 'history'
                     ? 'Your local record of transfers and integrity checks.'
                     : 'Original bytes, independently checked at the other end.'}
@@ -731,10 +737,17 @@ export default function PixelGate() {
                   transfer.
                 </p>
                 <p>
-                  Browser storage has a quota and can be cleared by the browser
-                  or user. Export and verify batches, then clear staged copies
-                  to make space. Leaving the tab or locking the screen may
-                  suspend transfers.
+                  Estimated staging space is this browser’s remaining allowance
+                  for received copies. Safari and Arc can report different
+                  estimates; it is not a guarantee of free disk space or a limit
+                  on the total you can transfer. Each file must fit alongside
+                  copies still staged here. Save or download, verify, then clear
+                  staged copies in batches to reuse the space. Saving to a
+                  folder also needs disk space for that destination copy.
+                </p>
+                <p>
+                  Browser storage can be cleared by the browser or user. Leaving
+                  the tab or locking the screen may suspend transfers.
                 </p>
                 <p>
                   Six-digit codes expire after ten minutes and are released
@@ -772,6 +785,7 @@ export default function PixelGate() {
                       <div className="role-selector" aria-label="Transfer mode">
                         <button
                           className={role === 'send' ? 'active' : ''}
+                          aria-pressed={role === 'send'}
                           disabled={!!room || busy || running}
                           onClick={() => setRole('send')}
                         >
@@ -780,6 +794,7 @@ export default function PixelGate() {
                         </button>
                         <button
                           className={role === 'receive' ? 'active' : ''}
+                          aria-pressed={role === 'receive'}
                           disabled={!!room || busy || running}
                           onClick={() => setRole('receive')}
                         >
@@ -802,7 +817,14 @@ export default function PixelGate() {
                                   ? 'Receiver’s six-digit code'
                                   : 'Receiver’s pairing link'}
                               </label>
-                              <div className="pairing-input">
+                              <div
+                                className={
+                                  'pairing-input' +
+                                  (pairingMode === 'code'
+                                    ? ' pairing-code-input'
+                                    : '')
+                                }
+                              >
                                 {pairingMode === 'code' ? (
                                   <CodeInput
                                     value={code}
@@ -840,8 +862,9 @@ export default function PixelGate() {
                                 </button>
                               </div>
                               <p className="hint">
-                                No account needed. Open PixelGate on the other
-                                device and choose Receive.
+                                {pairingMode === 'code'
+                                  ? 'On the other device, choose Receive files and create a connection. Enter its code here, then approve this sender on that device.'
+                                  : 'On the other device, choose Receive files and Use copy/paste pairing. Create a connection there, then paste its receiver link here.'}
                               </p>
                             </>
                           ) : (
@@ -853,8 +876,9 @@ export default function PixelGate() {
                                     This device will receive your files
                                   </strong>
                                   <p>
-                                    Choose a destination folder or save verified
-                                    downloads.
+                                    Create a code below and enter it on the
+                                    sending device. You’ll approve the sender
+                                    before any files arrive.
                                   </p>
                                 </div>
                               </div>
@@ -1226,27 +1250,30 @@ export default function PixelGate() {
                         </div>
                       )}
                       {!room && (
-                        <button
-                          className="text-button"
-                          disabled={busy}
-                          onClick={() => {
-                            setPairingMode(
-                              pairingMode === 'code' ? 'manual' : 'code',
-                            );
-                            setCode('');
-                            setResponse('');
-                          }}
-                        >
-                          {pairingMode === 'code'
-                            ? 'Use copy/paste pairing'
-                            : 'Use six-digit pairing'}
-                        </button>
-                      )}
-                      {!room && pairingMode === 'code' && (
-                        <p className="hint">
-                          Pairing uses PeerJS for connection details only. Files
-                          transfer directly between your devices.
-                        </p>
+                        <div className="pairing-options">
+                          <button
+                            className="text-button"
+                            disabled={busy}
+                            onClick={() => {
+                              setPairingMode(
+                                pairingMode === 'code' ? 'manual' : 'code',
+                              );
+                              setCode('');
+                              setResponse('');
+                            }}
+                          >
+                            {pairingMode === 'code'
+                              ? 'Use copy/paste pairing'
+                              : 'Use six-digit pairing'}
+                          </button>
+                          {pairingMode === 'code' && (
+                            <p className="hint">
+                              No account needed. Only connection details go
+                              through the pairing service; your files transfer
+                              directly.
+                            </p>
+                          )}
+                        </div>
                       )}
                       {room?.diagnostics && (
                         <details className="route-diagnostics">
@@ -1302,7 +1329,7 @@ export default function PixelGate() {
                         <span className="hint">
                           {role === 'send'
                             ? `${queue.length.toLocaleString()} files selected`
-                            : capacityLabel}
+                            : `${received.length.toLocaleString()} files received`}
                         </span>
                       </div>
                       {role === 'send' ? (
@@ -1413,6 +1440,43 @@ export default function PixelGate() {
                         </>
                       ) : (
                         <>
+                          <div
+                            className="storage-card"
+                            aria-label="Browser staging storage"
+                          >
+                            <div className="storage-heading">
+                              <span>Estimated staging space</span>
+                              <strong>{capacityLabel}</strong>
+                            </div>
+                            <p>
+                              Received files stay in this browser until you save
+                              and clear their staged copies.
+                            </p>
+                            <details>
+                              <summary>How storage works</summary>
+                              <p>
+                                This is the browser’s estimated remaining
+                                storage allowance for this site. Safari and Arc
+                                can show different amounts. Actual free disk
+                                space may be lower.
+                              </p>
+                              <p>
+                                Each file must fit alongside copies still staged
+                                here. You can transfer more in total by saving
+                                or downloading a batch, verifying the saved
+                                copies, then choosing Clear verified staging.
+                              </p>
+                              <p>
+                                Folder saving also keeps a staged copy until you
+                                clear it, so allow disk space for both copies.
+                                This estimate does not measure your destination
+                                folder’s free space.
+                              </p>
+                            </details>
+                          </div>
+                          <h3 className="saving-heading">
+                            Save verified copies
+                          </h3>
                           <div className="destination">
                             <span className="folder-icon">
                               <Folder size={24} />
@@ -1463,37 +1527,42 @@ export default function PixelGate() {
                                 'Files appear below as the sender starts transferring.'}
                             </p>
                           </div>
-                          <div className="button-row">
-                            <button
-                              className="button"
-                              disabled={
-                                busy ||
-                                !!active ||
-                                (!history.length && !received.length)
-                              }
-                              onClick={() => void guarded(exportBatch)}
-                            >
-                              <ArrowDownToLine size={16} />
-                              Export verified batch
-                            </button>
-                            <button
-                              className="button"
-                              disabled={
-                                busy || (!history.length && !received.length)
-                              }
-                              onClick={() => verifyInput.current?.click()}
-                            >
-                              <ShieldCheck size={16} />
-                              Verify saved copies
-                            </button>
-                            <button
-                              className="text-button"
-                              disabled={busy || !!active}
-                              onClick={() => void guarded(clearVerified)}
-                            >
-                              <Trash2 size={15} />
-                              Clear verified staging
-                            </button>
+                          <div className="batch-actions">
+                            <span className="batch-label">
+                              Manage received copies
+                            </span>
+                            <div className="button-row">
+                              <button
+                                className="button"
+                                disabled={
+                                  busy ||
+                                  !!active ||
+                                  (!history.length && !received.length)
+                                }
+                                onClick={() => void guarded(exportBatch)}
+                              >
+                                <ArrowDownToLine size={16} />
+                                Export verified batch
+                              </button>
+                              <button
+                                className="button"
+                                disabled={
+                                  busy || (!history.length && !received.length)
+                                }
+                                onClick={() => verifyInput.current?.click()}
+                              >
+                                <ShieldCheck size={16} />
+                                Verify saved copies
+                              </button>
+                              <button
+                                className="text-button"
+                                disabled={busy || !!active}
+                                onClick={() => void guarded(clearVerified)}
+                              >
+                                <Trash2 size={15} />
+                                Clear verified staging
+                              </button>
+                            </div>
                           </div>
                         </>
                       )}
@@ -1834,8 +1903,8 @@ export default function PixelGate() {
           )}
           <footer className="page-footer">
             <span>
-              PixelGate <span className="footer-divider">/</span> Original
-              bytes. Verified copies.
+              PixelGate {version} <span className="footer-divider">/</span>{' '}
+              Original bytes. Verified copies.
             </span>
             <span>
               <a

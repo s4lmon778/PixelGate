@@ -121,6 +121,10 @@ Receiving requires OPFS with synchronous worker access. Unsupported browsers are
 
 Browser quota and device free space determine session capacity. Direct folder mode still stages each file before saving it, so allow space for staging and its destination copy. Export, verify, and clear batches rather than assuming unlimited storage.
 
+**Estimated staging space** is the browser-reported storage allowance remaining for this site's local received copies, not a reserved amount of free disk space. Safari and Arc keep separate storage and can report different estimates. Each file must fit alongside copies still staged in that browser, with some room for checkpoints and records. You can transfer more over time by saving or downloading a batch, verifying the saved copies, then choosing **Clear verified staging**. The estimate does not measure space in your destination folder or limit how much the sender can select.
+
+A user completed an iPhone-to-Mac transfer on a Personal Hotspot with 0.3.4 after the original Wi-Fi failed. This supports a network-dependent connection problem; it does not identify the router setting responsible or certify large-session reliability. A hotspot is a useful direct-transfer alternative when a Wi-Fi network prevents local discovery or device traffic.
+
 Integrity covers the bytes supplied by a browser picker. Original Apple Photos resources, complete Live Photo pairing, iCloud-original retrieval, native media scanning, atomic rename, and restoration of filesystem modification dates are outside this version. Embedded metadata remains unchanged when it is part of the selected file.
 
 ## Development

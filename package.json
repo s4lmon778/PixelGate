@@ -1,6 +1,6 @@
 {
   "name": "pixelgate",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "private": true,
   "type": "module",
   "description": "Direct browser-to-browser file transfers with independent SHA-256 verification.",
