@@ -43,6 +43,13 @@ The app is a static **TypeScript / React / Vite** build hosted on GitHub Pages. 
 
 ## Quick start
 
+<div align="center">
+  <img src="docs/assets/quick-start.gif" alt="Six-step PixelGate walkthrough: create a receiver code, connect the sender, approve, send files, download, then verify the saved copy and clear staging" width="960" />
+  <p><sub>A real synthetic-file transfer, with camera zooms and click highlights. Playback is edited for instruction.</sub></p>
+</div>
+
+[Watch or download the 29-second video](docs/assets/quick-start.mp4) · [Recording details](docs/assets/README.md#quick-start-walkthrough)
+
 1. Open **[PixelGate](https://s4lmon778.github.io/PixelGate/)** on both devices, using a trusted network that permits connections between them.
 2. On the destination device, choose **Receive files**, optionally choose a destination folder, and click **Create a connection**.
 3. On the sender, enter the receiver's **six-digit code** or scan its QR code, then click **Connect**.

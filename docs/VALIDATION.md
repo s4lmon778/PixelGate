@@ -1,5 +1,10 @@
 # Validation record
 
+## Quick-start walkthrough · October 7, 2026
+
+- Recorded a real 144,000-byte synthetic text-file transfer between fresh Chromium profiles through an isolated local PeerServer. Receiver consent, browser-copy verification, actual download, independent Node SHA-256 comparison, reselected exported-copy verification, and verified-staging cleanup complete successfully. Captured signaling contains neither the fixture filename nor its hash.
+- Composited 13 genuine interface views into a 29-second walkthrough with six steps, smooth camera zooms/pans, click highlights, and Sender/Receiver labels. The 960 × 640 GIF uses 10 fps; the MP4 uses 20 fps. Key frames for pairing, approval, saving, verification, and cleanup were visually inspected. Playback timing is instructional, not a throughput measurement; OS pickers are omitted. Local discovery overrides are limited to the recorder. Runtime code and the app version are unchanged.
+
 ## README visuals · October 7, 2026
 
 - Recorded the real screen-awake preference and appearance menu in a fresh, empty Chromium profile. The locally hosted GIF contains 96 frames at 10 fps (9.6 seconds), is 960 × 353 pixels, and is approximately 145 KiB. The capture opens no pairing room and contains no transfer data or performance benchmark. Light, dark, and switch-off frames were visually inspected.
