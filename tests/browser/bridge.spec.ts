@@ -7,7 +7,7 @@ import { PeerServer } from 'peer';
 import WebSocket from 'ws';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { version } from '../../package.json';
+import packageInfo from '../../package.json' with { type: 'json' };
 
 async function scanQr(image: Locator) {
   await expect(image).toBeVisible();
@@ -134,7 +134,7 @@ test('six-digit pairing requires approval, transfers verified bytes, and consume
       .getByLabel('Connection report', { exact: true })
       .innerText();
     const route = JSON.parse(routeReport);
-    expect(route.version).toBe(version);
+    expect(route.version).toBe(packageInfo.version);
     expect(route.localCandidates).toHaveProperty('host');
     expect(routeReport).not.toMatch(
       /a=candidate:|\.local|(?:\d{1,3}\.){3}\d{1,3}/,
