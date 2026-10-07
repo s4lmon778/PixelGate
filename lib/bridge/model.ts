@@ -29,6 +29,7 @@ export interface RecordFile {
   destinationPath?: string;
   error?: string;
   downloaded?: boolean;
+  shared?: boolean;
   localRole?: 'send' | 'receive';
 }
 export interface Session {
@@ -107,6 +108,7 @@ export function validateRecord(raw: unknown): RecordFile {
     updated: Date.now(),
     error: undefined,
     downloaded: false,
+    shared: false,
     destinationPath: undefined,
   };
 }

@@ -46,18 +46,31 @@ The application is a static TypeScript/React build hosted on GitHub Pages. PeerJ
 3. On the sender, enter the receiver's **six-digit code** or scan its QR code, then click **Connect**. Leading zeroes are valid; use **Enlarge QR code** if needed.
 4. On the receiver, click **Approve sender** for your intended device. No sender response needs copying.
 5. Select files or folders on the sender and click **Send files**. Keep both browsers open and foregrounded.
-6. Save the verified copies. For manual downloads, reselect the saved files through **Verify saved copies** to confirm their exported bytes.
+6. Save the verified copies: choose a destination folder before receiving where supported, or use **Save to app or location** afterward. Select a batch, prepare it, then tap **Choose app or save location** to open the device's native options. Downloads remain available. Reselect files saved through apps or downloads using **Verify saved copies** to confirm their final bytes.
 
 Codes expire after ten minutes and are released when the approved connection activates. One sender is accepted per receiver. Six digits are a convenient lookup, not identity authentication: share a code only with your intended device and approve only its request.
 
 ### Saving options
 
-| Mode            | Storage workflow                                                                       | Verification of the saved copy                                                           |
-| --------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Direct folder   | Copy verified staged bytes into a user-selected folder, where browser support permits. | Close the destination writer, reread the destination file, and compare size and SHA-256. |
-| Manual download | Download verified browser copies and move them to the desired folder.                  | Mark the downloaded copy as pending until the user reselects it for hash verification.   |
+| Mode              | Storage workflow                                                                                                                | Verification of the saved copy                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Direct folder     | Copy verified staged bytes into a user-selected folder, where browser support permits.                                          | Close the destination writer, reread the destination file, and compare size and SHA-256.                   |
+| Native save/share | Select up to 20 verified browser copies, prepare them, then choose an available app or save action in the device's share sheet. | A handoff is recorded separately; the final saved copy remains pending until reselected and hash-verified. |
+| Manual download   | Download verified browser copies and move them to the desired folder.                                                           | Mark the downloaded copy as pending until the user reselects it for hash verification.                     |
 
 Choose a destination that fits your workflow: a Documents folder, an archive directory, Downloads, or a media folder. If you use a photo library, document manager, or backup service, import or sync the saved files through that app and confirm backup there. For example, Android users importing photos can choose `DCIM/PixelGate` and configure that folder in Google Photos. PixelGate never reports backup success or deletes source files.
+
+Mobile browsers do not universally expose folder writers or photo-album access. **Save to app or location** uses Web Share file support when present; your OS and installed apps determine the available destinations and save actions. PixelGate cannot preselect an app or album, remember a share target, or guarantee a specific Photos action. Unsupported types or oversized batches may be rejected by the browser or target app; choose fewer files or use downloads. App sharing flattens paths to filenames, numbers collisions, and passes unchanged staged bytes without transcoding. The selected app can subsequently transform or upload files under its own settings.
+
+**Google Photos albums:** this release does not connect to a Google account or upload through Google's API. Google's Library API can manage albums created by the integrating app, rather than save into arbitrary existing albums; its Picker API selects existing media for reading, not an upload destination. A Google Photos account integration would be a separate, explicit cloud-upload option requiring OAuth configuration. [Google's album restrictions](https://developers.google.com/photos/library/guides/manage-albums), [API changes](https://developers.google.com/photos/support/updates).
+
+### Screen awake and local history
+
+The main-page **Keep screen awake** switch defaults on during pairing and connections, with the preference saved locally. Its status distinguishes a requested lock from an active lock, and reports denial or release. The app reacquires an enabled screen lock when the tab becomes visible again, releases it when switched off or disconnected, and provides a retry action. Unsupported browsers show device screen-timeout guidance.
+
+Screen Wake Lock prevents automatic screen lock where supported; it does not keep a browser running after manual locking, app switching, or OS suspension. Power-saving policies may release it. Enable it on both devices and keep both tabs visible. Checkpoint-based reconnection remains the recovery path for interrupted transfers.
+
+In **History**, **Clear history** clears all displayed records or the selected session, with confirmation. It preserves staged bytes, saved copies, and receiver resume manifests. **Clear verified staging** is a separate storage action. Resuming, verifying, or saving retained files can create new history records.
 
 ## Features
 
@@ -65,8 +78,8 @@ Choose a destination that fits your workflow: a Documents folder, an archive dir
 - **File and folder queues:** multiple selection, recursive folder drops where supported, preserved relative paths and Unicode names, and rejection of unsafe destination paths.
 - **Integrity and recovery:** incremental hashing, independent stored-file readback, durable checkpoints, and resume after source reselection and rehashing.
 - **Saving and duplicate handling:** destination readback, verified duplicate detection, numbered filenames for conflicting content, and retained staged copies for retry.
-- **Session controls:** pause, resume, cancel, byte progress, local history, and downloadable JSON, CSV, and text reports.
-- **Batch management:** export up to 50 pending verified files per click, verify saved copies, and clear eligible staging to reclaim space.
+- **Session controls:** pause, resume, cancel, byte progress, a screen-awake switch, local history with session-aware clearing, and downloadable JSON, CSV, and text reports.
+- **Batch management:** export up to 50 pending verified files per click, select up to 20 for a native app handoff, verify saved copies, and clear eligible staging to reclaim space.
 - **Accessible interface:** responsive layouts, mobile-sized controls, keyboard focus, system light/dark mode, and reduced-motion support.
 
 ## Architecture
@@ -168,6 +181,10 @@ Changed source bytes receive a different identity. A retained verified file is s
 - **Destination scope:** revalidate staged bytes, copy them through a destination writer, close it, and independently hash the saved file. A destination failure retains verified staging for retry.
 - **Exported scope:** download initiation leaves verification pending. A reselected saved file must match before the exported copy is marked verified.
 
+Native app handoff prepares `File` objects from staged Blobs after a fresh size/SHA-256 check, without a file-sized JavaScript buffer. Preparation and sharing use separate taps so a long hash does not consume the Web Share API's transient user activation. `navigator.canShare({files})` gates the payload before a synchronous `navigator.share({files})` invocation in the click handler. Cancellation and unsupported payloads retain staging. A successful API result sets local `shared` metadata, never destination verification; reports explicitly distinguish the handoff from the saved-copy check. User-selected batches cap preparation at 20 files and render the list in pages of 50.
+
+History clearing targets only the IndexedDB `history` store, in one transaction. Session clearing uses a cursor rather than deleting receiver manifests or staging chunks; interruption recovery does not depend on the presentation log.
+
 Incoming manifests cannot assign their own verification status: receiver validation resets phase, scope, offsets, and destination state. Existing destination files are skipped only after size/hash readback; conflicting content receives a numbered filename. Relative paths reject traversal, absolute paths, control characters, and ambiguous separators before filesystem access.
 
 **Code:** [record validation](lib/bridge/model.ts), [saving and readback](lib/bridge/storage.ts). **Regression evidence:** [corruption and path tests](tests/core.test.ts), [destination/export tests](tests/storage.test.ts).
@@ -196,32 +213,33 @@ The signaling broker is a trust dependency. A six-digit code and SHA-256 do not 
 
 ## Validation and boundaries
 
-Recorded for **0.3.7 on October 6, 2026** across full and targeted runs; these are completed checks, not a continuously updated CI badge.
+Recorded through **0.3.8 on October 6, 2026** across full and targeted runs; these are completed checks, not a continuously updated CI badge. Historical fault-injection coverage is documented by release in [VALIDATION.md](VALIDATION.md).
 
-| Evidence                                         | Coverage                                                                                                                                                                                                 |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| TypeScript, ESLint, production build             | Strict type checks, linting, and deployable static assets                                                                                                                                                |
-| 85 unit/integration tests                        | Independent hashes, corruption, changed sources, resume checkpoints, duplicate conflicts, permission/quota failures, safe paths, pairing lifecycle, and publishing behavior                              |
-| 25 passing browser scenarios; 5 deliberate skips | Real WebRTC transfers, consent, ICE race/discovery injection, compatibility storage, checkpoint rollback, corruption, export verification, refresh recovery, QR decoding, mobile layout, and text sizing |
-| Chromium 101 compatibility checks                | Actual older engine, public PeerJS pairing, local chunk storage, independently verified bytes, downloads, refresh, corruption rejection, and quota-failure rollback                                      |
-| Live GitHub Pages + public PeerJS check          | Code pairing, explicit approval, independently verified staged bytes, and consumed-code rejection                                                                                                        |
-| Physical-device report                           | User-confirmed completed iPhone-to-Mac transfer over a Personal Hotspot; original Wi-Fi still failed                                                                                                     |
+| Evidence                                         | Coverage                                                                                                                                                                                                                                                                                        |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TypeScript, ESLint, production build             | Strict type checks, linting, and deployable static assets                                                                                                                                                                                                                                       |
+| 88 unit/integration tests                        | Independent hashes, corruption, changed sources, resume checkpoints, duplicate conflicts, permission/quota failures, safe paths, pairing lifecycle, app-handoff preparation, and publishing behavior                                                                                            |
+| Mobile save / awake / history regression suite   | Byte-preserving file preparation, fresh-tap activation, cancellation, unsupported payloads, corruption rejection, late-lock cleanup, wake denial/reacquisition, preference persistence, and history clearing without losing recovery data. Native mobile share targets remain a hardware check. |
+| 31 passing browser scenarios; 2 deliberate skips | Real WebRTC transfers, consent, compatibility storage, corruption, export verification, refresh recovery, QR decoding, mobile layout, text sizing, and the new save/awake/history controls; earlier fault-injection coverage is recorded by release                                             |
+| Chromium 101 compatibility checks                | Actual older engine, public PeerJS pairing, local chunk storage, independently verified bytes, downloads, refresh, corruption rejection, and quota-failure rollback                                                                                                                             |
+| Live GitHub Pages + public PeerJS check          | Code pairing, explicit approval, independently verified staged bytes, and consumed-code rejection                                                                                                                                                                                               |
+| Physical-device report                           | User-confirmed completed iPhone-to-Mac transfer over a Personal Hotspot; original Wi-Fi still failed                                                                                                                                                                                            |
 
 Browser tests compare synthetic source and staged bytes against independently computed Node/Web Crypto hashes. QR tests decode rendered output with `jsQR`, and request inspection checks that signaling contains no fixture filenames or hashes. Publishing tests use isolated local Git remotes to check committed-source requirements, deployment history preservation, and source-commit provenance.
 
 ### Supported environments
 
-| Environment               | Evidence and remaining limits                                                                                                                       |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Desktop Chromium          | Automated sending/receiving; folder-save readback is unit-tested and feature-detected                                                               |
-| Desktop Firefox           | Automated sending/receiving; use downloads where folder access is unavailable                                                                       |
-| WebKit test engine        | Automated sender-to-Chromium interoperability; does not certify native Safari receiving                                                             |
-| iPhone Safari to Mac      | User-reported hotspot completion; exact iPhone version, final Mac browser, transfer size, and independently checked exported hash were not recorded |
-| First-generation Pixel XL | Receiving was blocked by missing newer storage APIs; the compatibility fix is engine-tested, with physical-device validation pending                |
+| Environment                 | Evidence and remaining limits                                                                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Desktop Chromium            | Automated sending/receiving; folder-save readback is unit-tested and feature-detected                                                                   |
+| Desktop Firefox             | Automated sending/receiving; use downloads where folder access is unavailable                                                                           |
+| WebKit test engine          | Automated sender-to-Chromium interoperability; does not certify native Safari receiving                                                                 |
+| iPhone Safari to Mac        | User-reported hotspot completion; exact iPhone version, final Mac browser, transfer size, and independently checked exported hash were not recorded     |
+| Older Pixel / iOS receivers | User reports receiving, downloads, and opening files working; exact OS/browser versions, batch sizes, and independent exported hashes were not recorded |
 
 Receiving uses synchronous OPFS when available and IndexedDB Blob checkpoints otherwise. The receiver must pass a real local write/read test before pairing. Folder access is optional; use verified downloads and reselect the exported files for final verification where folder saving is unavailable. Compatibility storage may be slower, particularly on older devices; start with small batches and keep the browser open. Clearing site data or browser eviction can remove staged bytes in either mode.
 
-The production syntax target includes Chrome 92, Firefox 95, and Safari 15.4; this is not certification of every version or device. Chromium 101 engine testing is recorded in [VALIDATION.md](VALIDATION.md). The actual first-generation Pixel's browser version, transfer capacity, and saving behavior still require physical validation. HTTPS is required except for trusted localhost development. Browser suspension, network isolation, host-address privacy, or NAT restrictions can prevent a direct connection.
+The production syntax target includes Chrome 92, Firefox 95, and Safari 15.4; this is not certification of every version or device. Chromium 101 engine testing is recorded in [VALIDATION.md](VALIDATION.md). The user reports phone receiving/downloads working, but exact versions, capacities, native save targets, and wake-lock behavior still need physical validation. HTTPS is required except for trusted localhost development. Browser suspension, network isolation, host-address privacy, or NAT restrictions can prevent a direct connection.
 
 A **5 GB manifest** test is not a **5 GB byte transfer**, and a **10,000-path manifest** test is not a completed 10,000-file session. Large sessions, files above 4 GB, actual quota exhaustion, and device-specific saving behavior require real hardware validation. Browser picker bytes are the source of truth: original Apple Photos resources, complete Live Photo pairing, iCloud-original retrieval, native media scanning, atomic rename, and filesystem timestamp restoration are outside this version.
 

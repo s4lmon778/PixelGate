@@ -11,6 +11,10 @@ export function report(records: RecordFile[], format: 'json' | 'csv' | 'txt') {
     destination: f.destinationPath ?? '',
     downloadedCopy:
       f.downloaded && f.scope === 'browser' ? 'verification pending' : '',
+    appHandoff: f.shared
+      ? 'handed to save/share sheet; confirm save in target app'
+      : '',
+    appCopy: f.shared && f.scope === 'browser' ? 'verification pending' : '',
     error: f.error ?? '',
   }));
   if (format === 'json')
@@ -35,6 +39,8 @@ export function report(records: RecordFile[], format: 'json' | 'csv' | 'txt') {
       'filesystemModifiedTime',
       'destination',
       'downloadedCopy',
+      'appHandoff',
+      'appCopy',
       'error',
     ] as const;
     // Neutralize spreadsheet formulas as well as quoting CSV delimiters.
@@ -48,11 +54,11 @@ export function report(records: RecordFile[], format: 'json' | 'csv' | 'txt') {
     ].join('\r\n');
   }
   return (
-    `PixelGate Transfer Report\n${new Date().toISOString()}\n\n${records.filter(isVerified).length} / ${records.length} copies verified\nVerification scope is listed per file. Downloaded copies require a separate readback check.\n\n` +
+    `PixelGate Transfer Report\n${new Date().toISOString()}\n\n${records.filter(isVerified).length} / ${records.length} copies verified\nVerification scope is listed per file. Downloaded copies and app saves require a separate readback check.\n\n` +
     rows
       .map(
         (r) =>
-          `${r.path}\n${r.bytes} bytes | ${r.status} | ${r.verificationScope}\nSHA-256: ${r.sha256}${r.error ? `\n${r.error}` : ''}`,
+          `${r.path}\n${r.bytes} bytes | ${r.status} | ${r.verificationScope}\nSHA-256: ${r.sha256}${r.appHandoff ? `\nApp: ${r.appHandoff}${r.appCopy ? ` | ${r.appCopy}` : ''}` : ''}${r.error ? `\n${r.error}` : ''}`,
       )
       .join('\n\n')
   );

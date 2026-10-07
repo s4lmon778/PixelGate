@@ -89,6 +89,28 @@ export const local = {
     operation<RecordFile | undefined>('files', 'readonly', (s) => s.get(id)),
   put: (file: RecordFile) => save(file, 'receive'),
   remove: (id: string) => operation('files', 'readwrite', (s) => s.delete(id)),
+  clearHistory: async (sessionId?: string) => {
+    const d = await db();
+    return new Promise<void>((resolve, reject) => {
+      const tx = d.transaction('history', 'readwrite');
+      const store = tx.objectStore('history');
+      if (!sessionId) store.clear();
+      else {
+        const request = store.openCursor();
+        request.onsuccess = () => {
+          const cursor = request.result;
+          if (!cursor) return;
+          if ((cursor.value as RecordFile).sessionId === sessionId)
+            cursor.delete();
+          cursor.continue();
+        };
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () =>
+        reject(tx.error ?? new Error('Unable to clear transfer history.'));
+    });
+  },
   sessions: () =>
     operation<Session[]>('sessions', 'readonly', (s) => s.getAll()),
   session: (value: Session) =>

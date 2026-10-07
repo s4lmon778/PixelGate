@@ -45,7 +45,15 @@ The writer is closed before actual stored bytes are reread and SHA-256 compared.
 
 Direct folder saving validates paths, preserves directory structure, detects same-size/same-hash copies, preserves conflicts with numbered filenames, commits on close, and rereads the destination. Manual download initiation does not prove exported integrity; a reselected saved copy must hash-match.
 
+Native save/share feature-detects `navigator.share` and `canShare`. Preparation rereads and hashes up to 20 user-selected staged files, constructs File objects from Blob references, and flattens paths with collision-safe filenames. A second user tap invokes sharing before any await, preserving transient activation. Cancellation, unsupported payloads, and corrupt copies never mark a handoff or discard staging. API resolution records local `shared` metadata; it does not prove target-app saving or backup, so verification scope remains `browser` until independent reselected-file verification. The receiving app can transform or upload files outside PixelGate's control. Neither folder access nor specific photo-album actions are assumed available on mobile browsers.
+
 A record’s transfer phase and verification scope are separate. Scopes are `none`, `browser`, `destination`, or `exported`. Integrity failure blocks saving. Permission/quota failure pauses or preserves verified staging for retry.
+
+## Screen lock and history lifecycle
+
+The screen-awake component requests a supported screen wake lock during pairing or a connection when enabled. Local preference, actual sentinel status, denied/released status, and retry controls remain distinct. Visibility restoration reacquires an enabled lock. Effect disposal releases held locks and immediately releases a request that resolves after switch-off, disconnect, or unmount. The app does not claim execution during OS suspension; active transfers are paused when backgrounded and recover through existing durable checkpoints.
+
+History clearing uses a transaction over the `history` object store alone, optionally filtering a session with a cursor. Receiver manifests in `files`, sender manifests, and both staging backends remain intact. Receiver inventory is refreshed separately from history so clearing the log does not disable batch saving of retained copies. Later activity on retained records can create new log entries.
 
 Internal `pixelbridge` storage/channel identifiers retain the original v1 namespace. Public branding is PixelGate. Because the GitHub deployment has a new origin, existing Sites storage is not migrated.
 

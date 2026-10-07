@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { QrImage } from './QrImage';
 import { CodeInput } from './CodeInput';
+import { KeepAwake } from './KeepAwake';
+import { SaveToApp } from './SaveToApp';
 import { version } from '../package.json';
 import {
   ArrowDownToLine,
@@ -74,6 +76,7 @@ function verificationLabel(r: RecordFile) {
   if (!isVerified(r)) return phaseLabel[r.phase];
   if (r.scope === 'destination') return 'Destination verified';
   if (r.scope === 'exported') return 'Exported copy verified';
+  if (r.shared) return 'App save verification pending';
   return r.downloaded
     ? 'Download verification pending'
     : 'Browser copy verified';
@@ -103,6 +106,7 @@ export default function PixelGate() {
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [received, setReceived] = useState<RecordFile[]>([]);
   const [history, setHistory] = useState<RecordFile[]>([]);
+  const [storedReceived, setStoredReceived] = useState<RecordFile[]>([]);
   const [notice, setNotice] = useState('');
   const [problem, setProblem] = useState('');
   const [folderName, setFolderName] = useState('Manual download');
@@ -129,12 +133,15 @@ export default function PixelGate() {
   const session = useRef('');
   const startTime = useRef(0);
   const baseBytes = useRef(0);
-  const wake = useRef<WakeLockSentinel | undefined>(undefined);
   const releaseLock = useRef<(() => void) | undefined>(undefined);
 
   const refresh = useCallback(async () => {
-    const records = await local.files();
+    const [records, stored] = await Promise.all([
+      local.files(),
+      local.receivedFiles(),
+    ]);
     setHistory(records.sort((a, b) => b.updated - a.updated));
+    setStoredReceived(stored);
     const estimate = await navigator.storage?.estimate?.();
     setCapacityLabel(
       estimate?.quota
@@ -167,7 +174,6 @@ export default function PixelGate() {
       void receiver.current?.close();
       void connection.current?.stop();
       releaseLock.current?.();
-      void wake.current?.release();
     };
   }, [refresh]);
   useEffect(() => {
@@ -215,14 +221,20 @@ export default function PixelGate() {
       1000,
     );
     const visible = () => {
-      if (document.visibilityState === 'hidden' && (running || connected)) {
+      if (
+        document.visibilityState === 'hidden' &&
+        (running ||
+          [...receivedRecords.current.values()].some((r) =>
+            ['transferring', 'verifying'].includes(r.phase),
+          ))
+      ) {
         sender.current?.pause();
         receiver.current?.pause();
         setPaused(true);
         setNotice(
           'Browser was backgrounded. Return to this tab and resume; reconnect if necessary.',
         );
-      } else if (document.visibilityState === 'visible') void keepAwake();
+      }
     };
     document.addEventListener('visibilitychange', visible);
     return () => {
@@ -230,16 +242,6 @@ export default function PixelGate() {
       document.removeEventListener('visibilitychange', visible);
     };
   }, [running, connected]);
-  async function keepAwake() {
-    try {
-      if (navigator.wakeLock && (!wake.current || wake.current.released))
-        wake.current = await navigator.wakeLock.request('screen');
-    } catch {
-      setNotice(
-        'Keep this browser open and prevent the screen from locking during transfers.',
-      );
-    }
-  }
   async function guarded(action: () => Promise<unknown>) {
     setProblem('');
     setNotice('');
@@ -261,8 +263,6 @@ export default function PixelGate() {
     connection.current = undefined;
     releaseLock.current?.();
     releaseLock.current = undefined;
-    await wake.current?.release();
-    wake.current = undefined;
     setConnected(false);
     setRoom(undefined);
     setQr(undefined);
@@ -317,7 +317,6 @@ export default function PixelGate() {
       connected: (channel) => {
         setConnected(true);
         setPaused(false);
-        void keepAwake();
         if (role === 'send')
           sender.current = new Sender(channel, () =>
             setQueue([...currentQueue.current]),
@@ -370,14 +369,20 @@ export default function PixelGate() {
     const picker = (window as BrowserFolderWindow).showDirectoryPicker;
     if (!picker) {
       setNotice(
-        'Folder saving is unavailable in this browser. Download verified copies, then move them to your preferred folder.',
+        'Folder access is unavailable in this browser. Use Save to app or location if offered, or download verified copies.',
       );
       return;
     }
-    const handle = await picker.call(window, {
-      mode: 'readwrite',
-      id: 'pixelbridge-destination',
-    });
+    let handle: FileSystemDirectoryHandle;
+    try {
+      handle = await picker.call(window, {
+        mode: 'readwrite',
+        id: 'pixelbridge-destination',
+      });
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') return;
+      throw e;
+    }
     folder.current = handle;
     setFolderName(handle.name);
     await local.set('destination', handle);
@@ -416,7 +421,6 @@ export default function PixelGate() {
     );
     setElapsed(1);
     try {
-      await keepAwake();
       await sender.current.run(currentQueue.current, session.current);
       await refresh();
     } catch (e) {
@@ -651,6 +655,7 @@ export default function PixelGate() {
               </button>
             </div>
           )}
+          <KeepAwake active={!!room || connected || running} />
           {view === 'guide' ? (
             <div className="guide-grid">
               <section className="panel">
@@ -674,9 +679,10 @@ export default function PixelGate() {
                     the same trusted local network or hotspot.
                   </li>
                   <li>
-                    Save verified copies to a folder of your choice, or download
-                    them. After downloading, select the saved files again to
-                    verify their final bytes.
+                    Choose a destination folder where supported, or use Save to
+                    app or location to open your device’s save/share sheet after
+                    receiving. Downloads are also available. Reselect files
+                    saved through downloads or apps to verify their final bytes.
                   </li>
                   <li>
                     If you use a photo library, document manager, or backup
@@ -700,8 +706,9 @@ export default function PixelGate() {
                   PixelGate reread the actual saved file and confirmed its hash.
                 </p>
                 <p>
-                  Downloads stay pending until checked. PixelGate does not
-                  verify backups made by other apps or services.
+                  Downloads and files handed to another app stay pending until
+                  checked. PixelGate does not verify backups made by other apps
+                  or services.
                 </p>
               </section>
               <section className="panel">
@@ -757,7 +764,9 @@ export default function PixelGate() {
                 </p>
                 <p>
                   Browser storage can be cleared by the browser or user. Leaving
-                  the tab or locking the screen may suspend transfers.
+                  the tab or locking the screen may suspend transfers. Keep
+                  screen awake requests protection from automatic screen lock
+                  where supported; it does not enable background transfers.
                 </p>
                 <p>
                   Six-digit codes expire after ten minutes and are released
@@ -1514,17 +1523,40 @@ export default function PixelGate() {
                             </div>
                             <button
                               className="button"
-                              disabled={busy || !!active}
+                              disabled={
+                                busy ||
+                                !!active ||
+                                typeof (window as BrowserFolderWindow)
+                                  .showDirectoryPicker !== 'function'
+                              }
                               onClick={() => void guarded(selectFolder)}
                             >
                               Choose folder
                             </button>
                           </div>
                           <p className="hint destination-hint">
-                            Choose a folder for your files, such as Documents,
-                            Downloads, or a media folder. Folder access depends
-                            on your browser.
+                            {typeof (window as BrowserFolderWindow)
+                              .showDirectoryPicker === 'function'
+                              ? 'Choose a folder before receiving to save and verify files there automatically, preserving their folder structure.'
+                              : 'Direct folder access is unavailable in this browser. Use your device’s save/share options below or downloads.'}
                           </p>
+                          <SaveToApp
+                            records={storedReceived}
+                            disabled={busy || !!active}
+                            changed={async () => {
+                              await refresh();
+                              const updates = await local.receivedFiles();
+                              for (const record of updates)
+                                if (receivedRecords.current.has(record.id))
+                                  receivedRecords.current.set(
+                                    record.id,
+                                    record,
+                                  );
+                              setReceived(
+                                [...receivedRecords.current.values()].reverse(),
+                              );
+                            }}
+                          />
                           {folder.current && (
                             <button
                               className="text-button"
@@ -1559,9 +1591,7 @@ export default function PixelGate() {
                               <button
                                 className="button"
                                 disabled={
-                                  busy ||
-                                  !!active ||
-                                  (!history.length && !received.length)
+                                  busy || !!active || !storedReceived.length
                                 }
                                 onClick={() => void guarded(exportBatch)}
                               >
@@ -1570,9 +1600,7 @@ export default function PixelGate() {
                               </button>
                               <button
                                 className="button"
-                                disabled={
-                                  busy || (!history.length && !received.length)
-                                }
+                                disabled={busy || !storedReceived.length}
                                 onClick={() => verifyInput.current?.click()}
                               >
                                 <ShieldCheck size={16} />
@@ -1710,6 +1738,35 @@ export default function PixelGate() {
                     </span>
                   </h2>
                   <div className="report-actions">
+                    {view === 'history' && (
+                      <button
+                        className="text-button"
+                        disabled={busy || !!active || !historyRecords.length}
+                        onClick={() =>
+                          void guarded(async () => {
+                            if (
+                              !window.confirm(
+                                `Clear ${historyRecords.length} transfer history records${historySession === 'all' ? '' : ' in this session'}? Staged files, saved copies, and resume checkpoints will be kept.`,
+                              )
+                            )
+                              return;
+                            await local.clearHistory(
+                              historySession === 'all'
+                                ? undefined
+                                : historySession,
+                            );
+                            setHistorySession('all');
+                            await refresh();
+                            setNotice(
+                              'Transfer history cleared. Staged files, saved copies, and resume checkpoints were kept.',
+                            );
+                          })
+                        }
+                      >
+                        <Trash2 size={15} />
+                        Clear history
+                      </button>
+                    )}
                     {(['json', 'csv', 'txt'] as const).map((format) => (
                       <button
                         key={format}
@@ -1780,7 +1837,7 @@ export default function PixelGate() {
                     <File size={26} />
                     <strong>
                       {view === 'history'
-                        ? 'No transfers yet'
+                        ? 'No history records'
                         : 'Your queue is clear'}
                     </strong>
                     <span>

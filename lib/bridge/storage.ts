@@ -3,6 +3,7 @@ import { hashFile } from './hash';
 import {
   CHECKPOINT_BYTES,
   collisionName,
+  isVerified,
   safePath,
   type RecordFile,
 } from './model';
@@ -336,6 +337,47 @@ export async function downloadStaged(record: RecordFile) {
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
   await local.put({ ...record, downloaded: true, updated: Date.now() });
+}
+// Prepare separately from the tap that opens the native share sheet. Hashing
+// can outlive transient activation, especially on older phones and large files.
+export async function prepareSharedFiles(
+  records: RecordFile[],
+): Promise<File[]> {
+  if (!records.length || records.length > 20)
+    throw new Error('Select between 1 and 20 files to save with another app.');
+  const files: File[] = [];
+  const names = new Set<string>();
+  for (const record of records) {
+    if (!isVerified(record))
+      throw new Error('Only verified browser copies can be shared.');
+    const name = safePath(record.relativePath).split('/').at(-1)!;
+    let source: File;
+    try {
+      source = await stagedFile(record.id);
+    } catch {
+      throw new Error(
+        `${name}: browser copy is unavailable. Receive this file again.`,
+      );
+    }
+    if (
+      source.size !== record.size ||
+      (await hashFile(source)) !== record.sha256
+    )
+      throw new Error(
+        `${name}: browser copy failed verification. Receive this file again.`,
+      );
+    let uniqueName = name;
+    let suffix = 2;
+    while (names.has(uniqueName)) uniqueName = collisionName(name, suffix++);
+    names.add(uniqueName);
+    files.push(
+      new File([source], uniqueName, {
+        type: record.mimeType,
+        lastModified: record.modified,
+      }),
+    );
+  }
+  return files;
 }
 export async function verifyExport(file: File, records: RecordFile[]) {
   const candidates = records.filter(

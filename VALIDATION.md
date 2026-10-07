@@ -1,5 +1,21 @@
 # Validation record
 
+## GitHub Pages edition · 0.3.8
+
+Executed on **October 6, 2026**, with synthetic fixtures:
+
+- Strict TypeScript, ESLint, the production build, formatting, and **88 unit/integration tests** pass. Three new storage cases independently hash prepared app-share bytes, reject corrupted/unverified or oversized batches, and preserve bytes when flattening Unicode filename conflicts. Reports distinguish app handoff from destination verification.
+- Across full and targeted runs, **31 unique browser scenarios pass**, with two deliberate native-share fixture skips in nonpersistent macOS WebKit. The suite exercises existing code/manual transfers, compatibility storage, source/staging/export readback, corruption rejection, consumed pairing codes, mobile layout, and 200% text sizing. Earlier ICE race/discovery injection and storage-worker fault cases are recorded under their original releases; they were not all rerun here.
+- The 16 passing new UI cases cover session/all-history clearing and cancellation, retained receiver manifests/checkpoint bytes, batch saving after history clearing, unsupported capabilities, native-share cancellation, disallowed payloads, same-size corruption rejection, byte-exact preparation, fresh user activation, filename collisions, pending verification labels, wake denial/retry/release/reacquisition, preference persistence, and an asynchronous lock resolving after switch-off. Wake and share APIs are controlled fixtures: this verifies application behavior, not a physical device's share targets or screen power management. WebKit wake lifecycle runs as a sender, preserving its existing nonpersistent receiver-storage limitation.
+- Actual **Chromium 101.0.4951.15** passes the compatibility byte transfer using public PeerJS plus all six mobile-control cases. The last share-selection refinement is rerun in that older engine. This is an engine check, not an Android or iOS hardware certification.
+- One targeted Chromium compatibility run timed out before connection; a focused rerun completed in 9.2 seconds. The prior run had completed bytes and failed only because its broad status locator also matched the new awake status; that locator now targets the actual notice. No network-policy or hardware-reliability claim follows from these fixtures.
+
+The user now reports receiving, downloading, and opening files working on older Pixel and iOS devices. Exact OS/browser versions, sizes, independent exported hashes, destination apps, and physical wake behavior were not recorded. Native app save/share must be tested on the actual devices; selecting a target does not prove saved-copy integrity or cloud backup. Screen lock or OS suspension can still interrupt transfers.
+
+Google Photos integration is not included: official Library API documentation restricts writes to albums created by the integrating app. The Picker API selects existing media for reading rather than an upload destination. An OAuth-backed upload into PixelGate-created albums would be a separate opt-in cloud workflow; no credentials or account access were added.
+
+The release adds a visible screen-awake switch, selected native save/share batches, and session-aware history clearing. Clearing history changes only the log store and retains staged files and resume manifests. Files handed to another app keep browser verification scope until an actual saved file is independently checked.
+
 ## GitHub Pages edition · 0.3.5
 
 Executed on **October 6, 2026**, with synthetic fixtures:

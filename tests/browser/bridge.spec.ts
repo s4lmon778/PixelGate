@@ -544,7 +544,7 @@ for (const mode of ['automatic', 'blocked', 'explicit', 'early', 'indexeddb'])
               exact: true,
             })
             .click();
-          await expect(receiver.getByRole('status')).toContainText(
+          await expect(receiver.locator('.alert[role="status"]')).toContainText(
             '1 staged copies cleared',
           );
           const remaining = await receiver.evaluate(async () => {

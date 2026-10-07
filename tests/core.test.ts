@@ -91,11 +91,17 @@ describe('integrity and manifests', () => {
         phase: 'verified' as const,
         scope: 'browser' as const,
         downloaded: true,
+        shared: true,
       },
     ];
     expect(report(records, 'csv')).toContain('"\'=SUM(1).jpg"');
     expect(report(records, 'json')).toContain('verification pending');
     expect(report(records, 'txt')).toContain('browser');
+    expect(report(records, 'txt')).toContain('handed to save/share sheet');
+    expect(JSON.parse(report(records, 'json')).files[0]).toMatchObject({
+      verificationScope: 'browser',
+      appCopy: 'verification pending',
+    });
   });
 });
 describe('signaling privacy boundary', () => {

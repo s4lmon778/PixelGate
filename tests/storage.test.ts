@@ -19,6 +19,7 @@ import {
   saveToFolder,
   verifyExport,
   capacity,
+  prepareSharedFiles,
 } from '../lib/bridge/storage';
 const sha = createHash('sha256')
   .update(new Uint8Array([1, 2, 3]))
@@ -96,6 +97,41 @@ beforeEach(() => {
         estimate: async () => ({ quota: 100000000, usage: 0 }),
       },
     },
+  });
+});
+describe('native app handoff preparation', () => {
+  it('independently checks staged bytes and preserves Unicode names, MIME and modification time', async () => {
+    const files = await prepareSharedFiles([record]);
+    expect(files[0].name).toBe('IMG.HEIC');
+    expect(files[0].type).toBe('image/heic');
+    expect(files[0].lastModified).toBe(0);
+    expect(
+      createHash('sha256')
+        .update(new Uint8Array(await files[0].arrayBuffer()))
+        .digest('hex'),
+    ).toBe(sha);
+    expect(state.stored.size).toBe(0);
+  });
+  it('blocks corrupted or unverified copies and rejects unbounded batches', async () => {
+    state.bytes = new Uint8Array([3, 2, 1]);
+    await expect(prepareSharedFiles([record])).rejects.toThrow(
+      'failed verification',
+    );
+    await expect(
+      prepareSharedFiles([{ ...record, scope: 'none', phase: 'failed' }]),
+    ).rejects.toThrow('Only verified');
+    await expect(
+      prepareSharedFiles(Array.from({ length: 21 }, () => record)),
+    ).rejects.toThrow('between 1 and 20');
+  });
+  it('gives flattened folder collisions distinct names without changing any bytes', async () => {
+    const records = ['a/旅行.jpg', 'b/旅行.jpg', 'c/旅行 (2).jpg'].map(
+      (relativePath) => ({ ...record, relativePath }),
+    );
+    const files = await prepareSharedFiles(records);
+    expect(new Set(files.map((f) => f.name)).size).toBe(3);
+    for (const file of files)
+      expect(new Uint8Array(await file.arrayBuffer())).toEqual(state.bytes);
   });
 });
 describe('stored and exported copies', () => {
