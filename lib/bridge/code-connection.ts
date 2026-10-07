@@ -8,6 +8,7 @@ import type { PairRoom } from './connection';
 import { PAIR_TTL } from './pairing';
 import { RouteProbe } from './route-diagnostics';
 import { LanRoute, lanAddress } from './lan-route';
+import { CandidateInbox } from './candidate-inbox';
 
 const PREFIX = 'pixelgate-v2-';
 const PROTOCOL = 'pixelgate-code-v1';
@@ -84,6 +85,7 @@ export class CodeConnection {
   private requests = 0;
   private probe?: RouteProbe;
   private lanRoute?: LanRoute;
+  private inbox?: CandidateInbox;
 
   constructor(
     private role: 'send' | 'receive',
@@ -235,6 +237,19 @@ export class CodeConnection {
   private bind(data: DataConnection) {
     this.data = data;
     if (data.peerConnection) {
+      this.inbox = new CandidateInbox(data.peerConnection);
+      const original = data.handleMessage.bind(data);
+      // PeerJS dispatches ANSWER and CANDIDATE independently. An early
+      // candidate must wait for the negotiated description rather than fail.
+      data.handleMessage = async (message) => {
+        if (this.stopped || this.approved) return;
+        if (message.type === 'CANDIDATE')
+          this.inbox?.receive(message.payload?.candidate);
+        else {
+          await original(message);
+          this.inbox?.ready();
+        }
+      };
       if (this.senderAddress)
         this.lanRoute = new LanRoute(data.peerConnection, this.senderAddress);
       this.probe = new RouteProbe(
@@ -247,13 +262,14 @@ export class CodeConnection {
           }
         },
         () => this.lanRoute?.added ?? 0,
+        () => this.inbox?.snapshot(),
       );
     }
     this.routeTimer = setTimeout(
       () =>
         this.fail(
           new Error(
-            'Pairing succeeded, but no direct route opened. On the receiver, revoke this connection and enter the sender’s Wi-Fi IP under “Trouble connecting?” before creating a new code. If that also fails, try a different network or hotspot; same Wi-Fi can still isolate devices.',
+            'Pairing succeeded, but no direct route opened. The connection report records candidate delivery and browser errors. Local discovery or traffic between devices may be blocked, even on the same Wi-Fi.',
           ),
         ),
       45000,
@@ -261,7 +277,7 @@ export class CodeConnection {
     data.on('error', () =>
       this.fail(
         new Error(
-          'Could not open a direct route. On the receiver, revoke this connection and try the sender’s Wi-Fi IP under “Trouble connecting?” with a fresh code. If it still fails, try a different network or hotspot.',
+          'Could not open a direct route. Connection details were collected automatically. Check the connection report for candidate delivery and browser errors.',
         ),
       ),
     );
@@ -369,6 +385,7 @@ export class CodeConnection {
 
   private activate() {
     this.probe?.stop();
+    this.inbox?.stop();
     this.lanRoute?.stop();
     this.senderAddress = '';
     this.approved = true;
@@ -397,6 +414,7 @@ export class CodeConnection {
 
   async stop() {
     this.probe?.stop();
+    this.inbox?.stop();
     this.lanRoute?.stop();
     this.senderAddress = '';
     this.stopped = true;

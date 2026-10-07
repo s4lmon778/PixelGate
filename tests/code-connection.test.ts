@@ -71,6 +71,7 @@ class Data extends EventEmitter {
     send: vi.fn(),
     onmessage: undefined as undefined | ((event: { data: unknown }) => void),
   };
+  handleMessage = vi.fn().mockResolvedValue(undefined);
   close = vi.fn(() => this.emit('close'));
 }
 const events = () => ({
@@ -325,7 +326,7 @@ describe('six-digit code pairing', () => {
       c = new CodeConnection('send', e);
     await c.start('123456');
     await vi.advanceTimersByTimeAsync(45001);
-    expect(e.error.mock.calls[0][0].message).toContain('same Wi-Fi');
+    expect(e.error.mock.calls[0][0].message).toContain('direct route');
     expect(state.peers[0].destroyed).toBe(true);
   });
 });

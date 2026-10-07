@@ -26,20 +26,21 @@ async function scanQr(image: Locator) {
   return decoded!.data;
 }
 
-for (const mode of ['automatic', 'blocked', 'explicit'])
+for (const mode of ['automatic', 'blocked', 'explicit', 'early'])
   test(
     mode === 'blocked'
       ? 'six-digit pairing with blocked discovery fails without transferring bytes'
-      : `six-digit pairing${mode === 'explicit' ? ' with explicit LAN fallback' : ''} requires approval, transfers verified bytes, and consumes the code`,
+      : `six-digit pairing${mode === 'explicit' ? ' with explicit LAN fallback' : mode === 'early' ? ' with candidates before answer' : ''} requires approval, transfers verified bytes, and consumes the code`,
     async ({ browserName }) => {
       const explicitLan = mode === 'explicit';
-      const blockedLan = mode !== 'automatic';
+      const blockedLan = mode === 'blocked' || mode === 'explicit';
       test.skip(
         mode === 'blocked' && browserName !== 'chromium',
         'One negative control is sufficient for the injected route failure.',
       );
       test.skip(
-        blockedLan && Boolean(process.env.PIXELGATE_TEST_PUBLIC_SIGNALING),
+        mode !== 'automatic' &&
+          Boolean(process.env.PIXELGATE_TEST_PUBLIC_SIGNALING),
         'Local discovery failure is injected only in the isolated fixture.',
       );
       const lanAddress = Object.values(networkInterfaces())
@@ -75,7 +76,7 @@ for (const mode of ['automatic', 'blocked', 'explicit'])
       const signals: string[] = [];
       const connections: string[] = [];
       let holdRoutes = !publicSignaling;
-      const delayedRoutes: (() => void)[] = [];
+      const delayedRoutes: { type: string; forward: () => void }[] = [];
       for (const context of [receiverContext, senderContext]) {
         if (blockedLan)
           await context.addInitScript(() => {
@@ -131,7 +132,7 @@ for (const mode of ['automatic', 'blocked', 'explicit'])
             };
             const type = JSON.parse(String(message)).type;
             if (holdRoutes && ['ANSWER', 'CANDIDATE'].includes(type))
-              delayedRoutes.push(forward);
+              delayedRoutes.push({ type, forward });
             else forward();
           });
           remote.on('open', () => {
@@ -155,7 +156,7 @@ for (const mode of ['automatic', 'blocked', 'explicit'])
           .click();
         if (explicitLan) {
           await receiver
-            .getByText('Trouble connecting?', { exact: true })
+            .getByText('Advanced network settings', { exact: true })
             .click();
           await receiver
             .getByLabel('Sender’s Wi-Fi IP (optional)', { exact: true })
@@ -258,7 +259,50 @@ for (const mode of ['automatic', 'blocked', 'explicit'])
             sender.getByText('Connected', { exact: true }),
           ).toHaveCount(0);
           holdRoutes = false;
-          for (const forward of delayedRoutes) forward();
+          if (mode === 'early') {
+            for (const route of delayedRoutes.filter(
+              (route) => route.type === 'CANDIDATE',
+            ))
+              route.forward();
+            await sender
+              .getByText('Connection diagnostics', { exact: true })
+              .click();
+            if (process.env.PIXELGATE_EXPECT_EARLY_FAILURE) {
+              await expect(sender.getByRole('alert')).toContainText(
+                'Pairing failed',
+                { timeout: 10000 },
+              );
+              const failed = JSON.parse(
+                await sender
+                  .getByLabel('Connection report', { exact: true })
+                  .innerText(),
+              );
+              expect(failed.remoteDescription).toBe(false);
+              expect(failed.signaling).toBe('have-local-offer');
+              await expect(
+                sender.getByText('Connected', { exact: true }),
+              ).toHaveCount(0);
+              await expect(receiver.locator('.file-status')).toHaveCount(0);
+              return;
+            }
+            await expect(
+              sender.getByLabel('Connection report', { exact: true }),
+            ).toContainText(/"queued": [1-9]/, { timeout: 10000 });
+            const pendingReport = JSON.parse(
+              await sender
+                .getByLabel('Connection report', { exact: true })
+                .innerText(),
+            );
+            expect(pendingReport.remoteDescription).toBe(false);
+            await expect(sender.getByRole('alert')).toHaveCount(0);
+            await sender
+              .getByText('Connection diagnostics', { exact: true })
+              .click();
+            for (const route of delayedRoutes.filter(
+              (route) => route.type === 'ANSWER',
+            ))
+              route.forward();
+          } else for (const route of delayedRoutes) route.forward();
           delayedRoutes.length = 0;
         }
         if (mode === 'blocked') {
@@ -307,6 +351,24 @@ for (const mode of ['automatic', 'blocked', 'explicit'])
           }
         });
         expect(actualHash).toBe(hash);
+        if (mode === 'early' && browserName === 'chromium') {
+          await receiver
+            .getByText('Connection diagnostics', { exact: true })
+            .click();
+          const completed = JSON.parse(
+            await receiver
+              .getByLabel('Connection report', { exact: true })
+              .innerText(),
+          );
+          expect(completed.candidateDelivery.added).toBeGreaterThan(0);
+          await receiver
+            .locator('.connection-panel')
+            .screenshot({ path: 'docs/assets/connection-fixed.png' });
+          await receiver
+            .getByText('Connection diagnostics', { exact: true })
+            .click();
+        }
+
         if (explicitLan) {
           await receiver
             .getByText('Connection diagnostics', { exact: true })
@@ -579,7 +641,7 @@ test('responsive screen exposes primary actions with no overflow', async ({
   await page
     .getByRole('button', { name: 'Receive files', exact: true })
     .click();
-  await page.getByText('Trouble connecting?', { exact: true }).click();
+  await page.getByText('Advanced network settings', { exact: true }).click();
   await expect(
     page.getByLabel('Sender’s Wi-Fi IP (optional)', { exact: true }),
   ).toBeVisible();
@@ -610,7 +672,7 @@ test('text enlargement keeps controls and page width usable', async ({
     await page
       .getByRole('button', { name: 'Receive files', exact: true })
       .click();
-    await page.getByText('Trouble connecting?', { exact: true }).click();
+    await page.getByText('Advanced network settings', { exact: true }).click();
     await expect(
       page.getByLabel('Sender’s Wi-Fi IP (optional)', { exact: true }),
     ).toBeVisible();

@@ -1,14 +1,14 @@
 # Validation record
 
-## GitHub Pages edition · 0.3.3
+## GitHub Pages edition · 0.3.4
 
 Executed on **October 6, 2026**, with synthetic fixtures:
 
 - TypeScript, ESLint, and the production static build pass.
-- **77 unit/integration tests pass**: independent SHA-256, deliberate corruption, changed source content, durable checkpoint recovery, missing staged copies, duplicate/conflict handling, destination/export readback, denied access, quota exhaustion, safe/Unicode paths, 10,000 manifest paths, and 5 GB manifest sizes.
+- **81 unit/integration tests pass**: independent SHA-256, deliberate corruption, changed source content, durable checkpoint recovery, missing staged copies, duplicate/conflict handling, destination/export readback, denied access, quota exhaustion, safe/Unicode paths, 10,000 manifest paths, and 5 GB manifest sizes.
 - Isolated local Git remotes verify first-time Pages publication, deployment history preservation, and rejection of uncommitted source.
 - Serverless pairing tests cover bounded compression/decompression, invalid descriptions and extra fields, ten-minute expiry, wrong session responses, explicit approval, one-sender enforcement, immediate revocation, and copied offer/answer negotiation.
-- **12 Playwright browser checks pass**, exercising a real **2 MiB + 111 byte** peer transfer, independent Node/Web Crypto source/staging hashes, batch download, reselected export verification, damaged export rejection, history after refresh, URL-fragment import in an already-open tab, invalid response rejection, mobile layout, and 200% text sizing.
+- **16 current Playwright browser checks pass** for code pairing, independent Node/Web Crypto source/staging hashes of **1 MiB + 37 bytes**, receiver approval before channel readiness, consumed-code rejection, candidates arriving before answers, local-address fallback, safe failure without a route, mobile layout, and 200% text sizing. Two duplicate negative controls are deliberately skipped. The earlier manual-mode suite exercised a **2 MiB + 111 byte** transfer, batch download, exported-copy verification, corruption rejection, refresh recovery, and copied-description import; those browser scenarios were not rerun for 0.3.4.
 - Request inspection checks that static hosting receives only GET asset/document requests and no pairing tokens, filenames, hashes, or file data. Code pairing exchanges signaling frames with PeerJS; copy/paste pairing makes no signaling-service connection.
 - QR regression checks decode the displayed SVG using the independent `jsQR` decoder at desktop, enlarged-dialog, and 390 px mobile sizes. The decoded link is then used for the real peer transfer. Physical phone-camera scanning still requires device testing.
 
@@ -20,14 +20,15 @@ The Chromium six-digit scenario also passes against the real public PeerJS servi
 
 ## Browser environment
 
-| Engine / device           | Version / setup                                                                                      | Result                             |
-| ------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| Chromium                  | Playwright Chromium 141.0.7390.37; normal privacy for code pairing; explicit LAN for manual fixtures | Transfer and layout checks         |
-| Firefox                   | Playwright Firefox 142.0.1; normal privacy for code pairing; explicit LAN for manual fixtures        | Transfer and layout checks         |
-| WebKit                    | Playwright WebKit 26.0 sender to Chromium receiver                                                   | Interoperability and layout checks |
-| Native desktop Safari     | Not run                                                                                              | Pending                            |
-| iPhone Safari             | Record actual iOS/browser versions                                                                   | Pending                            |
-| First-generation Pixel XL | Record actual Android/Chrome versions                                                                | Pending                            |
+| Engine / device           | Version / setup                                                                                      | Result                                     |
+| ------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| Chromium                  | Playwright Chromium 141.0.7390.37; normal privacy for code pairing; explicit LAN for manual fixtures | Transfer and layout checks                 |
+| Firefox                   | Playwright Firefox 142.0.1; normal privacy for code pairing; explicit LAN for manual fixtures        | Transfer and layout checks                 |
+| WebKit                    | Playwright WebKit 26.0 sender to Chromium receiver                                                   | Interoperability and layout checks         |
+| Native desktop Safari     | Safari 26.5 on macOS 26.5.1                                                                          | User failure on 0.3.3; 0.3.4 retry pending |
+| Native Mac Arc            | Arc 1.166.0 on macOS 26.5.1                                                                          | User failure on 0.3.3; 0.3.4 retry pending |
+| iPhone Safari             | Record actual iOS/browser versions                                                                   | Pending                                    |
+| First-generation Pixel XL | Record actual Android/Chrome versions                                                                | Pending                                    |
 
 Six-digit tests use normal browser host-address privacy, including WebKit-to-Chromium, and deliberately hold back answers/ICE candidates until the receiver approves: approval must become available before the route opens, and no transfer may start before it opens. The older manual-pairing fixtures use explicit LAN candidates; a separate run of Firefox manual pairing with normal mDNS privacy failed to open a direct channel. This limitation does not affect the six-digit regression results, but demonstrates why automated checks cannot certify all device/network combinations. `PIXELGATE_TEST_EXPLICIT_LAN=1` is an optional test diagnostic; production uses normal browser discovery. WebKit’s nonpersistent macOS test contexts do not provide reliable OPFS receiving, so this does not certify native Safari receiving.
 
@@ -48,3 +49,7 @@ Version 0.3.2 adds a local route report with states, candidate counts, and bound
 Version 0.3.3 adds an optional receiver-side sender Wi-Fi IPv4 address. Five unit tests cover address validation, UDP/application-only candidates, preserving negotiated ports/credentials/mid, trickle/deduplication, 32-route bounds, rejection, and cancellation during pending work. Two integration regressions verify invalid input cannot register a room and the fallback does not enter signaling options or reports, bypass approval, or leave timers after activation.
 
 The browser fallback fixture disables STUN and replaces both devices’ host candidates with an unresolvable mDNS name through an isolated PeerServer. Chromium, Firefox, and WebKit-sender-to-Chromium-receiver each transfer **1 MiB + 37 bytes** through the explicit address, with independent Node/Web Crypto hashes, receiver consent, consumed-code rejection, and no supplied address/file information in the scrubbed signaling capture or exported report. A Chromium negative control without an explicit address times out without receiving any file. This establishes a discovery-failure fallback, not a bypass for network isolation. Native iPhone-to-Mac success remains unconfirmed.
+
+Version 0.3.4 fixes early trickle candidates aborting negotiation. A controlled copy of committed 0.3.3 (`f48c8dc`) fails when candidates are delivered before the answer: the sender reports “Pairing failed,” remains at `have-local-offer`, and has no remote description. With 0.3.4, that same scenario queues candidates, retains approval, connects, transfers verified bytes, and consumes the code. The regression runs in Chromium, Firefox, and WebKit-to-Chromium with normal browser privacy. Four new unit checks cover SDP readiness, FIFO/deduplication, a rejected route followed by a valid route, input/lifetime bounds, privacy, and cancellation. The pinned PeerJS message dispatch is wrapped per connection; candidate additions are serialized instead of independently attempted before SDP. Reports add delivery counts, fixed error categories, and statistics success/failure counts. No address lookup, new permissions, TURN, or third-party service was added. Manual addressing remains optional under advanced settings and is no longer the timeout instruction.
+
+Read-only checks on the Mac (macOS 26.5.1) found the application firewall enabled, block-all disabled, and incoming connections permitted for Arc and Safari. Direct STUN binding probes to Cloudflare UDP 3478, Google UDP 19302, and an alternate Google UDP 19302 endpoint timed out after four seconds over IPv4; IPv6 probes returned `EHOSTUNREACH`. These independent probes support the receiver’s STUN error report; they do not identify the network policy responsible, establish that LAN traffic is blocked, or prove the original missing-answer failure had the same cause. No firewall, proxy, browser privacy, or network settings were changed. Successful native iPhone-to-Mac transfer still requires a 0.3.4 device retry.

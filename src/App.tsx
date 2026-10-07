@@ -860,11 +860,12 @@ export default function PixelGate() {
                               </div>
                               {pairingMode === 'code' && (
                                 <details className="lan-fallback">
-                                  <summary>Trouble connecting?</summary>
+                                  <summary>Advanced network settings</summary>
                                   <p className="hint" id="lan-help">
-                                    If pairing succeeds but the connection times
-                                    out, enter the sender’s Wi-Fi IPv4 address
-                                    before creating a new code. On iPhone:
+                                    Connection details are collected
+                                    automatically. For advanced diagnosis only,
+                                    you can supply the sender’s Wi-Fi IPv4
+                                    address before creating a code. On iPhone:
                                     Settings → Wi-Fi → ⓘ beside the connected
                                     network → IP Address. This can help when
                                     local device discovery fails; it cannot

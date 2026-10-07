@@ -1,3 +1,4 @@
+import type { CandidateDelivery } from './candidate-inbox';
 export type CandidateCounts = {
   host: number;
   srflx: number;
@@ -18,6 +19,9 @@ export interface RouteDiagnostics {
   localMdns: number;
   remoteMdns: number;
   lanCandidatesAdded: number;
+  candidateDelivery?: CandidateDelivery;
+  statsReads: number;
+  statsErrors: number;
   candidatePairs: Record<string, number>;
   stunErrors: { service: string; code: number }[];
 }
@@ -43,11 +47,14 @@ export class RouteProbe {
   private timer?: ReturnType<typeof setInterval>;
   private stopped = false;
   private polling = false;
+  private statsReads = 0;
+  private statsErrors = 0;
   constructor(
     private pc: RTCPeerConnection,
     private channel: () => RTCDataChannel | undefined,
     private update: (report: RouteDiagnostics) => void,
     private lanCandidates: () => number = () => 0,
+    private delivery: () => CandidateDelivery | undefined = () => undefined,
   ) {
     pc.addEventListener('icecandidateerror', this.error);
     this.timer = setInterval(() => void this.poll(), 2000);
@@ -69,6 +76,7 @@ export class RouteProbe {
     this.polling = true;
     try {
       const stats = await this.pc.getStats();
+      if (!this.stopped) this.statsReads++;
       const pairs: Record<string, number> = {};
       stats.forEach((value) => {
         if (value.type === 'candidate-pair' && typeof value.state === 'string')
@@ -76,6 +84,7 @@ export class RouteProbe {
       });
       if (!this.stopped) this.pairs = pairs;
     } catch {
+      if (!this.stopped) this.statsErrors++;
       /* Some browsers stop exposing stats after a failed route. */
     } finally {
       this.polling = false;
@@ -99,6 +108,9 @@ export class RouteProbe {
       localMdns: local.mdns,
       remoteMdns: remote.mdns,
       lanCandidatesAdded: this.lanCandidates(),
+      candidateDelivery: this.delivery(),
+      statsReads: this.statsReads,
+      statsErrors: this.statsErrors,
       candidatePairs: { ...this.pairs },
       stunErrors: this.errors.map((error) => ({ ...error })),
     };

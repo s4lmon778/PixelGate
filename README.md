@@ -53,7 +53,9 @@ Codes expire after ten minutes and are released when approved. One sender is all
 
 ### Pairing succeeds but the connection times out
 
-On the receiver, revoke the failed connection, expand **Trouble connecting?**, and enter the **sender’s Wi-Fi IPv4 address** before creating a fresh six-digit code. On iPhone, find it in **Settings → Wi-Fi → ⓘ beside the connected network → IP Address**. Pair and approve again.
+PixelGate collects and exchanges connection details automatically. Keep both devices on the current version; early network candidates are queued until the receiver’s answer is ready. No IP lookup is required in the normal six-digit flow. Connection diagnostics record candidate delivery and browser error categories without exporting addresses.
+
+For advanced local-discovery diagnosis only: On the receiver, revoke the failed connection, expand **Advanced network settings**, and enter the **sender’s Wi-Fi IPv4 address** before creating a fresh six-digit code. On iPhone, find it in **Settings → Wi-Fi → ⓘ beside the connected network → IP Address**. Pair and approve again.
 
 This optional fallback uses the supplied address to try the sender’s negotiated WebRTC port directly when local device discovery fails. The supplied address is used locally, without adding it to pairing metadata, history, or connection reports. Normal WebRTC signaling already exchanges network information. Approval, encrypted transport, and hash verification still apply. It cannot overcome network isolation, a firewall blocking direct traffic, or an IPv6-only network. If it fails too, test a different network or hotspot. No TURN relay is configured.
 
