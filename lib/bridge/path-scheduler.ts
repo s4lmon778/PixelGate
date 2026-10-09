@@ -9,6 +9,8 @@ type Observation = {
   lastSent: number;
   minimumDelay: number;
   receivedBytes: number;
+  delay: number;
+  timelyBytes: number;
 };
 
 /** Learn delivery on existing browser-selected paths; never bind an interface. */
@@ -30,6 +32,8 @@ export class PathScheduler<T> {
         lastSent: now,
         minimumDelay: Infinity,
         receivedBytes: 0,
+        delay: 0,
+        timelyBytes: 0,
       };
       this.observations.set(path, observation);
     }
@@ -51,6 +55,16 @@ export class PathScheduler<T> {
       observation.minimumDelay,
       Math.max(1, now - sentAt),
     );
+    const delay = Math.max(1, now - sentAt);
+    observation.delay = observation.delay
+      ? observation.delay * 0.5 + delay * 0.5
+      : delay;
+    // A long, stable RTT is not evidence of a growing queue. Compare delivery
+    // with this path's own baseline, rather than a fixed 150 ms RTT ceiling.
+    observation.timelyBytes =
+      observation.delay - observation.minimumDelay <= 150
+        ? observation.timelyBytes + bytes
+        : 0;
     const elapsed = now - observation.started;
     // Receipt batches and timer noise must not become instantaneous bandwidth.
     if (elapsed < 100 || observation.delivered < 4 * FRAME_BYTES) return;
@@ -61,6 +75,21 @@ export class PathScheduler<T> {
     observation.samples++;
     observation.started = now;
     observation.delivered = 0;
+  }
+
+  feedback(paths: T[]) {
+    let queueDelay = 0;
+    let timelyBytes = 0;
+    for (const path of paths) {
+      const observation = this.observations.get(path);
+      if (!observation) continue;
+      queueDelay = Math.max(
+        queueDelay,
+        observation.delay - observation.minimumDelay,
+      );
+      timelyBytes += observation.timelyBytes;
+    }
+    return { queueDelay, timelyBytes };
   }
 
   choose(
@@ -125,6 +154,12 @@ export class PathScheduler<T> {
             ? Math.round(observation!.minimumDelay)
             : undefined,
           samples: observation?.samples ?? 0,
+          receiptDelayMs: observation
+            ? Math.round(observation.delay)
+            : undefined,
+          queuedDelayMs: observation
+            ? Math.round(observation.delay - observation.minimumDelay)
+            : undefined,
         };
       }),
     };

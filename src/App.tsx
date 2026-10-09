@@ -36,6 +36,12 @@ import { pairingLink } from '@/lib/bridge/pairing';
 import { local } from '@/lib/bridge/database';
 import { Receiver, Sender } from '@/lib/bridge/transfer';
 import { StripedChannel } from '@/lib/bridge/striped-channel';
+import {
+  retainedConnectionReport,
+  retainConnectionReport,
+  clearConnectionReport,
+  type ConnectionReport,
+} from '@/lib/bridge/connection-report';
 import { dropped, selected } from '@/lib/bridge/selection';
 import {
   downloadStaged,
@@ -94,6 +100,7 @@ export default function PixelGate() {
   const [status, setStatus] = useState('Not connected');
   const [connected, setConnected] = useState(false);
   const [room, setRoom] = useState<PairRoom>();
+  const [savedReport, setSavedReport] = useState(retainedConnectionReport);
   const [code, setCode] = useState('');
   const [senderAddress, setSenderAddress] = useState('');
   const [response, setResponse] = useState('');
@@ -139,6 +146,33 @@ export default function PixelGate() {
   const startTime = useRef(0);
   const baseBytes = useRef(0);
   const releaseLock = useRef<(() => void) | undefined>(undefined);
+
+  const currentReport: ConnectionReport | undefined = room?.diagnostics
+    ? {
+        version,
+        role,
+        recordedAt: new Date().toISOString(),
+        browser: navigator.userAgent,
+        storageMode,
+        ...room.diagnostics,
+        transfer: transport.current?.snapshot(),
+      }
+    : undefined;
+  const connectionReport = currentReport ?? savedReport;
+  useEffect(() => {
+    if (!room?.diagnostics || transport.current?.readyState !== 'open') return;
+    const report: ConnectionReport = {
+      version,
+      role,
+      recordedAt: new Date().toISOString(),
+      browser: navigator.userAgent,
+      storageMode,
+      ...room.diagnostics,
+      transfer: transport.current.snapshot(),
+    };
+    retainConnectionReport(report);
+    setSavedReport(report);
+  }, [room, role, storageMode]);
 
   const refresh = useCallback(async () => {
     const [records, stored] = await Promise.all([
@@ -260,6 +294,10 @@ export default function PixelGate() {
     }
   }
   async function disconnect() {
+    if (currentReport && transport.current?.readyState === 'open') {
+      retainConnectionReport(currentReport);
+      setSavedReport(currentReport);
+    }
     sender.current?.cancel();
     sender.current = undefined;
     await connection.current?.stop();
@@ -1327,7 +1365,7 @@ export default function PixelGate() {
                           )}
                         </div>
                       )}
-                      {room?.diagnostics && (
+                      {connectionReport && (
                         <details className="route-diagnostics">
                           <summary>Connection diagnostics</summary>
                           <p className="hint">
@@ -1336,39 +1374,39 @@ export default function PixelGate() {
                             filenames, or file data. This report is never
                             uploaded automatically.
                           </p>
+                          {!currentReport && (
+                            <p className="hint">
+                              Last connection report, saved on this device at{' '}
+                              {new Date(
+                                connectionReport.recordedAt,
+                              ).toLocaleString()}
+                              . Clearing files does not remove it.
+                            </p>
+                          )}
                           <pre aria-label="Connection report">
-                            {JSON.stringify(
-                              {
-                                version,
-                                role,
-                                ...room.diagnostics,
-                                transfer: transport.current?.snapshot(),
-                              },
-                              null,
-                              2,
-                            )}
+                            {JSON.stringify(connectionReport, null, 2)}
                           </pre>
                           <button
                             className="text-button"
                             onClick={() =>
                               void guarded(async () => {
                                 await navigator.clipboard.writeText(
-                                  JSON.stringify(
-                                    {
-                                      version,
-                                      role,
-                                      ...room.diagnostics,
-                                      transfer: transport.current?.snapshot(),
-                                    },
-                                    null,
-                                    2,
-                                  ),
+                                  JSON.stringify(connectionReport, null, 2),
                                 );
                                 setNotice('Connection report copied.');
                               })
                             }
                           >
                             <Copy size={14} /> Copy connection report
+                          </button>
+                          <button
+                            className="text-button"
+                            onClick={() => {
+                              clearConnectionReport();
+                              setSavedReport(undefined);
+                            }}
+                          >
+                            Clear saved report
                           </button>
                         </details>
                       )}

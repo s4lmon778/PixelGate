@@ -1,28 +1,40 @@
-import { test, expect, chromium } from '@playwright/test';
+import { test, expect, chromium, webkit } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { mkdir, open } from 'node:fs/promises';
+import { mkdir, open, rm, writeFile } from 'node:fs/promises';
+
+const largeMiB = Number(process.env.PIXELGATE_TEST_LARGE_MIB || 400);
+const largeName = `original-${largeMiB}MiB.mp4`;
+const transferTimeout = Math.max(120000, largeMiB * 80);
+const savingTimeout = Math.max(60000, largeMiB * 60);
+const safariReceiver = Boolean(process.env.PIXELGATE_TEST_SAFARI_RECEIVER);
 
 for (const backend of ['opfs', 'indexeddb']) {
-  test(`400 MiB original transfers through ${backend}, bypasses Android share limits, and downloads byte-exactly`, async ({
+  const scenario = safariReceiver
+    ? `Safari receiving with ${backend === 'opfs' ? 'automatic' : 'compatibility'} storage and a byte-exact download`
+    : `through ${backend}, bypasses Android share limits, and downloads byte-exactly`;
+  test(`${largeMiB} MiB original transfers ${scenario}`, async ({
     browser,
     browserName,
   }, testInfo) => {
     test.skip(
-      browserName !== 'chromium',
-      'One large-file engine validation; this is not physical Pixel certification.',
+      browserName !== 'chromium' && !process.env.PIXELGATE_TEST_ALL_ENGINES,
+      'Additional sending engines run in the explicit large-file comparison.',
     );
-    test.setTimeout(240000);
+    test.setTimeout(Math.max(240000, largeMiB * 200));
+    expect(
+      Number.isSafeInteger(largeMiB) && largeMiB >= 64 && largeMiB <= 16384,
+    ).toBe(true);
     const folder = testInfo.outputPath('large-file');
     await mkdir(folder, { recursive: true });
-    const path = `${folder}/original-400MiB.mp4`;
+    const path = `${folder}/${largeName}`;
     const source = await open(path, 'w');
     const hash = createHash('sha256');
     const block = Buffer.alloc(1024 * 1024, 0x7b);
     try {
-      for (let i = 0; i < 400; i++) {
-        block.writeUInt32BE(i, 0);
-        block.writeUInt32BE(400 - i, block.length - 4);
+      for (let i = 0; i < largeMiB; i++) {
+        block.writeUInt32BE(i * 64, 0);
+        block.writeUInt32BE(largeMiB - i, block.length - 4);
         for (let frame = 1; frame < 64; frame++)
           block.writeUInt32BE(i * 64 + frame, frame * 16 * 1024);
         await source.write(block);
@@ -35,22 +47,29 @@ for (const backend of ['opfs', 'indexeddb']) {
       await source.close();
     }
     const expected = hash.digest('hex');
-    const contextOptions = {
-      userAgent:
-        'Mozilla/5.0 (Linux; Android 13; Pixel) AppleWebKit/537.36 Chrome/106.0.0.0 Mobile Safari/537.36',
-    };
+    const contextOptions = safariReceiver
+      ? {}
+      : {
+          userAgent:
+            'Mozilla/5.0 (Linux; Android 13; Pixel) AppleWebKit/537.36 Chrome/106.0.0.0 Mobile Safari/537.36',
+        };
     // The directory-write surrogate is OPFS, sharing this origin's quota with
     // staging. Use a normal profile: Incognito caps this artificial combination
     // below 800 MiB, while a user-selected device folder is outside that quota.
-    const receiving = await chromium.launchPersistentContext(
-      testInfo.outputPath('receiving-profile'),
-      {
-        ...contextOptions,
-        headless: true,
-        executablePath: process.env.PIXELGATE_TEST_CHROMIUM_EXECUTABLE,
-        args: ['--disable-features=WebRtcHideLocalIpsWithMdns'],
-      },
-    );
+    // This macOS Playwright WebKit build does not expose a persistent default
+    // context. Its explicit receiver scenario uses the normal isolated API.
+    const receivingBrowser = safariReceiver ? await webkit.launch() : undefined;
+    const receiving = receivingBrowser
+      ? await receivingBrowser.newContext()
+      : await chromium.launchPersistentContext(
+          testInfo.outputPath('receiving-profile'),
+          {
+            ...contextOptions,
+            headless: true,
+            executablePath: process.env.PIXELGATE_TEST_CHROMIUM_EXECUTABLE,
+            args: ['--disable-features=WebRtcHideLocalIpsWithMdns'],
+          },
+        );
     if (backend === 'indexeddb')
       await receiving.addInitScript(() => {
         Reflect.set(
@@ -142,23 +161,88 @@ for (const backend of ['opfs', 'indexeddb']) {
               .first()
               .textContent()
               .catch(() => null);
-            if (status === 'Needs retry')
+            if (status === 'Needs retry' || status === 'Paused')
               throw new Error(
                 JSON.stringify({
                   body: await receiver
                     .locator('.file-list')
                     .innerText()
                     .catch(() => receiver.locator('body').innerText()),
+                  senderAlerts: await sender
+                    .getByRole('alert')
+                    .allTextContents(),
+                  receiverAlerts: await receiver
+                    .getByRole('alert')
+                    .allTextContents(),
+                  senderReport: await sender
+                    .getByLabel('Connection report', { exact: true })
+                    .textContent()
+                    .catch(() => null),
+                  receiverReport: await receiver
+                    .getByLabel('Connection report', { exact: true })
+                    .textContent()
+                    .catch(() => null),
                 }),
               );
             return status;
           },
-          { timeout: 120000 },
+          { timeout: transferTimeout },
         )
         .toBe('Browser copy verified');
+      const transferMilliseconds = Date.now() - start;
       console.log(
-        `400 MiB source hash + transfer + readback: ${Date.now() - start} ms`,
+        `${largeMiB} MiB ${browserName} source hash + transfer + readback: ${transferMilliseconds} ms`,
       );
+      const report = await sender
+        .getByLabel('Connection report', { exact: true })
+        .textContent()
+        .catch(() => null);
+      const receiverReport = await receiver
+        .getByLabel('Connection report', { exact: true })
+        .textContent();
+      if (safariReceiver) {
+        const downloadEvent = receiver.waitForEvent('download', {
+          timeout: savingTimeout,
+        });
+        await receiver
+          .getByRole('button', { name: `Save ${largeName}`, exact: true })
+          .click();
+        const download = await downloadEvent;
+        const downloaded = await download.path();
+        expect(download.suggestedFilename()).toBe(largeName);
+        const downloadedHash = createHash('sha256');
+        for await (const bytes of createReadStream(downloaded!))
+          downloadedHash.update(bytes);
+        expect(downloadedHash.digest('hex')).toBe(expected);
+        const validationPath = testInfo.outputPath(
+          'large-file-validation.json',
+        );
+        await writeFile(
+          validationPath,
+          JSON.stringify(
+            {
+              bytes: largeMiB * 1024 * 1024 + 23,
+              sha256: expected,
+              requestedBackend: backend,
+              actualBackend: JSON.parse(receiverReport!).storageMode,
+              senderEngine: browserName,
+              receiverEngine: 'webkit',
+              transferMilliseconds,
+              downloadedHashMatches: true,
+              senderConnection: report ? JSON.parse(report) : undefined,
+              receiverConnection: JSON.parse(receiverReport!),
+            },
+            null,
+            2,
+          ),
+        );
+        await testInfo.attach('large-file-validation.json', {
+          path: validationPath,
+          contentType: 'application/json',
+        });
+        expect(errors).toEqual([]);
+        return;
+      }
       await receiver
         .getByRole('button', { name: 'Save to app or location', exact: true })
         .click();
@@ -169,7 +253,7 @@ for (const backend of ['opfs', 'indexeddb']) {
         .getByRole('button', { name: 'Prepare selected files', exact: true })
         .click();
       await expect(dialog.getByRole('status')).toContainText('50 MiB', {
-        timeout: 60000,
+        timeout: savingTimeout,
       });
       await expect(
         dialog.getByRole('button', {
@@ -209,7 +293,7 @@ for (const backend of ['opfs', 'indexeddb']) {
       for await (const bytes of createReadStream(downloaded!))
         exportedHash.update(bytes);
       expect(exportedHash.digest('hex')).toBe(expected);
-      expect(download.suggestedFilename()).toBe('original-400MiB.mp4');
+      expect(download.suggestedFilename()).toBe(largeName);
       expect(
         await receiver.evaluate(
           () => (window as unknown as { shareCalls: number }).shareCalls,
@@ -221,6 +305,7 @@ for (const backend of ['opfs', 'indexeddb']) {
       await dialog
         .getByRole('button', { name: 'Close save options', exact: true })
         .click();
+      const savingStart = Date.now();
       await receiver
         .getByRole('button', { name: 'Save to Photos folder', exact: true })
         .click();
@@ -229,12 +314,12 @@ for (const backend of ['opfs', 'indexeddb']) {
           name: 'Save to Photos folder',
           exact: true,
         }),
-      ).toBeEnabled({ timeout: 60000 });
+      ).toBeEnabled({ timeout: savingTimeout });
       const savingProblem = await receiver.getByRole('alert').allTextContents();
       expect(savingProblem).toEqual([]);
       await expect(receiver.locator('.file-status').first()).toHaveText(
         'Destination verified',
-        { timeout: 60000 },
+        { timeout: savingTimeout },
       );
       await expect(
         receiver.getByRole('button', {
@@ -243,26 +328,50 @@ for (const backend of ['opfs', 'indexeddb']) {
         }),
       ).toBeEnabled();
       const destinationDownload = receiver.waitForEvent('download');
-      await receiver.evaluate(async () => {
+      const savingMilliseconds = Date.now() - savingStart;
+      await receiver.evaluate(async (name) => {
         const root = await (
           await (
             Reflect.get(window, 'testDirectory') ??
             navigator.storage.getDirectory.bind(navigator.storage)
           )()
         ).getDirectoryHandle('pixelgate-test-photos');
-        const file = await (
-          await root.getFileHandle('original-400MiB.mp4')
-        ).getFile();
+        const file = await (await root.getFileHandle(name)).getFile();
         const link = document.createElement('a');
         link.href = URL.createObjectURL(file);
         link.download = file.name;
         link.click();
-      });
+      }, largeName);
       const destinationPath = await (await destinationDownload).path();
       const destinationHash = createHash('sha256');
       for await (const bytes of createReadStream(destinationPath!))
         destinationHash.update(bytes);
       expect(destinationHash.digest('hex')).toBe(expected);
+      const validationPath = testInfo.outputPath('large-file-validation.json');
+      await writeFile(
+        validationPath,
+        JSON.stringify(
+          {
+            bytes: largeMiB * 1024 * 1024 + 23,
+            sha256: expected,
+            backend,
+            actualBackend: JSON.parse(receiverReport!).storageMode,
+            senderEngine: browserName,
+            receiverEngine: 'chromium',
+            transferMilliseconds,
+            savingMilliseconds,
+            downloadedHashMatches: true,
+            destinationHashMatches: true,
+            connection: report ? JSON.parse(report) : undefined,
+          },
+          null,
+          2,
+        ),
+      );
+      await testInfo.attach('large-file-validation.json', {
+        path: validationPath,
+        contentType: 'application/json',
+      });
       const later = Buffer.alloc(128 * 1024 + 7, 0x46);
       const laterHash = createHash('sha256').update(later).digest('hex');
       await sender.getByLabel('Choose files', { exact: true }).setInputFiles({
@@ -309,6 +418,13 @@ for (const backend of ['opfs', 'indexeddb']) {
     } finally {
       await sending.close();
       await receiving.close();
+      await receivingBrowser?.close();
+      // Remove only this test's generated source and isolated receiver profile.
+      await rm(folder, { recursive: true, force: true });
+      await rm(testInfo.outputPath('receiving-profile'), {
+        recursive: true,
+        force: true,
+      });
     }
   });
 }

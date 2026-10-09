@@ -79,4 +79,26 @@ describe('delivery-aware scheduling', () => {
     scheduler.clear();
     expect(scheduler.snapshot(['path']).paths[0].receivedBytes).toBe(0);
   });
+  it('distinguishes stable high latency from queue growth and isolates path feedback', () => {
+    const scheduler = new PathScheduler<string>();
+    learn(scheduler, 'distant', 800);
+    learn(scheduler, 'near', 20);
+    expect(scheduler.feedback(['distant', 'near']).queueDelay).toBe(0);
+    expect(scheduler.feedback(['distant']).timelyBytes).toBe(12 * FRAME_BYTES);
+    for (let i = 0; i < 5; i++) {
+      scheduler.sent('distant', 3000 + i * 1000, FRAME_BYTES);
+      scheduler.received(
+        'distant',
+        FRAME_BYTES,
+        3000 + i * 1000,
+        4400 + i * 1000,
+      );
+    }
+    expect(scheduler.feedback(['distant', 'near']).queueDelay).toBeGreaterThan(
+      500,
+    );
+    expect(scheduler.feedback(['distant']).timelyBytes).toBe(0);
+    expect(scheduler.feedback(['near']).queueDelay).toBe(0);
+    expect(scheduler.feedback(['near']).timelyBytes).toBe(12 * FRAME_BYTES);
+  });
 });

@@ -23,7 +23,7 @@ PixelGate moves files between computers, phones, and tablets using their browser
 
 The app is a static **TypeScript / React / Vite** build hosted on GitHub Pages. **PeerJS** exchanges connection metadata for six-digit pairing; it carries no file payloads. No native app, account, cloud media storage, or TURN relay is required.
 
-> **Status:** experimental. The current app is **0.3.17**. Automated checks exercise integrity and recovery; browser capabilities, available storage, and network policies still determine usability. Large-file and physical-device boundaries are documented below.
+> **Status:** experimental. The current app is **0.3.18**. Automated checks exercise integrity and recovery; browser capabilities, available storage, and network policies still determine usability. Large-file and physical-device boundaries are documented below.
 
 <div align="center">
   <img src="docs/assets/controls-demo.gif" alt="PixelGate's screen-awake switch animates between sun and moon while the appearance menu switches between Light and Dark" width="960" />
@@ -175,17 +175,17 @@ The [engineering guide](docs/ENGINEERING.md) explains these tradeoffs with sourc
 
 ## Validation and boundaries
 
-Recorded through **0.3.17 on October 9, 2026** across full and targeted runs. These are executed checks, not a continuously updated CI badge.
+Recorded through **0.3.18 on October 9, 2026** across full and targeted runs. These are executed checks, not a continuously updated CI badge.
 
-| Evidence                        | What was checked                                                                                                                                        |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **157 unit/integration tests**  | Independent hashes, recovery, bounded transfer windows, ordered parallel transport, lane failure fallback, pairing lifecycle, and deployment provenance |
-| Browser integration             | Real WebRTC transfers, approval, QR decoding, independent stored/exported hashes, interruption and refresh recovery, and corruption rejection           |
-| Interface and capability checks | Mobile/desktop layouts, enlarged text, appearance, native-share fixtures, download bytes, wake-lock lifecycle, and history preservation                 |
-| Legacy engine                   | Actual Chromium 101 compatibility storage, public signaling, downloads, checkpoint recovery, and current layout controls                                |
-| Physical-device reports         | Completed iPhone-to-Mac hotspot transfer; receiving, downloading, and opening files on older Pixel/iOS devices                                          |
+| Evidence                        | What was checked                                                                                                                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **167 unit/integration tests**  | Independent hashes, recovery, latency-relative bounded transfer windows, retained reports, ordered parallel transport, lane failure fallback, pairing lifecycle, and deployment provenance |
+| Browser integration             | Real WebRTC transfers, approval, QR decoding, independent stored/exported hashes, interruption and refresh recovery, and corruption rejection                                              |
+| Interface and capability checks | Mobile/desktop layouts, enlarged text, appearance, native-share fixtures, download bytes, wake-lock lifecycle, and history preservation                                                    |
+| Legacy engine                   | Actual Chromium 101 compatibility storage, public signaling, downloads, checkpoint recovery, and current layout controls                                                                   |
+| Physical-device reports         | Completed iPhone-to-Mac hotspot transfer; receiving, downloading, and opening files on older Pixel/iOS devices                                                                             |
 
-Browser tests include byte-exact 400 MiB transfers/downloads through OPFS and compatibility storage, plus a 125-file selection through native handoffs, automatically continued downloads, and one-action Photos device-folder saving. They use synthetic files and independent Node/Web Crypto hashes. Hardware reports lack complete device/version/capacity measurements and are recorded separately from automated engine evidence in [the validation record](docs/VALIDATION.md).
+Browser tests include byte-exact large transfers/downloads through OPFS and compatibility storage, including a 5 GiB + 23-byte WebKit sender fixture, plus a 125-file selection through native handoffs, automatically continued downloads, and one-action Photos device-folder saving. They use synthetic files and independent Node/Web Crypto hashes. Hardware reports lack complete device/version/capacity measurements and are recorded separately from automated engine evidence in [the validation record](docs/VALIDATION.md).
 
 - Receiving must pass a local write/read preflight. Folder access and native share targets depend on the browser and device; downloads remain the fallback.
 - Browsers must stay open. Wake lock can prevent automatic screen sleep where supported, but cannot guarantee background execution or survive manual locking and OS suspension.

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StripedChannel } from '../lib/bridge/striped-channel';
 import {
   FRAME_BYTES,
+  CHECKPOINT_BYTES,
   STRIPED_FRAME_BYTES,
   TRANSFER_WINDOW_BYTES,
 } from '../lib/bridge/model';
@@ -370,9 +371,12 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
         ...Peer.peers.map((peer) => peer.channel),
       ])
         channel.bufferedAmount = 0;
-      expect(transport.sendBufferBytes).toBeLessThanOrEqual(2 * 1024 * 1024);
+      expect(transport.sendBufferBytes).toBeLessThanOrEqual(
+        2 * CHECKPOINT_BYTES,
+      );
     }
-    expect(transport.sendBufferBytes).toBe(2 * 1024 * 1024);
+    expect(transport.sendBufferBytes).toBe(2 * CHECKPOINT_BYTES);
+    expect(transport.burstBytes).toBe(256 * 1024);
     expect(transport.pacingDelayMs).toBe(0);
     for (let i = 0; i < 16; i++)
       transport.send(new Uint8Array(FRAME_BYTES).buffer);
@@ -397,6 +401,130 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
     );
     expect(transport.sendBufferBytes).toBe(128 * 1024);
     expect(transport.pacingDelayMs).toBe(4);
+    vi.restoreAllMocks();
+  });
+  it.each([20, 800])(
+    'keeps healthy siblings running after a path stalls at %i ms baseline latency',
+    async (latency) => {
+      vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
+      const primary = new Channel();
+      const transport = new StripedChannel(primary.native(), 'send');
+      opened.push(transport);
+      primary.receive(
+        JSON.stringify({
+          type: 'hello',
+          version: 1,
+          stripedTransport: 1,
+          stripedReceipts: 1,
+          stripedLanes: 4,
+          stripedFrameBytes: STRIPED_FRAME_BYTES,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      for (const peer of Peer.peers) {
+        peer.channel.readyState = 'open';
+        peer.channel.dispatchEvent(new Event('open'));
+      }
+      const all = [primary, ...Peer.peers.map((peer) => peer.channel)];
+      for (let sequence = 0; sequence < 640; sequence += 16) {
+        for (const channel of all) channel.bufferedAmount = 0;
+        for (let i = 0; i < 16; i++)
+          transport.send(new Uint8Array(FRAME_BYTES).buffer);
+        await vi.advanceTimersByTimeAsync(latency);
+        primary.receive(
+          JSON.stringify({
+            type: 'pg-striped-receipt',
+            received: Array.from({ length: 16 }, (_, i) => sequence + i),
+          }),
+        );
+      }
+      expect(transport.sendBufferBytes).toBe(TRANSFER_WINDOW_BYTES - 64 * 1024);
+      expect(transport.pacingDelayMs).toBe(0);
+      expect(transport.sendFrameBytes).toBe(STRIPED_FRAME_BYTES);
+      for (const channel of all) channel.bufferedAmount = 0;
+      for (let i = 0; i < 4; i++)
+        transport.send(new Uint8Array(FRAME_BYTES).buffer);
+      await vi.advanceTimersByTimeAsync(latency);
+      primary.receive(
+        JSON.stringify({
+          type: 'pg-striped-receipt',
+          received: [640, 642, 643],
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(Math.max(300, latency * 3));
+      expect(transport.snapshot().deprioritizedConnections).toBe(1);
+      expect(transport.snapshot().replayedPackets).toBe(1);
+      expect(transport.sendBufferBytes).toBe(TRANSFER_WINDOW_BYTES - 64 * 1024);
+      expect(transport.pacingDelayMs).toBe(0);
+      expect(transport.sendFrameBytes).toBe(STRIPED_FRAME_BYTES);
+      primary.receive(
+        JSON.stringify({ type: 'pg-striped-receipt', received: [641] }),
+      );
+      expect(transport.snapshot().unreceivedBytes).toBe(0);
+      vi.restoreAllMocks();
+    },
+  );
+  it('fills a larger warmed window within receiver credit and reduces it when lanes close', async () => {
+    let clock = 100;
+    vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    const primary = new Channel();
+    const transport = new StripedChannel(primary.native(), 'send');
+    opened.push(transport);
+    primary.receive(
+      JSON.stringify({
+        type: 'hello',
+        version: 1,
+        stripedTransport: 1,
+        stripedReceipts: 1,
+        stripedLanes: 4,
+        stripedFrameBytes: STRIPED_FRAME_BYTES,
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    for (const peer of Peer.peers) {
+      peer.channel.readyState = 'open';
+      peer.channel.dispatchEvent(new Event('open'));
+    }
+    const all = [primary, ...Peer.peers.map((peer) => peer.channel)];
+    for (let sequence = 0; sequence < 2560; sequence += 16) {
+      for (const channel of all) channel.bufferedAmount = 0;
+      for (let i = 0; i < 16; i++)
+        transport.send(new Uint8Array(FRAME_BYTES).buffer);
+      clock += 500;
+      primary.receive(
+        JSON.stringify({
+          type: 'pg-striped-receipt',
+          received: Array.from({ length: 16 }, (_, i) => sequence + i),
+        }),
+      );
+    }
+    expect(transport.sendBufferBytes).toBe(TRANSFER_WINDOW_BYTES - 64 * 1024);
+    expect(transport.burstBytes).toBe(512 * 1024);
+    expect(transport.pacingDelayMs).toBe(0);
+    // Even the largest allowed frame leaves space for transport control.
+    expect(
+      transport.sendBufferBytes + STRIPED_FRAME_BYTES + 8,
+    ).toBeLessThanOrEqual(TRANSFER_WINDOW_BYTES);
+    Peer.peers[0].channel.close();
+    Peer.peers[1].channel.close();
+    expect(transport.sendBufferBytes).toBe(3 * CHECKPOINT_BYTES);
+    expect(transport.snapshot().unreceivedBytes).toBe(0);
+    for (const channel of all) channel.bufferedAmount = 0;
+    for (let i = 0; i < 16; i++)
+      transport.send(new Uint8Array(FRAME_BYTES).buffer);
+    clock += 620;
+    primary.receive(
+      JSON.stringify({
+        type: 'pg-striped-receipt',
+        received: Array.from({ length: 16 }, (_, i) => 2560 + i),
+      }),
+    );
+    // Small-frame delivery must not keep the largest warmed window/burst.
+    expect(transport.snapshot().queuedDelayMs).toBeGreaterThan(100);
+    expect(transport.snapshot().queuedDelayMs).toBeLessThan(150);
+    expect(transport.sendFrameBytes).toBe(FRAME_BYTES);
+    expect(transport.sendBufferBytes).toBe(2 * CHECKPOINT_BYTES);
+    expect(transport.burstBytes).toBe(256 * 1024);
     vi.restoreAllMocks();
   });
   it('selectively receipts displaced packets without delivering them before the missing prefix', async () => {

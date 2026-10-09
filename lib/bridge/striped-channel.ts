@@ -74,7 +74,6 @@ export class StripedChannel extends EventTarget implements TransferChannel {
   private receipts: number[] = [];
   private receiptTimer?: ReturnType<typeof setTimeout>;
   private retryTimer?: ReturnType<typeof setInterval>;
-  private timelyBytes = 0;
   private delay = 0;
   private highestReceived = -1;
   private replayed = 0;
@@ -137,41 +136,67 @@ export class StripedChannel extends EventTarget implements TransferChannel {
   get sendFrameBytes() {
     // Large messages reduce receiver work on healthy links. Keep small frames
     // during warmup/slow delivery so one message cannot dominate a weak path.
-    return this.timelyBytes >= CHECKPOINT_BYTES / 2 &&
-      this.delay <= 100 &&
-      !this.coolingDown()
+    const { timelyBytes, queueDelay } = this.deliveryFeedback();
+    return timelyBytes >= CHECKPOINT_BYTES / 2 && queueDelay <= 100
       ? this.frameBytes
       : FRAME_BYTES;
   }
   get sendBufferBytes() {
     if (!this.selective || !this.sending) return 64 * 1024;
-    if (this.delay > 750) return 128 * 1024;
-    if (this.delay > 250) return 256 * 1024;
-    if (this.delay > 150 || this.coolingDown()) return 512 * 1024;
-    if (this.timelyBytes >= 8 * CHECKPOINT_BYTES) return 2 * CHECKPOINT_BYTES;
-    if (this.timelyBytes >= 2 * CHECKPOINT_BYTES) return CHECKPOINT_BYTES;
+    const { timelyBytes, queueDelay } = this.deliveryFeedback();
+    if (queueDelay > 750) return 128 * 1024;
+    if (queueDelay > 250) return 256 * 1024;
+    if (queueDelay > 150) return 512 * 1024;
+    if (
+      this.frameBytes > FRAME_BYTES &&
+      queueDelay <= 100 &&
+      timelyBytes >= 8 * CHECKPOINT_BYTES
+    )
+      return Math.min(
+        TRANSFER_WINDOW_BYTES - 64 * 1024,
+        this.healthyLanes().length * CHECKPOINT_BYTES,
+      );
+    if (timelyBytes >= 4 * CHECKPOINT_BYTES) return 2 * CHECKPOINT_BYTES;
+    if (timelyBytes >= 2 * CHECKPOINT_BYTES) return CHECKPOINT_BYTES;
     return 512 * 1024;
   }
   get pacingDelayMs() {
     // Transport receipts bound the hidden queues. Once delivery is established,
     // yield a browser task without imposing a timer delay on every healthy burst.
+    const { timelyBytes, queueDelay } = this.deliveryFeedback();
     return this.selective &&
       this.sending &&
-      this.timelyBytes >= CHECKPOINT_BYTES / 2 &&
-      this.delay <= 150 &&
-      !this.coolingDown()
+      timelyBytes >= CHECKPOINT_BYTES / 2 &&
+      queueDelay <= 150
       ? 0
       : 4;
   }
-  private coolingDown() {
-    return [...this.cooldown.values()].some(
-      (until) => until > performance.now(),
+  private deliveryFeedback() {
+    const paths = [this.primary, ...this.openLanes()];
+    const healthy = this.healthyLanes();
+    const feedback = this.scheduler.feedback(healthy.length ? healthy : paths);
+    // A path already excluded from scheduling must not throttle its healthy
+    // siblings. If all paths stall, retain feedback and restart conservatively.
+    return healthy.length
+      ? feedback
+      : { timelyBytes: 0, queueDelay: Math.max(151, feedback.queueDelay) };
+  }
+  private healthyLanes() {
+    return [this.primary, ...this.openLanes()].filter(
+      (channel) => (this.cooldown.get(channel) ?? 0) <= performance.now(),
     );
   }
   get burstBytes() {
-    if (!this.selective || !this.sending || this.delay > 150) return 64 * 1024;
-    if (this.timelyBytes >= 2 * CHECKPOINT_BYTES) return 256 * 1024;
-    if (this.timelyBytes >= CHECKPOINT_BYTES / 2) return 128 * 1024;
+    const { timelyBytes, queueDelay } = this.deliveryFeedback();
+    if (!this.selective || !this.sending || queueDelay > 150) return 64 * 1024;
+    if (
+      this.frameBytes > FRAME_BYTES &&
+      queueDelay <= 100 &&
+      timelyBytes >= 8 * CHECKPOINT_BYTES
+    )
+      return 512 * 1024;
+    if (timelyBytes >= 2 * CHECKPOINT_BYTES) return 256 * 1024;
+    if (timelyBytes >= CHECKPOINT_BYTES / 2) return 128 * 1024;
     return 64 * 1024;
   }
   snapshot() {
@@ -183,6 +208,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       unreceivedBytes: this.pendingBytes,
       reorderedBytes: this.reorderedBytes,
       receiptDelayMs: Math.round(this.delay),
+      queuedDelayMs: Math.round(this.deliveryFeedback().queueDelay),
       replayedPackets: this.replayed,
       pacingBurstBytes: this.burstBytes,
       pacingDelayMs: this.pacingDelayMs,
@@ -344,7 +370,6 @@ export class StripedChannel extends EventTarget implements TransferChannel {
         performance.now(),
       );
     this.delay = this.delay ? this.delay * 0.8 + delay * 0.2 : delay;
-    this.timelyBytes = this.delay <= 150 ? this.timelyBytes + packet.size : 0;
     this.highestReceived = Math.max(this.highestReceived, sequence);
     this.pending.delete(sequence);
     this.pendingBytes -= packet.size;
