@@ -120,6 +120,7 @@ export default function PixelGate() {
   const [historySession, setHistorySession] = useState('all');
   const [elapsed, setElapsed] = useState(0);
   const connection = useRef<Connection | CodeConnection | undefined>(undefined);
+  const transport = useRef<StripedChannel | undefined>(undefined);
   const sender = useRef<Sender | undefined>(undefined);
   const receiver = useRef<Receiver | undefined>(undefined);
   const folder = useRef<FileSystemDirectoryHandle | undefined>(undefined);
@@ -263,6 +264,7 @@ export default function PixelGate() {
     await receiver.current?.close();
     receiver.current = undefined;
     connection.current = undefined;
+    transport.current = undefined;
     releaseLock.current?.();
     releaseLock.current = undefined;
     setConnected(false);
@@ -317,16 +319,21 @@ export default function PixelGate() {
       room: setRoom,
       status: setStatus,
       connected: (channel) => {
-        const transport = new StripedChannel(channel, role);
+        const transfer = new StripedChannel(
+          channel,
+          role,
+          pairingMode === 'code' && role === 'receive' ? senderAddress : '',
+        );
+        transport.current = transfer;
         setConnected(true);
         setPaused(false);
         if (role === 'send')
-          sender.current = new Sender(transport, () =>
+          sender.current = new Sender(transfer, () =>
             setQueue([...currentQueue.current]),
           );
         else
           receiver.current = new Receiver(
-            transport,
+            transfer,
             () => folder.current,
             (record) => {
               receivedRecords.current.set(record.id, record);
@@ -1304,9 +1311,10 @@ export default function PixelGate() {
                         <details className="route-diagnostics">
                           <summary>Connection diagnostics</summary>
                           <p className="hint">
-                            Local connection states and route counts only. No IP
-                            addresses, pairing codes, filenames, or file data.
-                            This report is never uploaded automatically.
+                            Local connection states, route types, latency, and
+                            transfer buffers. No IP addresses, pairing codes,
+                            filenames, or file data. This report is never
+                            uploaded automatically.
                           </p>
                           <pre aria-label="Connection report">
                             {JSON.stringify(
@@ -1314,6 +1322,7 @@ export default function PixelGate() {
                                 version,
                                 role,
                                 ...room.diagnostics,
+                                transfer: transport.current?.snapshot(),
                               },
                               null,
                               2,
@@ -1329,6 +1338,7 @@ export default function PixelGate() {
                                       version,
                                       role,
                                       ...room.diagnostics,
+                                      transfer: transport.current?.snapshot(),
                                     },
                                     null,
                                     2,

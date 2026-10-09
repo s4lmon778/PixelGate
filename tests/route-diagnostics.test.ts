@@ -100,6 +100,76 @@ describe('local route diagnostics', () => {
     probe.stop();
     expect(vi.getTimerCount()).toBe(0);
   });
+  it('reports selected route latency and byte rates without exposing candidate addresses or IDs', async () => {
+    vi.useFakeTimers();
+    const pc = connection();
+    const stats = (timestamp: number, sent: number, received: number) =>
+      new Map<string, object>([
+        [
+          'transport',
+          { type: 'transport', selectedCandidatePairId: 'private-pair' },
+        ],
+        [
+          'private-pair',
+          {
+            type: 'candidate-pair',
+            state: 'succeeded',
+            timestamp,
+            localCandidateId: 'private-local',
+            remoteCandidateId: 'private-remote',
+            bytesSent: sent,
+            bytesReceived: received,
+            currentRoundTripTime: 0.015,
+          },
+        ],
+        [
+          'private-local',
+          {
+            type: 'local-candidate',
+            candidateType: 'host',
+            protocol: 'udp',
+            address: '192.168.1.43',
+            port: 5000,
+          },
+        ],
+        [
+          'private-remote',
+          {
+            type: 'remote-candidate',
+            candidateType: 'srflx',
+            address: '203.0.113.7',
+            port: 6000,
+          },
+        ],
+      ]);
+    pc.getStats
+      .mockResolvedValueOnce(stats(2000, 20000, 10000))
+      .mockResolvedValueOnce(stats(4000, 420000, 210000));
+    const probe = new RouteProbe(
+      pc as unknown as RTCPeerConnection,
+      () => undefined,
+      vi.fn(),
+    );
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(probe.snapshot().selectedRoute).toEqual({
+      localType: 'host',
+      remoteType: 'srflx',
+      protocol: 'udp',
+      roundTripMs: 15,
+      sentBytesPerSecond: 200000,
+      receivedBytesPerSecond: 100000,
+    });
+    for (const secret of [
+      '192.168.1.43',
+      '203.0.113.7',
+      'private-local',
+      'private-pair',
+      '5000',
+      '6000',
+    ])
+      expect(JSON.stringify(probe.snapshot())).not.toContain(secret);
+    probe.stop();
+  });
 });
 
 describe('route failure explanations', () => {

@@ -1,4 +1,5 @@
 import { CandidateInbox } from './candidate-inbox';
+import { LanRoute, lanAddress } from './lan-route';
 import { validateSignal } from '../pairing-validation';
 import {
   CHECKPOINT_BYTES,
@@ -16,9 +17,15 @@ export type TransferChannel = Pick<
   | 'send'
   | 'close'
   | 'addEventListener'
-> & { prepare?: () => Promise<void>; receiveWindowBytes?: number };
+> & {
+  prepare?: () => Promise<void>;
+  receiveWindowBytes?: number;
+  sendBufferBytes?: number;
+  burstBytes?: number;
+};
 const MAGIC = 0x50475331;
 const LANES = 2;
+const MAX_LANES = 4;
 type Lane = {
   pc: RTCPeerConnection;
   inbox: CandidateInbox;
@@ -26,11 +33,14 @@ type Lane = {
   timer: ReturnType<typeof setTimeout>;
   failed: boolean;
   signals: number;
+  lanRoute?: LanRoute;
 };
 type Packet = {
   wire: string | ArrayBuffer;
   lane: RTCDataChannel;
   size: number;
+  sentAt: number;
+  retries: number;
 };
 
 /** Independent SCTP connections; restore the existing engine's ordered stream. */
@@ -51,21 +61,41 @@ export class StripedChannel extends EventTarget implements TransferChannel {
   private threshold = 0;
   private stopped = false;
   private signaling = Promise.resolve();
+  private selective = false;
+  private laneCount = LANES;
+  private turn = 0;
+  private receipts: number[] = [];
+  private receiptTimer?: ReturnType<typeof setTimeout>;
+  private retryTimer?: ReturnType<typeof setInterval>;
+  private receivedBytes = 0;
+  private delay = 0;
+  private highestReceived = -1;
+  private replayed = 0;
+  private cooldown = new Map<RTCDataChannel, number>();
   constructor(
     private primary: RTCDataChannel,
     private role: 'send' | 'receive',
+    private senderAddress = '',
   ) {
     super();
+    this.senderAddress = role === 'receive' ? lanAddress(senderAddress) : '';
     primary.onmessage = ({ data }) => this.receive(data, false);
     primary.addEventListener('bufferedamountlow', () =>
       this.dispatchEvent(new Event('bufferedamountlow')),
     );
     primary.addEventListener('close', () => {
       this.stopped = true;
+      clearTimeout(this.receiptTimer);
+      clearInterval(this.retryTimer);
       for (const lane of this.lanes.values()) this.dispose(lane);
+      this.lanes.clear();
       this.pending.clear();
       this.pendingBytes = 0;
       this.reordered.clear();
+      this.reorderedBytes = 0;
+      this.receipts = [];
+      this.cooldown.clear();
+      this.senderAddress = '';
       this.dispatchEvent(new Event('close'));
     });
   }
@@ -73,14 +103,18 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     return this.primary.readyState;
   }
   get bufferedAmount() {
-    return (
+    const native =
       this.primary.bufferedAmount +
       [...this.lanes.values()].reduce(
         (total, lane) =>
           total + (lane.failed ? 0 : (lane.channel?.bufferedAmount ?? 0)),
         0,
-      )
-    );
+      );
+    // Browser bufferedAmount excludes SCTP/OS queues. New peers also bound
+    // unreceived bytes, preventing a burst from disappearing into those queues.
+    return this.selective && this.sending
+      ? Math.max(native, this.pendingBytes)
+      : native;
   }
   get bufferedAmountLowThreshold() {
     return this.threshold;
@@ -88,8 +122,34 @@ export class StripedChannel extends EventTarget implements TransferChannel {
   get receiveWindowBytes() {
     return this.receiving ? TRANSFER_WINDOW_BYTES : CHECKPOINT_BYTES;
   }
+  get sendBufferBytes() {
+    return this.selective && this.sending ? 512 * 1024 : 64 * 1024;
+  }
+  get burstBytes() {
+    if (!this.selective || !this.sending || this.delay > 150) return 64 * 1024;
+    if (this.receivedBytes >= 2 * CHECKPOINT_BYTES) return 256 * 1024;
+    if (this.receivedBytes >= CHECKPOINT_BYTES / 2) return 128 * 1024;
+    return 64 * 1024;
+  }
+  snapshot() {
+    return {
+      connections:
+        (this.readyState === 'open' ? 1 : 0) + this.openLanes().length,
+      mode: this.sending || this.receiving ? 'parallel' : 'single',
+      selectiveReceipts: this.selective,
+      unreceivedBytes: this.pendingBytes,
+      reorderedBytes: this.reorderedBytes,
+      receiptDelayMs: Math.round(this.delay),
+      replayedPackets: this.replayed,
+      pacingBurstBytes: this.burstBytes,
+      sendBufferBytes: this.sendBufferBytes,
+      deprioritizedConnections: [...this.cooldown.values()].filter(
+        (until) => until > performance.now(),
+      ).length,
+    };
+  }
   async prepare() {
-    if (!this.negotiated || this.openLanes().length === LANES) return;
+    if (!this.negotiated || this.openLanes().length === this.laneCount) return;
     await new Promise<void>((resolve) => {
       const finish = () => {
         clearTimeout(timer);
@@ -99,7 +159,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       };
       const changed = () => {
         if (
-          this.openLanes().length === LANES ||
+          this.openLanes().length === this.laneCount ||
           this.stopped ||
           [...this.lanes.values()].some((lane) => lane.failed)
         )
@@ -115,25 +175,32 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     this.threshold = value;
     // If the aggregate buffer is full, at least one lane must remain above
     // its own low watermark; otherwise no lane would ever wake the sender.
-    this.primary.bufferedAmountLowThreshold = value / (LANES + 1);
+    this.primary.bufferedAmountLowThreshold = value / (this.laneCount + 1);
     for (const lane of this.lanes.values())
       if (lane.channel)
-        lane.channel.bufferedAmountLowThreshold = value / (LANES + 1);
+        lane.channel.bufferedAmountLowThreshold = value / (this.laneCount + 1);
   }
   send(data: string | Blob | ArrayBuffer | ArrayBufferView<ArrayBuffer>) {
     if (typeof data === 'string') {
       const value = JSON.parse(data);
       if (value.type === 'hello')
-        data = JSON.stringify({ ...value, stripedTransport: 1 });
+        data = JSON.stringify({
+          ...value,
+          stripedTransport: 1,
+          stripedReceipts: 1,
+          stripedLanes: MAX_LANES,
+        });
     }
     if (
       !this.sending &&
       this.role === 'send' &&
       this.negotiated &&
-      this.openLanes().length === LANES
+      this.openLanes().length > 0
     ) {
       this.primary.send(JSON.stringify({ type: 'pg-striped-start' }));
       this.sending = true;
+      if (this.selective)
+        this.retryTimer = setInterval(() => this.recoverGaps(), 100);
     }
     if (!this.sending) {
       Reflect.apply(this.primary.send, this.primary, [data]);
@@ -165,10 +232,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       header.setUint32(4, sequence);
       frame.set(bytes, 8);
       wire = frame.buffer;
-      const available = [this.primary, ...this.openLanes()];
-      channel = available.reduce((best, current) =>
-        current.bufferedAmount < best.bufferedAmount ? current : best,
-      );
+      channel = this.chooseLane();
     }
     // Retain bounded unreceived packets for retransmission if a lane closes.
     const size = typeof wire === 'string' ? wire.length : wire.byteLength;
@@ -182,6 +246,8 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       wire,
       lane: channel,
       size,
+      sentAt: performance.now(),
+      retries: 0,
     });
     Reflect.apply(channel.send, channel, [wire]);
   }
@@ -192,6 +258,91 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     return [...this.lanes.values()].flatMap((lane) =>
       !lane.failed && lane.channel?.readyState === 'open' ? [lane.channel] : [],
     );
+  }
+  private chooseLane(exclude?: RTCDataChannel) {
+    let available = [this.primary, ...this.openLanes()];
+    if (exclude && available.length > 1)
+      available = available.filter((channel) => channel !== exclude);
+    const healthy = available.filter(
+      (channel) => (this.cooldown.get(channel) ?? 0) <= performance.now(),
+    );
+    if (healthy.length) available = healthy;
+    const outstanding = new Map<RTCDataChannel, number>();
+    for (const packet of this.pending.values())
+      outstanding.set(
+        packet.lane,
+        (outstanding.get(packet.lane) ?? 0) + packet.size,
+      );
+    // Per-packet receipts free faster lanes first. Rotate equal scores so an
+    // empty native buffer on the primary cannot monopolize every frame.
+    const rotated = available.map(
+      (_, i) => available[(i + this.turn) % available.length],
+    );
+    this.turn++;
+    return rotated.reduce((best, current) =>
+      Math.max(current.bufferedAmount, outstanding.get(current) ?? 0) <
+      Math.max(best.bufferedAmount, outstanding.get(best) ?? 0)
+        ? current
+        : best,
+    );
+  }
+  private received(sequence: number) {
+    const packet = this.pending.get(sequence);
+    if (!packet) return;
+    const delay = performance.now() - packet.sentAt;
+    this.delay = this.delay ? this.delay * 0.8 + delay * 0.2 : delay;
+    this.receivedBytes += packet.size;
+    this.highestReceived = Math.max(this.highestReceived, sequence);
+    this.pending.delete(sequence);
+    this.pendingBytes -= packet.size;
+  }
+  private recoverGaps() {
+    if (this.stopped || this.readyState !== 'open') return;
+    const now = performance.now();
+    let count = 0;
+    for (const [sequence, packet] of this.pending) {
+      if (
+        sequence >= this.highestReceived ||
+        packet.retries >= 3 ||
+        now - packet.sentAt < Math.max(250, Math.min(2000, this.delay * 3))
+      )
+        continue;
+      // Moving a missing packet off a slow lane must not immediately make that
+      // lane look empty and attract new bytes. Give the other paths five seconds
+      // to carry the stream, then let this path participate again.
+      this.cooldown.set(packet.lane, now + 5000);
+      const lane = this.chooseLane(packet.lane);
+      if (lane.bufferedAmount > this.sendBufferBytes) continue;
+      try {
+        Reflect.apply(lane.send, lane, [packet.wire]);
+        packet.lane = lane;
+        packet.sentAt = now;
+        packet.retries++;
+        this.replayed++;
+      } catch {
+        this.close();
+        return;
+      }
+      if (++count === 8) break;
+    }
+  }
+  private receipt(sequence: number) {
+    if (!this.selective) return;
+    this.receipts.push(sequence);
+    if (this.receipts.length >= 4) this.flushReceipts();
+    else if (!this.receiptTimer)
+      this.receiptTimer = setTimeout(() => this.flushReceipts(), 25);
+  }
+  private flushReceipts() {
+    clearTimeout(this.receiptTimer);
+    this.receiptTimer = undefined;
+    if (this.stopped || !this.receipts.length) return;
+    const received = this.receipts;
+    this.receipts = [];
+    if (this.readyState === 'open')
+      this.primary.send(
+        JSON.stringify({ type: 'pg-striped-receipt', received }),
+      );
   }
   private deliver(data: string | ArrayBuffer) {
     this.onmessage?.call(this.primary, new MessageEvent('message', { data }));
@@ -209,8 +360,14 @@ export class StripedChannel extends EventTarget implements TransferChannel {
             value.stripedTransport === 1
           ) {
             this.negotiated = true;
+            this.selective = value.stripedReceipts === 1;
+            this.laneCount =
+              Number.isInteger(value.stripedLanes) && value.stripedLanes >= 1
+                ? Math.min(MAX_LANES, value.stripedLanes)
+                : LANES;
+            this.bufferedAmountLowThreshold = this.threshold;
             if (this.role === 'send')
-              for (let index = 0; index < LANES; index++)
+              for (let index = 0; index < this.laneCount; index++)
                 void this.offer(index);
           }
           this.deliver(data);
@@ -219,7 +376,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
             !this.negotiated ||
             !Number.isInteger(value.index) ||
             value.index < 0 ||
-            value.index >= LANES
+            value.index >= this.laneCount
           )
             return;
           let lane: Lane;
@@ -241,6 +398,22 @@ export class StripedChannel extends EventTarget implements TransferChannel {
           if (typeof value.value !== 'string' || value.value.length > 12000)
             throw new Error('Invalid parallel control.');
           this.reorder(value.sequence, value.value);
+        } else if (value.type === 'pg-striped-receipt') {
+          if (
+            !this.selective ||
+            this.role !== 'send' ||
+            !Array.isArray(value.received) ||
+            value.received.length > 16 ||
+            value.received.some(
+              (sequence: unknown) =>
+                !Number.isSafeInteger(sequence) ||
+                (sequence as number) < 0 ||
+                (sequence as number) >= this.outgoing,
+            )
+          )
+            throw new Error('Invalid parallel receipt.');
+          for (const sequence of value.received) this.received(sequence);
+          this.dispatchEvent(new Event('bufferedamountlow'));
         } else if (value.type === 'pg-striped-ack') {
           if (
             !Number.isInteger(value.sequence) ||
@@ -250,11 +423,11 @@ export class StripedChannel extends EventTarget implements TransferChannel {
           )
             throw new Error('Invalid parallel acknowledgment.');
           this.acknowledged = value.sequence;
-          for (const [sequence, packet] of this.pending)
+          for (const [sequence] of this.pending)
             if (sequence <= value.sequence) {
-              this.pending.delete(sequence);
-              this.pendingBytes -= packet.size;
+              this.received(sequence);
             }
+          this.dispatchEvent(new Event('bufferedamountlow'));
         } else if (!bulk) this.deliver(data);
         else throw new Error('Unexpected bulk control.');
       } else if (data instanceof ArrayBuffer) {
@@ -281,7 +454,10 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       sequence > 0xffffffff
     )
       throw new Error('Invalid parallel sequence.');
-    if (sequence < this.incoming || this.reordered.has(sequence)) return;
+    if (sequence < this.incoming || this.reordered.has(sequence)) {
+      this.receipt(sequence);
+      return;
+    }
     const size = typeof data === 'string' ? data.length : data.byteLength;
     if (
       sequence - this.incoming > TRANSFER_WINDOW_BYTES / FRAME_BYTES + 32 ||
@@ -291,6 +467,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       throw new Error('Parallel receive buffer exceeded.');
     this.reordered.set(sequence, data);
     this.reorderedBytes += size;
+    this.receipt(sequence);
     this.flush();
   }
   private flush() {
@@ -329,6 +506,9 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       timer: setTimeout(() => this.failLane(lane), 5000),
       failed: false,
       signals: 0,
+      lanRoute: this.senderAddress
+        ? new LanRoute(pc, this.senderAddress)
+        : undefined,
     };
     this.lanes.set(index, lane);
     pc.onicecandidate = ({ candidate }) => {
@@ -352,7 +532,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       lane.failed ||
       lane.channel ||
       channel.label !== 'pixelgate-bulk-v1' ||
-      !channel.ordered ||
+      channel.ordered !== !this.selective ||
       channel.maxRetransmits !== null ||
       channel.maxPacketLifeTime !== null
     ) {
@@ -361,10 +541,11 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     }
     lane.channel = channel;
     channel.binaryType = 'arraybuffer';
-    channel.bufferedAmountLowThreshold = this.threshold / (LANES + 1);
+    channel.bufferedAmountLowThreshold = this.threshold / (this.laneCount + 1);
     channel.onmessage = ({ data }) => this.receive(data, true);
     channel.addEventListener('open', () => {
       clearTimeout(lane.timer);
+      lane.lanRoute?.stop();
       this.dispatchEvent(new Event('laneschanged'));
     });
     channel.addEventListener('bufferedamountlow', () =>
@@ -378,7 +559,9 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       lane = this.lane(index);
       this.attach(
         lane,
-        lane.pc.createDataChannel('pixelgate-bulk-v1', { ordered: true }),
+        lane.pc.createDataChannel('pixelgate-bulk-v1', {
+          ordered: !this.selective,
+        }),
       );
       await lane.pc.setLocalDescription(await lane.pc.createOffer());
       if (!lane.failed && this.readyState === 'open')
@@ -425,6 +608,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
   }
   private dispose(lane: Lane) {
     clearTimeout(lane.timer);
+    lane.lanRoute?.stop();
     lane.inbox.stop();
     lane.pc.close();
   }
@@ -436,6 +620,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       for (const packet of this.pending.values())
         if (packet.lane === lane.channel) {
           packet.lane = this.primary;
+          this.replayed++;
           try {
             Reflect.apply(this.primary.send, this.primary, [packet.wire]);
           } catch {

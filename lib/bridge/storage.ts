@@ -368,9 +368,9 @@ export function offerPreparedDownload(file: File) {
 // can outlive transient activation, especially on older phones and large files.
 export async function prepareSharedFiles(
   records: RecordFile[],
+  progress?: (completed: number, total: number) => void,
 ): Promise<File[]> {
-  if (!records.length || records.length > 20)
-    throw new Error('Select between 1 and 20 files to save with another app.');
+  if (!records.length) throw new Error('Select files to save.');
   const files: File[] = [];
   const names = new Set<string>();
   for (const record of records) {
@@ -402,6 +402,7 @@ export async function prepareSharedFiles(
         lastModified: record.modified,
       }),
     );
+    progress?.(files.length, records.length);
   }
   return files;
 }

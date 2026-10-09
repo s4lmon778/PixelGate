@@ -3,11 +3,12 @@ import { Connection } from '../lib/bridge/connection';
 import { decodePair, encodePair, PAIR_TTL } from '../lib/bridge/pairing';
 const sdp =
   'v=0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\na=fingerprint:sha-256 AA:BB\r\na=candidate:1 1 UDP 1 127.0.0.1 1234 typ host\r\n';
-class Peer {
+class Peer extends EventTarget {
   localDescription?: RTCSessionDescriptionInit;
   remoteDescription?: RTCSessionDescriptionInit;
   iceGatheringState = 'complete';
   closed = false;
+  getStats = vi.fn().mockResolvedValue(new Map());
   channel = {
     label: 'pixelbridge-v1',
     ordered: true,

@@ -18,6 +18,9 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
     'unavailable-lanes',
     'legacy-local',
     'pipeline-local',
+    'lost-packet',
+    'slow-lane',
+    'previous-release',
   ]) {
     const receiving = await browser.newContext();
     const sending = await browser.newContext();
@@ -46,6 +49,11 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
               const message = JSON.parse(data);
               if (mode.startsWith('legacy') && message.type === 'hello') {
                 delete message.stripedTransport;
+                data = JSON.stringify(message);
+              }
+              if (mode === 'previous-release' && message.type === 'hello') {
+                delete message.stripedReceipts;
+                delete message.stripedLanes;
                 data = JSON.stringify(message);
               }
               if (mode.startsWith('legacy') && message.type === 'ready') {
@@ -101,10 +109,21 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
             droppedLane: false,
           };
           const observed = new WeakSet<RTCDataChannel>();
+          const delayedLanes = new WeakSet<RTCDataChannel>();
+          let assignedDelayedLane = false;
           Object.assign(window, { transferMetrics: metrics });
           const original = RTCDataChannel.prototype.send;
           RTCDataChannel.prototype.send = function (data) {
             if (typeof data !== 'string') {
+              if (
+                mode === 'lost-packet' &&
+                this.label === 'pixelgate-bulk-v1' &&
+                metrics.bytes > 1024 * 1024 &&
+                !metrics.droppedLane
+              ) {
+                metrics.droppedLane = true;
+                return; // A vanished packet must be recovered by the application.
+              }
               if (
                 mode === 'closed-lane' &&
                 this.label === 'pixelgate-bulk-v1' &&
@@ -145,12 +164,35 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
                 (metrics.lanes[this.label] ?? 0) + size;
             } else {
               const message = JSON.parse(data);
+              if (mode === 'previous-release' && message.type === 'hello') {
+                delete message.stripedReceipts;
+                delete message.stripedLanes;
+                data = JSON.stringify(message);
+              }
               if (
                 message.type === 'finish' ||
                 (message.type === 'pg-striped-control' &&
                   JSON.parse(message.value).type === 'finish')
               )
                 metrics.milliseconds = performance.now() - metrics.started;
+            }
+            if (
+              mode === 'slow-lane' &&
+              typeof data !== 'string' &&
+              this.label === 'pixelgate-bulk-v1'
+            ) {
+              if (!assignedDelayedLane) {
+                assignedDelayedLane = true;
+                delayedLanes.add(this);
+              }
+              if (delayedLanes.has(this)) {
+                const wire = data;
+                setTimeout(() => {
+                  if (this.readyState === 'open')
+                    Reflect.apply(original, this, [wire]);
+                }, 1500);
+                return;
+              }
             }
             Reflect.apply(original, this, [data]);
           };
@@ -212,12 +254,30 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
             }
           ).transferMetrics,
       );
-      if (mode === 'closed-lane') {
+      console.log(
+        JSON.stringify({
+          mode,
+          milliseconds: metrics.milliseconds,
+          lanes: metrics.lanes,
+        }),
+      );
+      if (['closed-lane', 'lost-packet'].includes(mode)) {
         expect(metrics.droppedLane).toBe(true);
         expect(metrics.bytes).toBeGreaterThanOrEqual(payload.length);
-      } else expect(metrics.bytes).toBe(payload.length);
-      if (['pipeline', 'pipeline-local', 'closed-lane'].includes(mode))
-        expect(metrics.lanes['pixelgate-bulk-v1']).toBeGreaterThan(0);
+      } else if (mode === 'slow-lane')
+        expect(metrics.bytes).toBeGreaterThanOrEqual(payload.length);
+      else expect(metrics.bytes).toBe(payload.length);
+      if (
+        [
+          'pipeline',
+          'pipeline-local',
+          'closed-lane',
+          'lost-packet',
+          'slow-lane',
+          'previous-release',
+        ].includes(mode)
+      )
+        expect(metrics.lanes['pixelgate-bulk-v1'], mode).toBeGreaterThan(0);
       if (mode === 'unavailable-lanes')
         expect(metrics.lanes['pixelgate-bulk-v1']).toBeUndefined();
       expect(metrics.milliseconds).toBeGreaterThan(0);

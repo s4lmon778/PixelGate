@@ -112,7 +112,7 @@ describe('native app handoff preparation', () => {
     ).toBe(sha);
     expect(state.stored.size).toBe(0);
   });
-  it('blocks corrupted or unverified copies and rejects unbounded batches', async () => {
+  it('blocks corrupted or unverified copies and empty selections', async () => {
     state.bytes = new Uint8Array([3, 2, 1]);
     await expect(prepareSharedFiles([record])).rejects.toThrow(
       'failed verification',
@@ -120,9 +120,22 @@ describe('native app handoff preparation', () => {
     await expect(
       prepareSharedFiles([{ ...record, scope: 'none', phase: 'failed' }]),
     ).rejects.toThrow('Only verified');
-    await expect(
-      prepareSharedFiles(Array.from({ length: 21 }, () => record)),
-    ).rejects.toThrow('between 1 and 20');
+    await expect(prepareSharedFiles([])).rejects.toThrow('Select files');
+  });
+  it('prepares collections larger than twenty with incremental progress and distinct names', async () => {
+    const progress = vi.fn();
+    const files = await prepareSharedFiles(
+      Array.from({ length: 125 }, (_, i) => ({
+        ...record,
+        relativePath: `folder-${i}/photo.jpg`,
+      })),
+      progress,
+    );
+    expect(files).toHaveLength(125);
+    expect(new Set(files.map((file) => file.name)).size).toBe(125);
+    expect(progress).toHaveBeenLastCalledWith(125, 125);
+    for (const file of files)
+      expect(await file.arrayBuffer()).toEqual(state.bytes.buffer);
   });
   it('gives flattened folder collisions distinct names without changing any bytes', async () => {
     const records = ['a/旅行.jpg', 'b/旅行.jpg', 'c/旅行 (2).jpg'].map(

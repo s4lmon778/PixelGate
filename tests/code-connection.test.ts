@@ -127,7 +127,7 @@ describe('six-digit code pairing', () => {
     expect(e.connected).toHaveBeenCalledOnce();
     expect(c.room?.diagnostics?.lanCandidatesAdded).toBe(1);
     expect(JSON.stringify(c.room)).not.toContain(address);
-    expect(vi.getTimerCount()).toBe(0);
+    expect(vi.getTimerCount()).toBe(1); // Live, address-free route diagnostics.
     await c.stop();
   });
   it('accepts six digits, leading zeroes, spaced input, and short fragment links', () => {

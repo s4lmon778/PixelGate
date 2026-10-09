@@ -2,10 +2,10 @@ import { openIndexed, writeIndexed } from './indexed-staging';
 
 interface Access {
   write(data: Uint8Array, opts: { at: number }): number;
-  flush(): void;
-  close(): void;
-  truncate(n: number): void;
-  getSize(): number;
+  flush(): void | Promise<void>;
+  close(): void | Promise<void>;
+  truncate(n: number): void | Promise<void>;
+  getSize(): number | Promise<number>;
 }
 let handle: Access | undefined;
 let indexedId: string | undefined;
@@ -14,7 +14,7 @@ self.onmessage = ({ data }) => {
   chain = chain.then(async () => {
     try {
       if (data.action === 'open') {
-        handle?.close();
+        await handle?.close();
         handle = undefined;
         indexedId = undefined;
         if (data.backend === 'indexeddb') {
@@ -42,12 +42,12 @@ self.onmessage = ({ data }) => {
           handle = await (
             file as unknown as { createSyncAccessHandle(): Promise<Access> }
           ).createSyncAccessHandle();
-          if (handle.getSize() < data.offset)
+          if ((await handle.getSize()) < data.offset)
             throw new Error(
               'Partial file is missing bytes. Restart this file.',
             );
-          handle.truncate(data.offset);
-          handle.flush();
+          await handle.truncate(data.offset);
+          await handle.flush();
         }
       } else if (data.action === 'write') {
         if (indexedId) {
@@ -60,21 +60,32 @@ self.onmessage = ({ data }) => {
             const n = handle.write(bytes.subarray(written), {
               at: data.offset + written,
             });
-            if (!n) throw new Error('Storage write stopped.');
+            if (
+              !Number.isSafeInteger(n) ||
+              n <= 0 ||
+              n > bytes.length - written
+            )
+              throw new Error(
+                'Browser storage rejected this checkpoint. Save and clear verified files, or retry in a regular browser tab.',
+              );
             written += n;
           }
-          handle.flush();
+          await handle.flush();
+          if ((await handle.getSize()) !== data.offset + bytes.length)
+            throw new Error(
+              'Browser storage did not retain the complete checkpoint. Retry in a regular browser tab.',
+            );
         }
       } else if (data.action === 'close') {
-        handle?.flush();
-        handle?.close();
+        await handle?.flush();
+        await handle?.close();
         handle = undefined;
         indexedId = undefined;
       }
       self.postMessage({ id: data.id, ok: true });
     } catch (error) {
       try {
-        handle?.close();
+        await handle?.close();
       } catch {}
       handle = undefined;
       indexedId = undefined;

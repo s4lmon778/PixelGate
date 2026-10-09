@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { androidChromeLink, downloadType } from '../lib/bridge/save-options';
+import {
+  androidChromeLink,
+  downloadType,
+  nativeShareBatch,
+  ANDROID_SHARE_FILE_BYTES,
+} from '../lib/bridge/save-options';
 
 describe('local save options', () => {
   it('opens only the HTTPS app page in Chrome without pairing or query data', () => {
@@ -35,5 +40,50 @@ describe('local save options', () => {
     expect(downloadType('x.jpg', 'IMAGE/HEIC')).toBe('image/heic');
     expect(downloadType('x.png', 'bad\r\ncontent')).toBe('image/png');
     expect(downloadType('x.unknown', '')).toBe('application/octet-stream');
+  });
+  it('limits each native handoff to ten while keeping the full collection available', () => {
+    const files = Array.from(
+      { length: 125 },
+      (_, i) =>
+        new File(['original'], `photo-${i}.jpg`, { type: 'image/jpeg' }),
+    );
+    const batch = nativeShareBatch(files, 'Android Chrome', () => true);
+    expect(batch).toEqual(files.slice(0, 10));
+    expect(files).toHaveLength(125);
+  });
+  it('routes a 400 MiB Android original to downloads even when canShare says true', () => {
+    const large = new File(['original'], 'video.mp4', { type: 'video/mp4' });
+    Object.defineProperty(large, 'size', { value: 400 * 1024 * 1024 });
+    const boundary = new File(['original'], 'boundary.mp4', {
+      type: 'video/mp4',
+    });
+    Object.defineProperty(boundary, 'size', {
+      value: ANDROID_SHARE_FILE_BYTES,
+    });
+    expect(
+      nativeShareBatch([large, boundary], 'Android Chrome', () => true),
+    ).toEqual([boundary]);
+    expect(nativeShareBatch([large], 'iPhone Safari', () => true)).toEqual([
+      large,
+    ]);
+  });
+  it('splits combined payload limits and leaves unsupported media untouched for downloads', () => {
+    const files = ['a.jpg', 'b.jpg', 'c.mov', 'd.jpg', 'e.jpg'].map(
+      (name) => new File(['original'], name),
+    );
+    const batch = nativeShareBatch(
+      files,
+      'Android',
+      ({ files }) =>
+        files!.length <= 2 &&
+        files!.every((file) => !file.name.endsWith('.mov')),
+    );
+    expect(batch).toEqual(files.slice(0, 2));
+    expect(files[2].name).toBe('c.mov');
+    expect(
+      nativeShareBatch(files, 'Android', () => {
+        throw new Error('unsupported');
+      }),
+    ).toEqual([]);
   });
 });

@@ -37,12 +37,17 @@ class Peer extends EventTarget {
   remoteDescription?: RTCSessionDescriptionInit;
   signalingState = 'stable';
   connectionState = 'new';
+  candidates: RTCIceCandidateInit[] = [];
+  async addIceCandidate(candidate: RTCIceCandidateInit) {
+    this.candidates.push(candidate);
+  }
   constructor() {
     super();
     Peer.peers.push(this);
     this.channel.readyState = 'connecting';
   }
-  createDataChannel() {
+  createDataChannel(_label: string, options: RTCDataChannelInit) {
+    this.channel.ordered = options.ordered ?? true;
     return this.channel.native();
   }
   async createOffer() {
@@ -92,6 +97,44 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe('parallel transport compatibility, ordering, and fallback', () => {
+  it('tries the user-supplied local address on a bulk peer without exporting it', async () => {
+    const primary = new Channel();
+    const transport = new StripedChannel(
+      primary.native(),
+      'receive',
+      '192.168.1.15',
+    );
+    opened.push(transport);
+    primary.receive(
+      JSON.stringify({ type: 'hello', version: 1, stripedTransport: 1 }),
+    );
+    primary.receive(
+      JSON.stringify({
+        type: 'pg-lane',
+        index: 0,
+        candidate: {
+          candidate: 'candidate:x 1 udp 2122260223 hidden.local 12345 typ host',
+          sdpMid: '0',
+          sdpMLineIndex: 0,
+        },
+      }),
+    );
+    const peer = Peer.peers[0];
+    peer.remoteDescription = {
+      type: 'offer',
+      sdp: 'v=0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\na=mid:0\r\na=candidate:x 1 udp 2122260223 hidden.local 12345 typ host\r\n',
+    };
+    await vi.advanceTimersByTimeAsync(250);
+    expect(peer.candidates).toContainEqual({
+      candidate: 'candidate:x 1 udp 2122260223 192.168.1.15 12345 typ host',
+      sdpMid: '0',
+      sdpMLineIndex: 0,
+    });
+    expect(JSON.stringify(transport.snapshot())).not.toContain('192.168.1.15');
+    expect(JSON.stringify(primary.sent)).not.toContain('192.168.1.15');
+    transport.close();
+    expect(vi.getTimerCount()).toBe(0);
+  });
   it('retains raw frames when the other client lacks capability support', () => {
     const primary = new Channel(),
       transport = new StripedChannel(primary.native(), 'send');
@@ -204,4 +247,149 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
     expect(Peer.peers).toHaveLength(0);
     expect(primary.readyState).toBe('open');
   });
+  it('uses bounded unordered bulk lanes only with the new mutually supported receipts', async () => {
+    const primary = new Channel(),
+      transport = new StripedChannel(primary.native(), 'send');
+    opened.push(transport);
+    primary.receive(
+      JSON.stringify({
+        type: 'hello',
+        version: 1,
+        stripedTransport: 1,
+        stripedReceipts: 1,
+        stripedLanes: 99,
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(Peer.peers).toHaveLength(4);
+    for (const peer of Peer.peers) {
+      expect(peer.channel.ordered).toBe(false);
+      peer.channel.readyState = 'open';
+      peer.channel.dispatchEvent(new Event('open'));
+    }
+    const all = [primary, ...Peer.peers.map((peer) => peer.channel)];
+    for (let i = 0; i < 25; i++) {
+      for (const channel of all) channel.bufferedAmount = 0;
+      transport.send(new Uint8Array([i]).buffer);
+    }
+    for (const channel of all)
+      expect(
+        channel.sent.filter((data) => data instanceof ArrayBuffer),
+      ).toHaveLength(5);
+    expect(transport.snapshot()).toMatchObject({
+      connections: 5,
+      selectiveReceipts: true,
+      unreceivedBytes: 225,
+    });
+    primary.receive(
+      JSON.stringify({ type: 'pg-striped-receipt', received: [0, 1, 2, 3] }),
+    );
+    expect(transport.snapshot().unreceivedBytes).toBe(189);
+    expect(transport.sendBufferBytes).toBe(512 * 1024);
+  });
+  it('selectively receipts displaced packets without delivering them before the missing prefix', async () => {
+    const primary = new Channel(),
+      transport = new StripedChannel(primary.native(), 'receive');
+    opened.push(transport);
+    const received = vi.fn();
+    transport.onmessage = received;
+    primary.receive(
+      JSON.stringify({
+        type: 'hello',
+        version: 1,
+        stripedTransport: 1,
+        stripedReceipts: 1,
+        stripedLanes: 4,
+      }),
+    );
+    primary.receive(JSON.stringify({ type: 'pg-striped-start' }));
+    received.mockClear();
+    for (const sequence of [1, 2, 3, 4]) primary.receive(frame(sequence));
+    expect(received).not.toHaveBeenCalled();
+    expect(
+      primary.sent.map((data) =>
+        typeof data === 'string' ? JSON.parse(data) : null,
+      ),
+    ).toContainEqual({ type: 'pg-striped-receipt', received: [1, 2, 3, 4] });
+    primary.receive(frame(0));
+    expect(received).toHaveBeenCalledTimes(5);
+    primary.receive(frame(1));
+    expect(received).toHaveBeenCalledTimes(5);
+    await vi.advanceTimersByTimeAsync(25);
+    expect(transport.readyState).toBe('open');
+  });
+  it('recovers a missing packet through another lane with bounded retries, then releases the retained bytes', async () => {
+    vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
+    const primary = new Channel(),
+      transport = new StripedChannel(primary.native(), 'send');
+    opened.push(transport);
+    primary.receive(
+      JSON.stringify({
+        type: 'hello',
+        version: 1,
+        stripedTransport: 1,
+        stripedReceipts: 1,
+        stripedLanes: 4,
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    for (const peer of Peer.peers) {
+      peer.channel.readyState = 'open';
+      peer.channel.dispatchEvent(new Event('open'));
+    }
+    const all = [primary, ...Peer.peers.map((peer) => peer.channel)];
+    for (let i = 0; i < 4; i++) {
+      for (const channel of all) channel.bufferedAmount = 0;
+      transport.send(new Uint8Array([i]).buffer);
+    }
+    const original = all.find((channel) =>
+      channel.sent.some(
+        (data) =>
+          data instanceof ArrayBuffer && new DataView(data).getUint32(4) === 1,
+      ),
+    )!;
+    primary.receive(
+      JSON.stringify({ type: 'pg-striped-receipt', received: [0, 2, 3] }),
+    );
+    await vi.advanceTimersByTimeAsync(300);
+    expect(transport.snapshot().replayedPackets).toBe(1);
+    expect(
+      all.some(
+        (channel) =>
+          channel !== original &&
+          channel.sent.some(
+            (data) =>
+              data instanceof ArrayBuffer &&
+              new DataView(data).getUint32(4) === 1,
+          ),
+      ),
+    ).toBe(true);
+    primary.receive(
+      JSON.stringify({ type: 'pg-striped-receipt', received: [1] }),
+    );
+    expect(transport.snapshot().unreceivedBytes).toBe(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(transport.snapshot().replayedPackets).toBe(1);
+    primary.close();
+    expect(vi.getTimerCount()).toBe(0);
+    vi.restoreAllMocks();
+  });
+  it.each([[10], Array(17).fill(0), [NaN], [-1]])(
+    'rejects forged or unbounded selective receipts: %s',
+    (received) => {
+      const primary = new Channel(),
+        transport = new StripedChannel(primary.native(), 'send');
+      opened.push(transport);
+      primary.receive(
+        JSON.stringify({
+          type: 'hello',
+          version: 1,
+          stripedTransport: 1,
+          stripedReceipts: 1,
+        }),
+      );
+      primary.receive(JSON.stringify({ type: 'pg-striped-receipt', received }));
+      expect(primary.readyState).toBe('closed');
+    },
+  );
 });

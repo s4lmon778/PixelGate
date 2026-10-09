@@ -12,11 +12,23 @@ For advanced local-discovery diagnosis, the receiver can revoke the failed conne
 
 ## Transfers are much slower than Wi-Fi internet downloads
 
-Reload both devices to use the same current build. PixelGate negotiates independent parallel peer connections, reassembles their chunks in order, and overlaps up to four durable checkpoints. Older clients and failed extra connections keep a single connection; no stored files or history need to be cleared. A dropped bulk connection retransmits unreceived packets over the original route.
+Reload both devices to use the same current build. PixelGate negotiates independent parallel peer connections, reassembles their chunks in order, and overlaps up to four durable checkpoints. Older clients and failed extra connections keep a single connection; no stored files or history need to be cleared. New clients negotiate up to five independent connections, adapt pacing from receipts, replay gaps over another connection, and temporarily avoid a slow lane. A dropped bulk connection retransmits unreceived packets over the original route.
 
 Internet-download speed measures a different path from device-to-device transfer. Direct transfers also depend on source reads, receiver storage, packet loss, and browser scheduling. Keep both tabs in the foreground and compare one reasonably large synthetic file; many small files include repeated hashing, file-open, and verification work. A trusted local network or hotspot can help distinguish a network-dependent slowdown from storage or device limits.
 
+While the transfer is running, open **Connection diagnostics** and copy the report on both devices. It now includes the primary selected route’s candidate types, UDP/TCP, round-trip time and byte-rate samples, plus the active connection count, receipt delay, buffered bytes and packet replays. Compare reports for the same large file on Wi-Fi and hotspot. The primary route’s byte counters cover that connection, not aggregate throughput across all five. Report the displayed speed and units; MB/s and Mb/s differ by eight. No addresses or file details are exported.
+
 Parallel connections do not select Wi-Fi networks or combine Wi-Fi and cellular bandwidth. Browsers leave interface routing to ICE and the OS. Performance measurements and their injected latency are recorded in [Validation](VALIDATION.md); they are not a guaranteed physical-device speed.
+
+## A large video cannot be handed to Google Photos
+
+Chrome on Android rejects native file sharing above 50 MiB per file and limits each handoff to ten files. PixelGate routes larger files to verified downloads instead of attempting a known unsupported handoff. Choose **Download all selected** for the collection, allow multiple downloads, and keep the tab open. In Google Photos, open **Collections → On this device → Download**, then enable that folder under **Photos settings → Backup → Back up device folders**. Older versions may say Library or Downloads. Files can also move the media into `DCIM/PixelGate` for device-folder import. [Google’s folder guide](https://support.google.com/photos/answer/6193313?co=GENIE.Platform%3DAndroid&hl=en).
+
+A website cannot force a particular app or album. Download/share requests retain verified browser copies and leave saved-copy verification pending; check playback and backup in Photos, and independently verify saved copies before clearing staging.
+
+## Browser storage rejects a checkpoint
+
+PixelGate stops before acknowledging an invalid native write result or missing file growth. Keep the source and retained browser data, save and verify completed files, and free space if needed. A regular browser tab may have different limits from a temporary context. Reconnect and reselect the same originals to resume from the last durable checkpoint. The app does not silently treat quota or integrity failures as missing APIs.
 
 ## What does “Estimated staging space” mean?
 

@@ -435,7 +435,10 @@ export class Sender {
     this.check();
   }
   private async writable() {
-    while (this.channel.bufferedAmount > SEND_BUFFER_BYTES) {
+    while (
+      this.channel.bufferedAmount >
+      (this.channel.sendBufferBytes ?? SEND_BUFFER_BYTES)
+    ) {
       this.check();
       // Events refill the transport promptly. A sparse fallback also supports
       // browser engines that occasionally miss bufferedamountlow notifications.
@@ -588,14 +591,18 @@ export class Sender {
             if (block.length !== end - offset)
               throw new Error('Source file changed. Reselect it and retry.');
             const messageLimit = FRAME_BYTES;
+            let burst = 0;
             for (let pos = 0; pos < block.length; pos += messageLimit) {
               await this.writable();
               this.channel.send(block.subarray(pos, pos + messageLimit));
               // bufferedAmount excludes some native SCTP/OS queues. Yield after
               // a small burst so both browsers can service packets and controls
               // instead of flooding those hidden buffers during slow start.
-              if ((pos / messageLimit + 1) % 4 === 0)
+              burst += Math.min(messageLimit, block.length - pos);
+              if (burst >= (this.channel.burstBytes ?? SEND_BUFFER_BYTES)) {
                 await new Promise((resolve) => setTimeout(resolve, 4));
+                burst = 0;
+              }
             }
             offset = end;
             checkpoints.push(end);

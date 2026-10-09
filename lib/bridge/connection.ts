@@ -1,5 +1,5 @@
 import { decodePair, encodePair, PAIR_TTL, type PairSignal } from './pairing';
-import type { RouteDiagnostics } from './route-diagnostics';
+import { RouteProbe, type RouteDiagnostics } from './route-diagnostics';
 export interface PairRoom {
   id: string;
   expires: number;
@@ -20,6 +20,7 @@ export class Connection {
   private timeout?: ReturnType<typeof setTimeout>;
   private stopped = false;
   private answered = false;
+  private probe?: RouteProbe;
   constructor(
     private role: 'send' | 'receive',
     private events: {
@@ -33,15 +34,26 @@ export class Connection {
     this.pc = new RTCPeerConnection({
       iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }],
     });
+    this.probe = new RouteProbe(
+      this.pc,
+      () => this.channel,
+      (diagnostics) => {
+        if (this.room) {
+          this.room = { ...this.room, diagnostics };
+          this.events.room(this.room);
+        }
+      },
+    );
     this.pc.onconnectionstatechange = () => {
       if (this.stopped) return;
-      if (this.pc?.connectionState === 'failed')
+      if (this.pc?.connectionState === 'failed') {
+        this.probe?.stop();
         this.events.error(
           new Error(
             'Could not connect directly. Use the same trusted local network and check guest-network or VPN isolation.',
           ),
         );
-      else if (this.pc?.connectionState === 'disconnected')
+      } else if (this.pc?.connectionState === 'disconnected')
         this.events.error(
           new Error(
             'Connection interrupted. Reconnect and reselect the same files to resume.',
@@ -89,10 +101,12 @@ export class Connection {
       this.events.connected(channel);
     };
     channel.onclose = () => {
+      this.probe?.stop();
       if (!this.stopped)
         this.events.error(new Error('Connection closed. Reconnect to resume.'));
     };
     channel.onerror = () => {
+      this.probe?.stop();
       if (!this.stopped)
         this.events.error(
           new Error('The peer connection encountered an error.'),
@@ -183,6 +197,7 @@ export class Connection {
   }
   async stop() {
     this.stopped = true;
+    this.probe?.stop();
     clearTimeout(this.timeout);
     this.channel?.close();
     this.pc?.close();

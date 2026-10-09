@@ -379,7 +379,8 @@ export class CodeConnection {
   }
 
   private activate() {
-    this.probe?.stop();
+    // Keep address-free route/latency diagnostics available during transfers.
+    this.probe?.snapshot();
     this.inbox?.stop();
     this.lanRoute?.stop();
     this.senderAddress = '';

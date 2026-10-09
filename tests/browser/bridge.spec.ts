@@ -281,7 +281,10 @@ for (const mode of [
             () => document.documentElement.scrollWidth <= innerWidth,
           ),
         ).toBe(true);
-        const bytes = Buffer.alloc(1024 * 1024 + 37, 0x7b);
+        const bytes = Buffer.alloc(
+          (explicitLan ? 8 : 1) * 1024 * 1024 + 37,
+          0x7b,
+        );
         const hash = createHash('sha256').update(bytes).digest('hex');
         await sender.locator('input[aria-label="Choose files"]').setInputFiles({
           name: 'code-transfer-é.bin',
@@ -384,6 +387,19 @@ for (const mode of [
           'Browser copy verified',
           { timeout: 60000 },
         );
+        if (explicitLan) {
+          await expect
+            .poll(
+              async () => {
+                const report = await receiver
+                  .getByLabel('Connection report', { exact: true })
+                  .textContent();
+                return JSON.parse(report || '{}').transfer?.connections;
+              },
+              { timeout: 15000 },
+            )
+            .toBe(5);
+        }
         const actualHash = await receiver.evaluate(
           async (indexed) => {
             if (indexed) {
@@ -526,7 +542,7 @@ for (const mode of [
           expect(completed.candidateDelivery.added).toBeGreaterThan(0);
           await receiver
             .locator('.connection-panel')
-            .screenshot({ path: 'docs/assets/connection-fixed.png' });
+            .screenshot({ path: 'test-results/connection-fixed.png' });
           await receiver
             .getByText('Connection diagnostics', { exact: true })
             .click();

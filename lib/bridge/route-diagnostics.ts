@@ -24,6 +24,14 @@ export interface RouteDiagnostics {
   statsErrors: number;
   candidatePairs: Record<string, number>;
   stunErrors: { service: string; code: number }[];
+  selectedRoute?: {
+    localType: string;
+    remoteType: string;
+    protocol: string;
+    roundTripMs?: number;
+    sentBytesPerSecond?: number;
+    receivedBytesPerSecond?: number;
+  };
 }
 
 // Interpret only observed negotiation facts. Browser reports cannot identify
@@ -73,6 +81,8 @@ export class RouteProbe {
   private polling = false;
   private statsReads = 0;
   private statsErrors = 0;
+  private selectedRoute?: RouteDiagnostics['selectedRoute'];
+  private previous?: { timestamp: number; sent?: number; received?: number };
   constructor(
     private pc: RTCPeerConnection,
     private channel: () => RTCDataChannel | undefined,
@@ -106,7 +116,63 @@ export class RouteProbe {
         if (value.type === 'candidate-pair' && typeof value.state === 'string')
           pairs[value.state] = (pairs[value.state] ?? 0) + 1;
       });
-      if (!this.stopped) this.pairs = pairs;
+      if (!this.stopped) {
+        this.pairs = pairs;
+        let selected: RTCIceCandidatePairStats | undefined;
+        stats.forEach((value) => {
+          if (value.type === 'transport' && value.selectedCandidatePairId)
+            selected = stats.get(value.selectedCandidatePairId);
+        });
+        if (!selected)
+          stats.forEach((value) => {
+            if (
+              value.type === 'candidate-pair' &&
+              value.state === 'succeeded' &&
+              (value.nominated || value.selected)
+            )
+              selected = value;
+          });
+        if (selected) {
+          const local = stats.get(selected.localCandidateId);
+          const remote = stats.get(selected.remoteCandidateId);
+          const kind = (value: unknown) =>
+            typeof value === 'string' &&
+            ['host', 'srflx', 'prflx', 'relay'].includes(value)
+              ? value
+              : 'unknown';
+          const sample = {
+            timestamp: selected.timestamp,
+            sent: selected.bytesSent,
+            received: selected.bytesReceived,
+          };
+          const interval = this.previous
+            ? (sample.timestamp - this.previous.timestamp) / 1000
+            : 0;
+          const rate = (value: number | undefined, old?: number) =>
+            interval > 0 &&
+            Number.isFinite(value) &&
+            Number.isFinite(old) &&
+            value! >= old!
+              ? Math.round((value! - old!) / interval)
+              : undefined;
+          this.selectedRoute = {
+            localType: kind(local?.candidateType),
+            remoteType: kind(remote?.candidateType),
+            protocol: ['udp', 'tcp'].includes(local?.protocol)
+              ? local.protocol
+              : 'unknown',
+            roundTripMs: Number.isFinite(selected.currentRoundTripTime)
+              ? Math.round(selected.currentRoundTripTime! * 1000)
+              : undefined,
+            sentBytesPerSecond: rate(sample.sent, this.previous?.sent),
+            receivedBytesPerSecond: rate(
+              sample.received,
+              this.previous?.received,
+            ),
+          };
+          this.previous = sample;
+        }
+      }
     } catch {
       if (!this.stopped) this.statsErrors++;
       /* Some browsers stop exposing stats after a failed route. */
@@ -137,6 +203,7 @@ export class RouteProbe {
       statsErrors: this.statsErrors,
       candidatePairs: { ...this.pairs },
       stunErrors: this.errors.map((error) => ({ ...error })),
+      selectedRoute: this.selectedRoute ? { ...this.selectedRoute } : undefined,
     };
     this.update(report);
     return report;
