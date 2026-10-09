@@ -239,6 +239,7 @@ export async function existingDestination(
   root: FileSystemDirectoryHandle,
   record: RecordFile,
   preferredPath?: string,
+  flatten = false,
 ): Promise<RecordFile | undefined> {
   const match = async (path: string) => {
     const parts = safePath(path).split('/');
@@ -269,7 +270,9 @@ export async function existingDestination(
   });
   if (preferredPath && (await match(preferredPath)).matches)
     return verified(preferredPath);
-  const parts = safePath(record.relativePath).split('/');
+  const parts = safePath(
+    flatten ? record.originalName : record.relativePath,
+  ).split('/');
   const original = parts.pop()!;
   for (let n = 1; n <= 10000; n++) {
     const path = [...parts, collisionName(original, n)].join('/');
@@ -282,6 +285,7 @@ export async function existingDestination(
 export async function saveToFolder(
   root: FileSystemDirectoryHandle,
   record: RecordFile,
+  flatten = false,
 ): Promise<RecordFile> {
   safePath(record.relativePath);
   const source = await stagedFile(record.id);
@@ -289,7 +293,9 @@ export async function saveToFolder(
     throw new Error(
       'Staged copy failed verification. Transfer this file again.',
     );
-  const parts = record.relativePath.split('/');
+  const parts = safePath(
+    flatten ? record.originalName : record.relativePath,
+  ).split('/');
   const original = parts.pop()!;
   let folder = root;
   for (const part of parts)

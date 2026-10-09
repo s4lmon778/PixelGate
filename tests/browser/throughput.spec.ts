@@ -10,10 +10,12 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
   test.setTimeout(300000);
   const baseline = process.env.PIXELGATE_TEST_BASELINE_URL;
   const slowLink = Boolean(process.env.PIXELGATE_TEST_SLOW_LINK);
+  const adaptivePaths = Boolean(process.env.PIXELGATE_TEST_ADAPTIVE_PATHS);
+  const mixedPeers = Boolean(process.env.PIXELGATE_TEST_MIXED_PEERS);
   const measurements: { mode: string; milliseconds: number; bytes: number }[] =
     [];
   const payload = Buffer.alloc(
-    (slowLink ? 4 : baseline ? 32 : 8) * 1024 * 1024 + 111,
+    (adaptivePaths ? 16 : slowLink ? 4 : baseline ? 32 : 8) * 1024 * 1024 + 111,
     0x7b,
   );
   // Distinguish every transport frame so reordered/duplicated bytes cannot pass
@@ -21,35 +23,55 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
   for (let offset = 0; offset + 4 <= payload.length; offset += 16 * 1024)
     payload.writeUInt32BE(offset / (16 * 1024), offset);
   const expected = createHash('sha256').update(payload).digest('hex');
-  const modes = slowLink
-    ? ['baseline-slow-link-local', 'pipeline-slow-link-local']
-    : baseline
+  const modes = mixedPeers
+    ? ['mixed-receiver-local', 'mixed-sender-local', 'new-peers-local']
+    : adaptivePaths
       ? [
-          'baseline-local',
-          'pipeline-local',
-          'baseline-receipt-delay',
-          'pipeline-receipt-delay',
-          'baseline-ack-delay',
-          'pipeline-ack-delay',
-          'baseline-slow-lane',
-          'pipeline-slow-lane',
-          'baseline-lost-packet',
-          'pipeline-lost-packet',
-          'baseline-read-delay-local',
-          'pipeline-read-delay-local',
+          'baseline-paths-symmetric-local',
+          'pipeline-paths-symmetric-local',
+          'baseline-paths-asymmetric-local',
+          'pipeline-paths-asymmetric-local',
+          'baseline-paths-moderate-local',
+          'pipeline-paths-moderate-local',
+          'baseline-paths-recovery-local',
+          'pipeline-paths-recovery-local',
+          'baseline-paths-shared-local',
+          'pipeline-paths-shared-local',
         ]
-      : [
-          'legacy',
-          'pipeline',
-          'closed-lane',
-          'unavailable-lanes',
-          'legacy-local',
-          'pipeline-local',
-          'lost-packet',
-          'slow-lane',
-          'previous-release',
-        ];
-  for (const mode of modes) {
+      : slowLink
+        ? ['baseline-slow-link-local', 'pipeline-slow-link-local']
+        : baseline
+          ? [
+              'baseline-local',
+              'pipeline-local',
+              'baseline-receipt-delay',
+              'pipeline-receipt-delay',
+              'baseline-ack-delay',
+              'pipeline-ack-delay',
+              'baseline-slow-lane',
+              'pipeline-slow-lane',
+              'baseline-lost-packet',
+              'pipeline-lost-packet',
+              'baseline-read-delay-local',
+              'pipeline-read-delay-local',
+            ]
+          : [
+              'legacy',
+              'pipeline',
+              'closed-lane',
+              'unavailable-lanes',
+              'legacy-local',
+              'pipeline-local',
+              'lost-packet',
+              'slow-lane',
+              'previous-release',
+            ];
+  const selectedModes = process.env.PIXELGATE_TEST_PATH_MODE
+    ? modes.filter((mode) =>
+        mode.includes(process.env.PIXELGATE_TEST_PATH_MODE!),
+      )
+    : modes;
+  for (const mode of selectedModes) {
     const receiving = await browser.newContext();
     const sending = await browser.newContext();
     try {
@@ -159,12 +181,18 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
             lanes: {} as Record<string, number>,
             droppedLane: false,
             sourceReads: 0,
+            maximumPayloadFrameBytes: 0,
+            binaryMessages: 0,
             queued: 0,
             queueSum: 0,
             queueSamples: 0,
           };
           let nextDelivery = 0;
           let delivered = 0;
+          const pathQueues = new Map<
+            RTCDataChannel,
+            { next: number; index: number }
+          >();
           const observed = new WeakSet<RTCDataChannel>();
           const delayedLanes = new WeakSet<RTCDataChannel>();
           let assignedDelayedLane = false;
@@ -217,6 +245,11 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
                   ArrayBuffer.isView(data) ? data.byteOffset : 0,
                 ).getUint32(0) === 0x50475331;
               metrics.bytes += size - (striped ? 8 : 0);
+              metrics.maximumPayloadFrameBytes = Math.max(
+                metrics.maximumPayloadFrameBytes,
+                size - (striped ? 8 : 0),
+              );
+              metrics.binaryMessages++;
               metrics.lanes[this.label] =
                 (metrics.lanes[this.label] ?? 0) + size;
             } else {
@@ -269,6 +302,48 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
               }, at - now);
               return;
             }
+            if (mode.includes('paths-') && typeof data !== 'string') {
+              let path = pathQueues.get(this);
+              if (!path) {
+                path = { next: 0, index: pathQueues.size };
+                pathQueues.set(this, path);
+              }
+              const size = data instanceof Blob ? data.size : data.byteLength;
+              const now = performance.now();
+              const elapsed = now - metrics.started;
+              const asymmetric =
+                mode.includes('asymmetric') ||
+                (mode.includes('recovery') && elapsed < 2000);
+              const moderate = mode.includes('moderate') && path.index === 1;
+              const slow = asymmetric && path.index === 1;
+              const rate = moderate
+                ? 400 * 1024
+                : slow
+                  ? 256 * 1024
+                  : 1024 * 1024;
+              const latency = slow ? 120 : 15;
+              const shared = mode.includes('shared');
+              const at =
+                Math.max(now, shared ? nextDelivery : path.next) +
+                (size / rate) * 1000;
+              if (shared) nextDelivery = at;
+              else path.next = at;
+              metrics.queued += size;
+              setTimeout(
+                () => {
+                  metrics.queued -= size;
+                  delivered += size;
+                  if (delivered > 1024 * 1024) {
+                    metrics.queueSum += metrics.queued;
+                    metrics.queueSamples++;
+                  }
+                  if (this.readyState === 'open')
+                    Reflect.apply(original, this, [data]);
+                },
+                at + latency - now,
+              );
+              return;
+            }
             Reflect.apply(original, this, [data]);
           };
         },
@@ -277,7 +352,10 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
       const receiver = await receiving.newPage();
       const sender = await sending.newPage();
       await receiver.goto(
-        baseline && mode.startsWith('baseline-') ? baseline : './',
+        baseline &&
+          (mode.startsWith('baseline-') || mode === 'mixed-receiver-local')
+          ? baseline
+          : './',
       );
       await receiver
         .getByRole('button', { name: 'Receive files', exact: true })
@@ -290,7 +368,18 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
         .click();
       const link = receiver.getByLabel('Receiver link', { exact: true });
       await expect(link).toBeVisible({ timeout: 20000 });
-      await sender.goto(await link.inputValue());
+      const senderLink = await link.inputValue();
+      if (mixedPeers) {
+        const pairing = new URL(senderLink);
+        const landing = new URL(
+          mode === 'mixed-sender-local'
+            ? baseline!
+            : testInfo.project.use.baseURL!,
+        );
+        landing.search = pairing.search;
+        landing.hash = pairing.hash;
+        await sender.goto(landing.href);
+      } else await sender.goto(senderLink);
       await sender
         .getByRole('button', { name: 'Prepare sender response', exact: true })
         .click();
@@ -330,10 +419,17 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
                 queueSum: number;
                 queueSamples: number;
                 sourceReads: number;
+                maximumPayloadFrameBytes: number;
+                binaryMessages: number;
               };
             }
           ).transferMetrics,
       );
+      const report = await sender
+        .getByLabel('Connection report', { exact: true })
+        .textContent()
+        .catch(() => null);
+      const transport = report ? JSON.parse(report).transfer : undefined;
       console.log(
         JSON.stringify({
           mode,
@@ -341,12 +437,17 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
           lanes: metrics.lanes,
           averageQueuedBytes: metrics.queueSum / (metrics.queueSamples || 1),
           sourceReads: metrics.sourceReads,
+          transport,
+          maximumPayloadFrameBytes: metrics.maximumPayloadFrameBytes,
+          binaryMessages: metrics.binaryMessages,
         }),
       );
       if (mode === 'closed-lane' || mode.endsWith('lost-packet')) {
         expect(metrics.droppedLane).toBe(true);
         expect(metrics.bytes).toBeGreaterThanOrEqual(payload.length);
       } else if (mode.endsWith('slow-lane'))
+        expect(metrics.bytes).toBeGreaterThanOrEqual(payload.length);
+      else if (mode.includes('paths-'))
         expect(metrics.bytes).toBeGreaterThanOrEqual(payload.length);
       else expect(metrics.bytes).toBe(payload.length);
       if (!mode.startsWith('legacy') && mode !== 'unavailable-lanes')
@@ -355,10 +456,18 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
       if (mode === 'unavailable-lanes')
         expect(metrics.lanes['pixelgate-bulk-v1']).toBeUndefined();
       expect(metrics.milliseconds).toBeGreaterThan(0);
+      if (mixedPeers)
+        expect(metrics.maximumPayloadFrameBytes).toBe(
+          mode === 'new-peers-local' ? 64 * 1024 - 8 : 16 * 1024,
+        );
       const receiverMetrics = await receiver.evaluate(
         () => (window as unknown as { receiveMetrics: object }).receiveMetrics,
       );
-      measurements.push({ mode, ...metrics, ...{ receiverMetrics } });
+      measurements.push({
+        mode,
+        ...metrics,
+        ...{ receiverMetrics, transport },
+      });
       const storedHash = await receiver.evaluate(async () => {
         const root = await (
           await navigator.storage.getDirectory()
@@ -397,6 +506,14 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
     contentType: 'application/json',
   });
   if (baseline) {
+    if (mixedPeers) return;
+    if (adaptivePaths) {
+      for (let index = 0; index < measurements.length; index += 2)
+        expect(measurements[index + 1].milliseconds).toBeLessThan(
+          measurements[index].milliseconds * 1.1,
+        );
+      return;
+    }
     if (slowLink) {
       const baselineMetrics = measurements[0] as (typeof measurements)[0] & {
         queueSum: number;

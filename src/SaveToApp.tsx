@@ -247,12 +247,22 @@ export function SaveToApp({
         </button>
       </div>
       {folderHint}
+      {android && !folderAccessAvailable && (
+        <p className="hint destination-hint">
+          To save straight into a local Photos folder, update Chrome through the
+          Play Store to version 132 or newer and reopen PixelGate. Save to
+          Photos folder becomes available when this browser supports it.
+          Downloads remain available here.
+        </p>
+      )}
       <details className="help-details">
         <summary>Saving options</summary>
         {!folderAccessAvailable && (
           <p className="hint">
             Direct folder access is unavailable in this browser. Use your
             device’s save/share options or downloads.
+            {android &&
+              ' Chrome 132 or newer on Android supports folder access. Update Chrome through the Play Store, reopen PixelGate, and look for Save to Photos folder.'}
           </p>
         )}
         <p className="hint">
@@ -437,6 +447,9 @@ export function SaveToApp({
               Save large videos and collections to Google Photos
             </summary>
             <p className="hint">
+              {folderAccessAvailable
+                ? 'To skip downloading and moving files, close this dialog and use Save to Photos folder. Choose or create DCIM/PixelGate in internal storage and allow editing. All received originals are saved and verified in that folder; future transfers save there automatically in this tab. Enable PixelGate in Photos device-folder backup once. '
+                : 'Chrome 132 or newer supports saving directly to a local Photos device folder. Update Chrome through the Play Store and use Save to Photos folder. If folder access is unavailable, use downloads: '}
               Download verified files, then open Google Photos → Collections →
               On this device → Download. To back up that folder, open Photos
               settings → Backup → Back up device folders and enable Download.

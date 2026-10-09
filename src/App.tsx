@@ -58,6 +58,7 @@ type BrowserFolderWindow = Window & {
   showDirectoryPicker?: (options: {
     mode: 'readwrite';
     id: string;
+    startIn?: 'pictures';
   }) => Promise<FileSystemDirectoryHandle>;
 };
 const errorText = (e: unknown) =>
@@ -124,6 +125,7 @@ export default function PixelGate() {
   const sender = useRef<Sender | undefined>(undefined);
   const receiver = useRef<Receiver | undefined>(undefined);
   const folder = useRef<FileSystemDirectoryHandle | undefined>(undefined);
+  const photosFolder = useRef(false);
   const currentQueue = useRef<QueuedFile[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
@@ -350,6 +352,7 @@ export default function PixelGate() {
             () => {
               void refresh().catch(() => {});
             },
+            () => photosFolder.current,
           );
       },
       error: (e) => {
@@ -375,7 +378,7 @@ export default function PixelGate() {
       throw e;
     }
   }
-  async function selectFolder() {
+  async function selectFolder(forPhotos = false) {
     const picker = (window as BrowserFolderWindow).showDirectoryPicker;
     if (!picker) {
       setNotice(
@@ -388,14 +391,24 @@ export default function PixelGate() {
       handle = await picker.call(window, {
         mode: 'readwrite',
         id: 'pixelbridge-destination',
+        ...(forPhotos ? { startIn: 'pictures' as const } : {}),
       });
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') return;
       throw e;
     }
     folder.current = handle;
+    photosFolder.current = forPhotos;
     setFolderName(handle.name);
     await local.set('destination', handle);
+    if (forPhotos) {
+      // The picker grants access before hashing or copying. Save the entire
+      // pending collection and use the same folder for subsequent transfers.
+      await exportBatch();
+      setNotice(
+        `Photos folder: ${handle.name}. Originals are saved here and reread for verification. Enable this device folder once in Google Photos → Settings → Backup → Back up device folders. Future received files save here automatically while this tab stays open. Album selection remains in Photos.`,
+      );
+    }
   }
   async function addFiles(files: QueuedFile[]) {
     if (running)
@@ -454,7 +467,11 @@ export default function PixelGate() {
   }
   async function save(record: RecordFile) {
     if (folder.current) {
-      const saved = await saveToFolder(folder.current, record);
+      const saved = await saveToFolder(
+        folder.current,
+        record,
+        photosFolder.current,
+      );
       await local.put(saved);
       receivedRecords.current.set(saved.id, saved);
       setReceived([...receivedRecords.current.values()].reverse());
@@ -499,10 +516,13 @@ export default function PixelGate() {
     );
     let count = 0;
     const errors: string[] = [];
-    for (const record of pending.slice(0, 50)) {
+    const batch = folder.current ? pending : pending.slice(0, 50);
+    for (const record of batch) {
       try {
         if (folder.current)
-          await local.put(await saveToFolder(folder.current, record));
+          await local.put(
+            await saveToFolder(folder.current, record, photosFolder.current),
+          );
         else await downloadStaged(record);
         count++;
       } catch (error) {
@@ -511,7 +531,7 @@ export default function PixelGate() {
     }
     if (errors.length) setProblem(errors.slice(0, 3).join(' · '));
     setNotice(
-      `${count} copies ${folder.current ? 'saved and verified' : 'offered for download; allow multiple downloads, then reselect the saved files to verify them'}.${pending.length > 50 ? ' Run another batch for the remaining files.' : ''}`,
+      `${count} copies ${folder.current ? 'saved and verified' : 'offered for download; allow multiple downloads, then reselect the saved files to verify them'}.${pending.length > batch.length ? ' Run another batch for the remaining files.' : ''}`,
     );
     await refresh();
     const updated = await local.receivedFiles();
@@ -1540,26 +1560,49 @@ export default function PixelGate() {
                               <strong>{folderName}</strong>
                               <p>
                                 {folder.current
-                                  ? 'Saved files will be reread and verified.'
+                                  ? photosFolder.current
+                                    ? 'Original filenames in one device folder for Photos. Saved files are reread and verified.'
+                                    : 'Saved files will be reread and verified.'
                                   : 'Browser copies are verified before downloading.'}
                               </p>
                             </div>
                           </div>
                           <SaveToApp
                             folderControl={
-                              <button
-                                className="button"
-                                disabled={
-                                  busy ||
-                                  !!active ||
-                                  typeof (window as BrowserFolderWindow)
-                                    .showDirectoryPicker !== 'function'
-                                }
-                                onClick={() => void guarded(selectFolder)}
-                              >
-                                <Folder size={16} aria-hidden="true" />
-                                <span>Choose folder</span>
-                              </button>
+                              <>
+                                {/Android/i.test(navigator.userAgent) && (
+                                  <button
+                                    className="button primary"
+                                    disabled={
+                                      busy ||
+                                      !!active ||
+                                      typeof (window as BrowserFolderWindow)
+                                        .showDirectoryPicker !== 'function'
+                                    }
+                                    onClick={() =>
+                                      void guarded(() => selectFolder(true))
+                                    }
+                                  >
+                                    <Folder size={16} aria-hidden="true" />
+                                    <span>Save to Photos folder</span>
+                                  </button>
+                                )}
+                                <button
+                                  className="button"
+                                  disabled={
+                                    busy ||
+                                    !!active ||
+                                    typeof (window as BrowserFolderWindow)
+                                      .showDirectoryPicker !== 'function'
+                                  }
+                                  onClick={() =>
+                                    void guarded(() => selectFolder())
+                                  }
+                                >
+                                  <Folder size={16} aria-hidden="true" />
+                                  <span>Choose folder</span>
+                                </button>
+                              </>
                             }
                             folderHint={
                               typeof (window as BrowserFolderWindow)
@@ -1568,6 +1611,19 @@ export default function PixelGate() {
                                   Choose a folder before receiving to save and
                                   verify files there automatically, preserving
                                   their folder structure.
+                                  {/Android/i.test(navigator.userAgent) && (
+                                    <>
+                                      {' '}
+                                      For Photos, use Save to Photos folder and
+                                      choose or create DCIM/PixelGate in
+                                      internal storage. The whole received
+                                      collection saves there with original
+                                      filenames, without moving downloads.
+                                      Future files save there automatically.
+                                      Enable PixelGate in Photos device-folder
+                                      backup once.
+                                    </>
+                                  )}
                                 </p>
                               )
                             }
@@ -1597,6 +1653,7 @@ export default function PixelGate() {
                               disabled={busy || !!active}
                               onClick={() => {
                                 folder.current = undefined;
+                                photosFolder.current = false;
                                 setFolderName('Manual download');
                               }}
                             >

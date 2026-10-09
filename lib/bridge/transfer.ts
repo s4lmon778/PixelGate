@@ -56,6 +56,7 @@ export class Receiver {
     private changed: (r: RecordFile) => void,
     private error: (e: Error) => void,
     private completed?: () => void,
+    private flattenDestination: () => boolean = () => false,
   ) {
     channel.onmessage = (event) => {
       if (this.closed) return;
@@ -130,6 +131,7 @@ export class Receiver {
           folder,
           manifest,
           old?.destinationPath,
+          this.flattenDestination(),
         );
         if (destination) {
           await this.update(destination);
@@ -145,7 +147,12 @@ export class Receiver {
       }
       if (old && isVerified(old) && (await storedCopyValid(old))) {
         let result = { ...old, sessionId: manifest.sessionId };
-        if (this.folder()) result = await saveToFolder(this.folder()!, result);
+        if (this.folder())
+          result = await saveToFolder(
+            this.folder()!,
+            result,
+            this.flattenDestination(),
+          );
         else result = { ...result, scope: 'browser', phase: 'duplicate' };
         await this.update(result);
         control(this.channel, {
@@ -217,7 +224,11 @@ export class Receiver {
       };
       if (this.folder()) {
         try {
-          result = await saveToFolder(this.folder()!, result);
+          result = await saveToFolder(
+            this.folder()!,
+            result,
+            this.flattenDestination(),
+          );
         } catch {
           result.error =
             'Browser copy verified. Folder saving failed; choose a folder and retry saving.';
@@ -254,7 +265,7 @@ export class Receiver {
       throw new Error('Unexpected file bytes.');
     if (
       data.byteLength < 1 ||
-      data.byteLength > FRAME_BYTES ||
+      data.byteLength > (this.channel.frameBytes ?? FRAME_BYTES) ||
       this.buffered + data.byteLength > CHECKPOINT_BYTES ||
       record.bytes + this.buffered + data.byteLength > record.size
     )
@@ -609,15 +620,16 @@ export class Sender {
               throw new Error('Source file changed. Reselect it and retry.');
             }
             nextBlock = end < record.size ? read(end) : undefined;
-            const messageLimit = FRAME_BYTES;
             let burst = 0;
-            for (let pos = 0; pos < block.length; pos += messageLimit) {
+            for (let pos = 0; pos < block.length;) {
               await this.writable();
+              const messageLimit = this.channel.sendFrameBytes ?? FRAME_BYTES;
               this.channel.send(block.subarray(pos, pos + messageLimit));
               // bufferedAmount excludes some native SCTP/OS queues. Yield after
               // a small burst so both browsers can service packets and controls
               // instead of flooding those hidden buffers during slow start.
               burst += Math.min(messageLimit, block.length - pos);
+              pos += messageLimit;
               if (burst >= (this.channel.burstBytes ?? SEND_BUFFER_BYTES)) {
                 await pacer.yield(this.channel.pacingDelayMs ?? 4);
                 burst = 0;

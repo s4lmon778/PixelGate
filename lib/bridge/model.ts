@@ -1,5 +1,7 @@
 export const VERSION = 1;
 export const FRAME_BYTES = 16 * 1024;
+// Leave room for the striped header within the interoperable 64 KiB SCTP message.
+export const STRIPED_FRAME_BYTES = 64 * 1024 - 8;
 export const CHECKPOINT_BYTES = 1024 * 1024;
 export const TRANSFER_WINDOW_BYTES = 4 * CHECKPOINT_BYTES;
 export type Phase =

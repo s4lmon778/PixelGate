@@ -185,6 +185,19 @@ describe('stored and exported copies', () => {
     expect(result.scope).toBe('destination');
     expect(fs.files.get('旅行/IMG.HEIC')).toEqual(new Uint8Array([1, 2, 3]));
   });
+  it('saves Photos originals in one device folder, retaining collision protection and readback', async () => {
+    const fs = filesystem();
+    fs.files.set('IMG.HEIC', new Uint8Array([9, 9, 9]));
+    const result = await saveToFolder(fs.dir(), record, true);
+    expect(result.destinationPath).toBe('IMG (2).HEIC');
+    expect(result.relativePath).toBe('旅行/IMG.HEIC');
+    expect(fs.files.get('IMG.HEIC')).toEqual(new Uint8Array([9, 9, 9]));
+    expect(fs.files.get('IMG (2).HEIC')).toEqual(new Uint8Array([1, 2, 3]));
+    expect(
+      (await existingDestination(fs.dir(), record, undefined, true))?.scope,
+    ).toBe('destination');
+    expect(fs.writes).toEqual(['IMG (2).HEIC']);
+  });
   it('skips identical content only after hashing its actual stored copy', async () => {
     const fs = filesystem();
     fs.files.set('旅行/IMG.HEIC', new Uint8Array([1, 2, 3]));
@@ -232,6 +245,25 @@ describe('stored and exported copies', () => {
       ),
     ).toBe(1);
     expect(state.stored.get(record.id)?.scope).toBe('exported');
+  });
+  it('retains staging and avoids destination certification when the Photos folder is full', async () => {
+    const full = {
+      getFileHandle: async (_name: string, options?: { create?: boolean }) => {
+        if (!options?.create)
+          throw new DOMException('Missing', 'NotFoundError');
+        return {
+          createWritable: async () => {
+            throw new DOMException('Folder full', 'QuotaExceededError');
+          },
+        };
+      },
+    } as unknown as FileSystemDirectoryHandle;
+    await expect(saveToFolder(full, record, true)).rejects.toThrow(
+      'Folder full',
+    );
+    expect(state.bytes).toEqual(new Uint8Array([1, 2, 3]));
+    expect(state.stored.size).toBe(0);
+    expect(record.scope).toBe('browser');
   });
   it('pauses before quota exhaustion', async () => {
     navigator.storage.estimate = async () => ({ quota: 100, usage: 99 });

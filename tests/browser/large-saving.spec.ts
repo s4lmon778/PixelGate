@@ -39,20 +39,25 @@ for (const backend of ['opfs', 'indexeddb']) {
       userAgent:
         'Mozilla/5.0 (Linux; Android 13; Pixel) AppleWebKit/537.36 Chrome/106.0.0.0 Mobile Safari/537.36',
     };
-    const receiving =
-      backend === 'opfs'
-        ? await chromium.launchPersistentContext(
-            testInfo.outputPath('receiving-profile'),
-            {
-              ...contextOptions,
-              headless: true,
-              executablePath: process.env.PIXELGATE_TEST_CHROMIUM_EXECUTABLE,
-              args: ['--disable-features=WebRtcHideLocalIpsWithMdns'],
-            },
-          )
-        : await browser.newContext(contextOptions);
+    // The directory-write surrogate is OPFS, sharing this origin's quota with
+    // staging. Use a normal profile: Incognito caps this artificial combination
+    // below 800 MiB, while a user-selected device folder is outside that quota.
+    const receiving = await chromium.launchPersistentContext(
+      testInfo.outputPath('receiving-profile'),
+      {
+        ...contextOptions,
+        headless: true,
+        executablePath: process.env.PIXELGATE_TEST_CHROMIUM_EXECUTABLE,
+        args: ['--disable-features=WebRtcHideLocalIpsWithMdns'],
+      },
+    );
     if (backend === 'indexeddb')
       await receiving.addInitScript(() => {
+        Reflect.set(
+          window,
+          'testDirectory',
+          navigator.storage.getDirectory.bind(navigator.storage),
+        );
         Object.defineProperty(
           Object.getPrototypeOf(navigator.storage),
           'getDirectory',
@@ -62,6 +67,18 @@ for (const backend of ['opfs', 'indexeddb']) {
     const sending = await browser.newContext();
     await receiving.addInitScript(() => {
       Object.assign(window, { shareCalls: 0 });
+      // Exercise real streamed directory writes/readback. This substitutes only
+      // the native Android picker, which needs a physical-device acceptance test.
+      Object.defineProperty(window, 'showDirectoryPicker', {
+        configurable: true,
+        value: async () =>
+          (
+            await (
+              Reflect.get(window, 'testDirectory') ??
+              navigator.storage.getDirectory.bind(navigator.storage)
+            )()
+          ).getDirectoryHandle('pixelgate-test-photos', { create: true }),
+      });
       Object.defineProperty(Navigator.prototype, 'canShare', {
         configurable: true,
         value: () => true,
@@ -201,6 +218,95 @@ for (const backend of ['opfs', 'indexeddb']) {
       await expect(dialog.getByRole('status')).toContainText(
         'Verification pending',
       );
+      await dialog
+        .getByRole('button', { name: 'Close save options', exact: true })
+        .click();
+      await receiver
+        .getByRole('button', { name: 'Save to Photos folder', exact: true })
+        .click();
+      await expect(
+        receiver.getByRole('button', {
+          name: 'Save to Photos folder',
+          exact: true,
+        }),
+      ).toBeEnabled({ timeout: 60000 });
+      const savingProblem = await receiver.getByRole('alert').allTextContents();
+      expect(savingProblem).toEqual([]);
+      await expect(receiver.locator('.file-status').first()).toHaveText(
+        'Destination verified',
+        { timeout: 60000 },
+      );
+      await expect(
+        receiver.getByRole('button', {
+          name: 'Save to Photos folder',
+          exact: true,
+        }),
+      ).toBeEnabled();
+      const destinationDownload = receiver.waitForEvent('download');
+      await receiver.evaluate(async () => {
+        const root = await (
+          await (
+            Reflect.get(window, 'testDirectory') ??
+            navigator.storage.getDirectory.bind(navigator.storage)
+          )()
+        ).getDirectoryHandle('pixelgate-test-photos');
+        const file = await (
+          await root.getFileHandle('original-400MiB.mp4')
+        ).getFile();
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(file);
+        link.download = file.name;
+        link.click();
+      });
+      const destinationPath = await (await destinationDownload).path();
+      const destinationHash = createHash('sha256');
+      for await (const bytes of createReadStream(destinationPath!))
+        destinationHash.update(bytes);
+      expect(destinationHash.digest('hex')).toBe(expected);
+      const later = Buffer.alloc(128 * 1024 + 7, 0x46);
+      const laterHash = createHash('sha256').update(later).digest('hex');
+      await sender
+        .getByLabel('Choose files', { exact: true })
+        .setInputFiles({
+          name: 'later-original.jpg',
+          mimeType: 'image/jpeg',
+          buffer: later,
+        });
+      await sender
+        .getByRole('button', { name: 'Send files', exact: true })
+        .last()
+        .click();
+      // The selected Photos folder is reused without another export action.
+      await expect
+        .poll(
+          async () =>
+            receiver.evaluate(async () => {
+              try {
+                const root = await (
+                  await (
+                    Reflect.get(window, 'testDirectory') ??
+                    navigator.storage.getDirectory.bind(navigator.storage)
+                  )()
+                ).getDirectoryHandle('pixelgate-test-photos');
+                const file = await (
+                  await root.getFileHandle('later-original.jpg')
+                ).getFile();
+                return Array.from(
+                  new Uint8Array(
+                    await crypto.subtle.digest(
+                      'SHA-256',
+                      await file.arrayBuffer(),
+                    ),
+                  ),
+                  (byte) => byte.toString(16).padStart(2, '0'),
+                ).join('');
+              } catch {
+                return '';
+              }
+            }),
+          { timeout: 30000 },
+        )
+        .toBe(laterHash);
       expect(errors).toEqual([]);
     } finally {
       await sending.close();
@@ -219,6 +325,20 @@ test('125 selected originals stay queued across native handoffs and fifty-file d
   );
   await page.addInitScript(() => {
     Object.assign(window, { handedOff: [] as string[][] });
+    Object.defineProperty(navigator, 'userAgent', {
+      configurable: true,
+      value:
+        'Mozilla/5.0 (Linux; Android 10; Pixel XL) AppleWebKit/537.36 Chrome/138.0.0.0 Mobile Safari/537.36',
+    });
+    if (typeof Reflect.get(window, 'showDirectoryPicker') === 'function')
+      Object.defineProperty(window, 'showDirectoryPicker', {
+        configurable: true,
+        value: async () =>
+          (await navigator.storage.getDirectory()).getDirectoryHandle(
+            'pixelgate-test-photos',
+            { create: true },
+          ),
+      });
     Object.defineProperty(Navigator.prototype, 'canShare', {
       configurable: true,
       value: ({ files }: ShareData) => !!files?.length && files.length <= 10,
@@ -361,5 +481,41 @@ test('125 selected originals stay queued across native handoffs and fifty-file d
     const hash = createHash('sha256');
     for await (const bytes of createReadStream(path!)) hash.update(bytes);
     expect(hash.digest('hex')).toBe(originalHash);
+  }
+  if (browserName === 'chromium') {
+    await dialog
+      .getByRole('button', { name: 'Close save options', exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: 'Save to Photos folder', exact: true })
+      .click();
+    await expect(
+      page.getByRole('button', { name: 'Save to Photos folder', exact: true }),
+    ).toBeEnabled({ timeout: 30000 });
+    const saved = await page.evaluate(async () => {
+      const root = await (
+        await navigator.storage.getDirectory()
+      ).getDirectoryHandle('pixelgate-test-photos');
+      const hashes: string[] = [];
+      for (let i = 0; i < 125; i++) {
+        const file = await (
+          await root.getFileHandle(`photo-${i}.jpg`)
+        ).getFile();
+        hashes.push(
+          Array.from(
+            new Uint8Array(
+              await crypto.subtle.digest('SHA-256', await file.arrayBuffer()),
+            ),
+            (byte) => byte.toString(16).padStart(2, '0'),
+          ).join(''),
+        );
+      }
+      return hashes;
+    });
+    expect(saved).toHaveLength(125);
+    expect(saved.every((hash) => hash === originalHash)).toBe(true);
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Photos folder:' }),
+    ).toContainText('Future received files save here automatically');
   }
 });

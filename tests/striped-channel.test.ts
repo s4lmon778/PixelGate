@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StripedChannel } from '../lib/bridge/striped-channel';
-import { FRAME_BYTES, TRANSFER_WINDOW_BYTES } from '../lib/bridge/model';
+import {
+  FRAME_BYTES,
+  STRIPED_FRAME_BYTES,
+  TRANSFER_WINDOW_BYTES,
+} from '../lib/bridge/model';
 
 class Channel extends EventTarget {
   label = 'pixelgate-bulk-v1';
@@ -97,6 +101,48 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe('parallel transport compatibility, ordering, and fallback', () => {
+  it('accepts larger messages only after mutual receipt/frame negotiation', () => {
+    const primary = new Channel();
+    const transport = new StripedChannel(primary.native(), 'receive');
+    opened.push(transport);
+    const received: ArrayBuffer[] = [];
+    transport.onmessage = ({ data }) => {
+      if (data instanceof ArrayBuffer) received.push(data);
+    };
+    primary.receive(
+      JSON.stringify({
+        type: 'hello',
+        version: 1,
+        stripedTransport: 1,
+        stripedReceipts: 1,
+        stripedFrameBytes: STRIPED_FRAME_BYTES,
+      }),
+    );
+    expect(transport.frameBytes).toBe(STRIPED_FRAME_BYTES);
+    primary.receive(JSON.stringify({ type: 'pg-striped-start' }));
+    primary.receive(frame(0, new Uint8Array(STRIPED_FRAME_BYTES).fill(19)));
+    expect(received[0].byteLength).toBe(STRIPED_FRAME_BYTES);
+    expect(new Uint8Array(received[0]).every((byte) => byte === 19)).toBe(true);
+    primary.receive(frame(1, new Uint8Array(STRIPED_FRAME_BYTES + 1)));
+    expect(primary.readyState).toBe('closed');
+  });
+  it('retains 16 KiB frames for a receipt-capable older client', () => {
+    const primary = new Channel();
+    const transport = new StripedChannel(primary.native(), 'receive');
+    opened.push(transport);
+    primary.receive(
+      JSON.stringify({
+        type: 'hello',
+        version: 1,
+        stripedTransport: 1,
+        stripedReceipts: 1,
+      }),
+    );
+    expect(transport.frameBytes).toBe(FRAME_BYTES);
+    primary.receive(JSON.stringify({ type: 'pg-striped-start' }));
+    primary.receive(frame(0, new Uint8Array(FRAME_BYTES + 1)));
+    expect(primary.readyState).toBe('closed');
+  });
   it('tries the user-supplied local address on a bulk peer without exporting it', async () => {
     const primary = new Channel();
     const transport = new StripedChannel(
