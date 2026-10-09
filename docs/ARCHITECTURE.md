@@ -33,6 +33,12 @@ The version 1 ordered channel carries JSON controls and binary frames:
 
 Source hashes are computed incrementally. File IDs hash the source SHA-256 plus relative path. One active transfer uses 16 KiB frames and a 1 MiB receiver checkpoint buffer; one subsequent file hashes ahead. Sender buffering is bounded. Worker flush precedes the IndexedDB checkpoint commit, which precedes acknowledgment.
 
+After approval, clients optionally negotiate two additional independent WebRTC peer connections over the existing encrypted channel. Binary frames use whichever of the three open connections has the smallest outbound buffer. An eight-byte sequence header and sequenced controls restore the original ordered stream before the transfer engine sees it. The reassembly window and retained retransmission packets are bounded. Losing a bulk connection retransmits its unreceived packets over the original connection; duplicate packets are discarded. These transport receipts do not advance durable file progress or certify integrity.
+
+An active parallel transport advertises a four-checkpoint (4 MiB) receive window. The sender overlaps delivery with checkpoint writes and replies, but validates each durable acknowledgment in order and waits for all of them before finishing. The original connection uses one checkpoint at a time when extra connections are unavailable; older clients ignore the optional hello capability and use the unchanged raw protocol. Files of at least 2 MiB give lane setup up to 500 ms before starting; connection setup otherwise runs alongside preparation. Unopened lanes are disposed after five seconds. Frames remain at most 16 KiB of payload, sender buffering is limited to 64 KiB in aggregate, and a 64 KiB burst yields for 4 ms to avoid overwhelming hidden native queues.
+
+Independent peer connections have separate SCTP congestion state, but ICE and the operating system choose their routes. This does not force different Wi-Fi interfaces or implement OS-level bandwidth bonding. Pairing, approval, file identity, on-disk formats, and independent stored-file verification remain unchanged.
+
 After reconnect, the sender rehashes selected sources and the receiver owns the resume offset. Unacknowledged tails are truncated to the last stored checkpoint. Missing retained copies are retransferred. Verified destination/staged duplicates are reread before a skip is acknowledged.
 
 ## Storage and verification

@@ -10,6 +10,14 @@ Timeout messages automatically distinguish incomplete description exchange, reje
 
 For advanced local-discovery diagnosis, the receiver can revoke the failed connection and enter the **sender's local IPv4 address** under **Advanced network settings** before creating a fresh code. Find the address in the sending device's network settings for its current Wi-Fi or wired connection. The address is used locally to try the negotiated UDP application port; it is not added to pairing metadata, history, or exported reports. This optional route cannot bypass blocked device traffic or provide IPv6-only connectivity. Normal ICE signaling already exchanges network information.
 
+## Transfers are much slower than Wi-Fi internet downloads
+
+Reload both devices to use the same current build. PixelGate negotiates independent parallel peer connections, reassembles their chunks in order, and overlaps up to four durable checkpoints. Older clients and failed extra connections keep a single connection; no stored files or history need to be cleared. A dropped bulk connection retransmits unreceived packets over the original route.
+
+Internet-download speed measures a different path from device-to-device transfer. Direct transfers also depend on source reads, receiver storage, packet loss, and browser scheduling. Keep both tabs in the foreground and compare one reasonably large synthetic file; many small files include repeated hashing, file-open, and verification work. A trusted local network or hotspot can help distinguish a network-dependent slowdown from storage or device limits.
+
+Parallel connections do not select Wi-Fi networks or combine Wi-Fi and cellular bandwidth. Browsers leave interface routing to ICE and the OS. Performance measurements and their injected latency are recorded in [Validation](VALIDATION.md); they are not a guaranteed physical-device speed.
+
 ## What does “Estimated staging space” mean?
 
 It is the browser-reported quota minus estimated usage for the site's origin, not reserved free disk space. Estimates vary across browsers, profiles, and devices; actual free disk space may be lower. Each file must fit alongside copies still staged in that browser, with headroom for checkpoints and records.

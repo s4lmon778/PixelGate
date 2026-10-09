@@ -1,5 +1,16 @@
 # Validation record
 
+## Parallel transfer transport · 0.3.14 · October 8, 2026
+
+These controlled browser measurements do not establish physical Wi-Fi speed. Deployment provenance is available in the hosted `build.json`.
+
+- Strict TypeScript, ESLint, and **125 unit/integration tests** pass. New tests cover bounded pipeline credit, legacy window fallback, invalid windows and acknowledgments, immediate buffer-event refill, cancellation/disconnection, queue overflow, ordered reassembly, duplicate suppression, resource limits, independent peer connections, lane failure retransmission, and unavailable extra connections. Injected byte-write and checkpoint-metadata failures retain the committed prefix, truncate written tails on resume, and independently hash the resumed copy.
+- A real Chromium transfer fixture uses an 8 MiB + 111-byte synthetic file and delays each durable checkpoint reply by 150 ms. The baseline disables the optional transport capability and receive window; both sides use the same updated engine and pacing. First payload send through finish request took **2.127 s** with the single-connection protocol and **0.824 s** with parallel transport, approximately **2.58× faster** (3.76 versus 9.70 MiB/s). This is added application ACK delay, not full-network latency or an emulated Wi-Fi link. Source hashing, lane setup, and final readback time are excluded from the timed interval.
+- Closing a bulk lane during that transfer still completes with a matching independent stored-file hash (0.845 s). Rejecting extra channel creation completes through the original raw connection (2.139 s). With no added checkpoint delay, the same baseline and parallel cases measured **0.745 s** and **0.699 s** (10.74 and 11.45 MiB/s). Every scenario validates all stored bytes using Web Crypto against an independent Node SHA-256.
+- **20 browser cases pass**, with four deliberate project skips. Real-peer checks cover approval, independent readback, destination/export behavior, refresh/reconnect, and both OPFS and compatibility storage across Chromium, Firefox, and WebKit. The compatibility fixture now opens the existing collapsed **How storage works** disclosure before checking its hint; the product UI is unchanged. No physical multi-interface or multi-Wi-Fi bonding claim follows from these engine checks.
+
+**Reproduce:** `npm run build` followed by `npm run test:browser -- tests/browser/throughput.spec.ts --project=chromium`. The fixture saves `checkpoint-throughput.json` under its `test-results/` directory.
+
 ## Quick-start walkthrough · October 7, 2026
 
 - Recorded a real 144,000-byte synthetic text-file transfer between fresh Chromium profiles through an isolated local PeerServer. Receiver consent, browser-copy verification, actual download, independent Node SHA-256 comparison, reselected exported-copy verification, and verified-staging cleanup complete successfully. Captured signaling contains neither the fixture filename nor its hash.

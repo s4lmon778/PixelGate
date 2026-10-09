@@ -217,10 +217,14 @@ for (const mode of [
         await receiver
           .getByRole('button', { name: 'Create a connection', exact: true })
           .click();
-        if (mode === 'indexeddb' || safariReceiver)
+        if (mode === 'indexeddb' || safariReceiver) {
+          await receiver
+            .getByText('How storage works', { exact: true })
+            .click();
           await expect(
             receiver.getByLabel('Compatibility storage', { exact: true }),
           ).toBeVisible();
+        }
         const displayedCode = receiver.getByLabel('Pairing code', {
           exact: true,
         });
@@ -704,7 +708,7 @@ test('real peer transfer, readback, manual export verification, and reconnect', 
   await expect(receiver.getByText('Connected', { exact: true })).toBeVisible({
     timeout: 45000,
   });
-  const bytes = Buffer.alloc(2 * 1024 * 1024 + 111);
+  const bytes = Buffer.alloc(8 * 1024 * 1024 + 111);
   for (let i = 0; i < bytes.length; i++) bytes[i] = i % 251;
   const expected = createHash('sha256').update(bytes).digest('hex');
   await sender.locator('input[aria-label="Choose files"]').setInputFiles({

@@ -6,18 +6,23 @@ Design rationale, implementation entry points, and regression evidence for Pixel
 
 The versioned `Control` discriminated union separates JSON control messages from binary file frames. A `hello` handshake precedes manifests and payloads; the sender validates receiver offsets and checkpoint acknowledgments before advancing.
 
-| Mechanism           | Current behavior                                                  | Reason                                                                               |
-| ------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| File concurrency    | One active transfer; one subsequent file hashes ahead             | Overlap preparation with transfer while limiting payload work                        |
-| Hashing reads       | Incremental 1 MiB slices in a worker                              | Hash large sources without allocating the entire file on the UI thread               |
-| Transport frames    | Maximum 16 KiB                                                    | Bound each data-channel message and validate incoming frame sizes                    |
-| Sender backpressure | Wait while `bufferedAmount` exceeds 512 KiB                       | Avoid continuously feeding a slower receiver or network                              |
-| Durable checkpoints | Up to 1 MiB, with acknowledgment before the next block            | Bound unacknowledged payload and make restart offsets explicit                       |
-| Receiver dispatch   | Serialized processing; close if more than 160 messages are queued | Prevent asynchronous writes from reordering the receive stream and bound queued work |
+| Mechanism           | Current behavior                                                                                              | Reason                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| File concurrency    | One active transfer; one subsequent file hashes ahead                                                         | Overlap preparation with transfer while limiting payload work                       |
+| Hashing reads       | Incremental 1 MiB slices in a worker                                                                          | Hash large sources without allocating the entire file on the UI thread              |
+| Transport frames    | Maximum 16 KiB                                                                                                | Bound each data-channel message and validate incoming frame sizes                   |
+| Sender backpressure | Event-driven refill; aggregate `bufferedAmount` capped at 64 KiB plus one frame; 64 KiB bursts yield for 4 ms | Avoid flooding native queues while keeping network delivery and storage overlapped  |
+| Durable checkpoints | Up to 1 MiB; up to four outstanding checkpoints when parallel transport is active                             | Bound unacknowledged payload while avoiding a round-trip stop after each checkpoint |
+| Receiver dispatch   | Serialized processing; at most 4 MiB of queued binary payload and 288 messages                                | Preserve storage order and bound queued work                                        |
+| Parallel transport  | Original connection plus two independently negotiated peer connections; ordered reassembly and retransmission | Reduce dependence on one SCTP congestion window without changing the storage engine |
 
 These bounds concern payload processing, not total browser memory: queue metadata, runtime overhead, and browser-managed buffers still consume resources. Throughput depends on hashing, storage, the browser, and the network; the repository does not claim an unmeasured performance target.
 
-**Code:** [protocol types and constants](../lib/bridge/model.ts), [sender/receiver engine](../lib/bridge/transfer.ts), [incremental hash worker](../lib/bridge/hash.worker.ts).
+The transport borrows the sequence-and-reassembly pattern used by [Multipath TCP](https://www.rfc-editor.org/rfc/rfc8684.html#section-3.3.1) and piece-based transfers such as [BitTorrent](https://www.bittorrent.org/beps/bep_0003.html). Additional channels on the same peer connection would share SCTP congestion state, so bulk lanes use separate peer connections. Browser WebRTC does not provide SCTP multihoming ([RFC 8831](https://www.rfc-editor.org/rfc/rfc8831.html#section-5)); parallel connections can still use the same physical network. The raw version 1 protocol remains the fallback for older peers and failed lane setup.
+
+Transport acknowledgments release retransmission buffers only. Durable ACKs still follow write/flush and manifest commit, and complete-file readback still decides verification. After a failed checkpoint, queued payload is discarded until the next ordered manifest, without repeating the same error for every in-flight frame. A metadata failure retains the previous committed offset even if its byte tail reached storage; resume truncates that tail.
+
+**Code:** [protocol types and constants](../lib/bridge/model.ts), [sender/receiver engine](../lib/bridge/transfer.ts), [parallel transport](../lib/bridge/striped-channel.ts), [incremental hash worker](../lib/bridge/hash.worker.ts), [controlled browser throughput/failure fixture](../tests/browser/throughput.spec.ts).
 
 ## 2. Acknowledge persisted progress, not just received bytes
 

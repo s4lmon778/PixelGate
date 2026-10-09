@@ -1,17 +1,32 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import type { RecordFile, QueuedFile } from '../lib/bridge/model';
+import {
+  CHECKPOINT_BYTES,
+  FRAME_BYTES,
+  TRANSFER_WINDOW_BYTES,
+  type Control,
+  type RecordFile,
+  type QueuedFile,
+} from '../lib/bridge/model';
 const state = vi.hoisted(() => ({
   files: new Map<string, RecordFile>(),
   bytes: new Map<string, Uint8Array>(),
   corrupt: false,
   destination: false,
   opens: [] as number[],
+  beforeWrite: undefined as (() => Promise<void>) | undefined,
+  failPutAtBytes: undefined as number | undefined,
 }));
 vi.mock('../lib/bridge/database', () => ({
   local: {
     get: async (id: string) => state.files.get(id),
-    put: async (r: RecordFile) => state.files.set(r.id, { ...r }),
+    put: async (r: RecordFile) => {
+      if (r.phase === 'transferring' && r.bytes === state.failPutAtBytes) {
+        state.failPutAtBytes = undefined;
+        throw new Error('Checkpoint metadata failed');
+      }
+      state.files.set(r.id, { ...r });
+    },
     putSender: async () => {},
     session: async () => {},
   },
@@ -36,6 +51,7 @@ vi.mock('../lib/bridge/storage', () => ({
       );
     };
     write = async (offset: number, data: ArrayBuffer) => {
+      await state.beforeWrite?.();
       const block = new Uint8Array(data);
       const old = state.bytes.get(this.id)!;
       const bytes = new Uint8Array(offset + block.length);
@@ -69,11 +85,17 @@ import { Sender, Receiver } from '../lib/bridge/transfer';
 class Channel {
   readyState = 'open';
   bufferedAmount = 0;
+  bufferedAmountLowThreshold = 0;
   binaryType = 'arraybuffer';
   onmessage?: (e: { data: unknown }) => void;
   peer!: Channel;
   listeners = new Map<string, (() => void)[]>();
+  transform?: (message: Control) => Control;
+  binarySent = 0;
   send(value: string | Uint8Array) {
+    if (typeof value === 'string' && this.transform)
+      value = JSON.stringify(this.transform(JSON.parse(value)));
+    if (typeof value !== 'string') this.binarySent += value.byteLength;
     const data = typeof value === 'string' ? value : value.slice().buffer;
     queueMicrotask(() => {
       if (this.peer.readyState === 'open') this.peer.onmessage?.({ data });
@@ -81,6 +103,9 @@ class Channel {
   }
   addEventListener(type: string, fn: () => void) {
     this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn]);
+  }
+  emit(type: string) {
+    for (const fn of this.listeners.get(type) ?? []) fn();
   }
   close() {
     for (const c of [this, this.peer]) {
@@ -126,8 +151,197 @@ beforeEach(() => {
   state.opens = [];
   state.corrupt = false;
   state.destination = false;
+  state.beforeWrite = undefined;
+  state.failPutAtBytes = undefined;
 });
 describe('receiver-owned verification and checkpoints', () => {
+  it('truncates a written tail after checkpoint metadata fails', async () => {
+    state.failPutAtBytes = 2 * CHECKPOINT_BYTES;
+    const p = peers(),
+      q = queue(TRANSFER_WINDOW_BYTES + 123);
+    await p.sender.run(q, 'manifest-error');
+    await p.receiver.close();
+    expect(q[0].phase).toBe('failed');
+    expect(state.files.get(q[0].record!.id)?.bytes).toBe(CHECKPOINT_BYTES);
+    expect(state.bytes.get(q[0].record!.id)?.length).toBe(2 * CHECKPOINT_BYTES);
+    expect(p.errors).toHaveLength(1);
+    const resumed = peers();
+    await resumed.sender.run(q, 'manifest-resume');
+    expect(state.opens).toEqual([0, CHECKPOINT_BYTES]);
+    expect(q[0].phase).toBe('verified');
+    expect(
+      createHash('sha256')
+        .update(state.bytes.get(q[0].record!.id)!)
+        .digest('hex'),
+    ).toBe(q[0].record!.sha256);
+    await resumed.receiver.close();
+  });
+  it('retains the durable prefix after a storage error with later checkpoints in flight', async () => {
+    let writes = 0;
+    state.beforeWrite = async () => {
+      if (++writes === 2)
+        throw new DOMException('Storage is full', 'QuotaExceededError');
+    };
+    const p = peers(),
+      q = queue(TRANSFER_WINDOW_BYTES + 123);
+    await p.sender.run(q, 'quota');
+    await p.receiver.close();
+    expect(q[0].phase).toBe('failed');
+    expect(q[0].record?.bytes).toBe(CHECKPOINT_BYTES);
+    expect(state.files.get(q[0].record!.id)?.bytes).toBe(CHECKPOINT_BYTES);
+    expect(p.errors).toHaveLength(1);
+    state.beforeWrite = undefined;
+    const resumed = peers();
+    await resumed.sender.run(q, 'quota-resume');
+    expect(state.opens).toEqual([0, CHECKPOINT_BYTES]);
+    expect(q[0].phase).toBe('verified');
+    expect(
+      createHash('sha256')
+        .update(state.bytes.get(q[0].record!.id)!)
+        .digest('hex'),
+    ).toBe(q[0].record!.sha256);
+    await resumed.receiver.close();
+  });
+  it('fills only the advertised window while storage stalls, then verifies every byte', async () => {
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    state.beforeWrite = () => blocked;
+    const p = peers(),
+      q = queue(TRANSFER_WINDOW_BYTES + CHECKPOINT_BYTES + 123);
+    const run = p.sender.run(q, 'pipeline');
+    try {
+      await vi.waitFor(() =>
+        expect(p.a.binarySent).toBe(TRANSFER_WINDOW_BYTES),
+      );
+      expect(q[0].record?.bytes).toBe(0);
+      expect(state.files.get(q[0].record!.id)?.bytes).toBe(0);
+      expect(p.errors).toEqual([]);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(p.a.binarySent).toBe(TRANSFER_WINDOW_BYTES);
+    } finally {
+      release();
+    }
+    await run;
+    expect(q[0].phase).toBe('verified');
+    expect(p.a.binarySent).toBe(q[0].file.size);
+    expect(
+      createHash('sha256')
+        .update(state.bytes.get(q[0].record!.id)!)
+        .digest('hex'),
+    ).toBe(q[0].record!.sha256);
+    await p.receiver.close();
+  });
+  it('keeps one checkpoint in flight with an older receiver', async () => {
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    state.beforeWrite = () => blocked;
+    const p = peers(),
+      q = queue(CHECKPOINT_BYTES + 123);
+    p.b.transform = (message) => {
+      if (message.type === 'ready') delete message.receiveWindowBytes;
+      return message;
+    };
+    const run = p.sender.run(q, 'legacy');
+    try {
+      await vi.waitFor(() => expect(p.a.binarySent).toBe(CHECKPOINT_BYTES));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(p.a.binarySent).toBe(CHECKPOINT_BYTES);
+      expect(q[0].record?.bytes).toBe(0);
+    } finally {
+      release();
+    }
+    await run;
+    expect(q[0].phase).toBe('verified');
+    await p.receiver.close();
+  });
+  it.each([
+    0,
+    CHECKPOINT_BYTES + 1,
+    TRANSFER_WINDOW_BYTES + CHECKPOINT_BYTES,
+    Infinity,
+  ])(
+    'rejects an invalid receive window of %s before sending payload',
+    async (windowBytes) => {
+      const p = peers(),
+        q = queue(100);
+      p.b.transform = (message) =>
+        message.type === 'ready'
+          ? { ...message, receiveWindowBytes: windowBytes }
+          : message;
+      await p.sender.run(q, 'invalid-window');
+      expect(q[0].phase).toBe('failed');
+      expect(q[0].error).toContain('invalid transfer window');
+      expect(p.a.binarySent).toBe(0);
+      await p.receiver.close();
+    },
+  );
+  it('rejects an ACK that skips an outstanding durable checkpoint', async () => {
+    const p = peers(),
+      q = queue(CHECKPOINT_BYTES + 123);
+    p.b.transform = (message) =>
+      message.type === 'ack'
+        ? { ...message, offset: message.offset + 1 }
+        : message;
+    await p.sender.run(q, 'invalid-ack');
+    expect(q[0].phase).toBe('failed');
+    expect(q[0].error).toContain('checkpoint does not match');
+    expect(q[0].record?.bytes).toBe(0);
+    await p.receiver.close();
+  });
+  it('refills on bufferedamountlow without waiting for a polling timer', async () => {
+    const p = peers(),
+      q = queue(100);
+    p.a.bufferedAmount = CHECKPOINT_BYTES;
+    const run = p.sender.run(q, 'backpressure');
+    await vi.waitFor(() => expect(q[0].record?.phase).toBe('transferring'));
+    expect(p.a.binarySent).toBe(0);
+    p.a.bufferedAmount = p.a.bufferedAmountLowThreshold;
+    p.a.emit('bufferedamountlow');
+    await run;
+    expect(q[0].phase).toBe('verified');
+    await p.receiver.close();
+  });
+  it.each(['cancel', 'close'] as const)(
+    'wakes a blocked sender on %s',
+    async (action) => {
+      const p = peers(),
+        q = queue(100);
+      p.a.bufferedAmount = CHECKPOINT_BYTES;
+      const run = p.sender.run(q, 'blocked');
+      await vi.waitFor(() => expect(q[0].record?.phase).toBe('transferring'));
+      if (action === 'cancel') p.sender.cancel();
+      else p.a.close();
+      await run;
+      expect(q[0].phase).toBe(action === 'cancel' ? 'cancelled' : 'paused');
+      expect(p.a.binarySent).toBe(0);
+      await p.receiver.close();
+    },
+  );
+  it('rejects receiver queue overflow with bounded payload memory', async () => {
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    state.beforeWrite = () => blocked;
+    const p = peers(),
+      q = queue(TRANSFER_WINDOW_BYTES + FRAME_BYTES);
+    const record = await p.sender.prepare(q[0], 'overflow');
+    p.a.send(JSON.stringify({ type: 'start', file: record }));
+    await vi.waitFor(() => expect(state.opens).toEqual([0]));
+    for (let i = 0; i <= TRANSFER_WINDOW_BYTES / FRAME_BYTES; i++)
+      p.a.send(new Uint8Array(FRAME_BYTES));
+    try {
+      await vi.waitFor(() => expect(p.a.readyState).toBe('closed'));
+      expect(p.errors[0].message).toContain('receiving buffer');
+    } finally {
+      release();
+    }
+    await p.receiver.close();
+  });
   it('acknowledges reread destination copies without staging or retransmission', async () => {
     state.destination = true;
     const p = peers(() => {}, {} as FileSystemDirectoryHandle),

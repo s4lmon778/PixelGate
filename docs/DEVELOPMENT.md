@@ -31,6 +31,8 @@ npm run test:browser -- --project=chromium --grep compatibility
 
 ## Working with the repository
 
+For a controlled parallel-transfer comparison, run `npm run test:browser -- tests/browser/throughput.spec.ts --project=chromium` after building. It compares optional parallel transport with the raw single-connection protocol, delays durable ACKs by 150 ms, closes a bulk lane mid-transfer, rejects extra lane creation, and checks local transfers without added ACK delay. Each case independently hashes stored bytes. Timing spans first payload send through finish request and excludes setup, source hashing, and final readback; it is not a physical Wi-Fi benchmark. Measurements are attached as `checkpoint-throughput.json` in `test-results/`.
+
 React components and appearance logic live in `src/`; the transfer engine, persistence, hashing workers, and protocol types live in `lib/bridge/`. Unit/integration fixtures live in `tests/`, and real browser fixtures live in `tests/browser/`. Production output, browser reports, dependencies, and environment files are ignored.
 
 Use synthetic files for debugging. Changes to integrity, persistence, pairing, or recovery should include independent readback or fault-injection evidence. Record actual device versions and measurements separately from browser-engine tests.

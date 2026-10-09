@@ -23,7 +23,7 @@ PixelGate moves files between computers, phones, and tablets using their browser
 
 The app is a static **TypeScript / React / Vite** build hosted on GitHub Pages. **PeerJS** exchanges connection metadata for six-digit pairing; it carries no file payloads. No native app, account, cloud media storage, or TURN relay is required.
 
-> **Status:** experimental. The current app is **0.3.13**. Automated checks exercise integrity and recovery; browser capabilities, available storage, and network policies still determine usability. Large-file and physical-device boundaries are documented below.
+> **Status:** experimental. The current app is **0.3.14**. Automated checks exercise integrity and recovery; browser capabilities, available storage, and network policies still determine usability. Large-file and physical-device boundaries are documented below.
 
 <div align="center">
   <img src="docs/assets/controls-demo.gif" alt="PixelGate's screen-awake switch animates between sun and moon while the appearance menu switches between Light and Dark" width="960" />
@@ -79,6 +79,7 @@ Screenshots show the 0.3.13 interface with empty queues, including paired saving
 - **Pairing and approval:** six-digit entry, QR links, receiver consent, expiry, and revocation. Copy/paste pairing is available when signaling is unavailable.
 - **Files and folders:** multiple selection, recursive drops where supported, Unicode filenames, preserved relative paths, and destination-path validation.
 - **Integrity and recovery:** incremental worker hashing, independent stored-file readback, durable checkpoints, and resume after source reselection and rehashing.
+- **Parallel transfers:** sequence file chunks across independent peer connections, restore their order at the receiver, and overlap up to four checkpoints, with single-connection fallback.
 - **Saving:** direct folder writes with destination readback, native save/share where supported, verified downloads, duplicate checks, and numbered conflicting filenames.
 - **Batch controls:** pause/resume/cancel, progress, export and saved-copy verification, staging cleanup, local history, and JSON/CSV/text reports.
 - **Accessible interface:** responsive paired action rows, keyboard controls, Light / Dark / System appearance, reduced-motion support, expandable help, and an optional screen-awake switch.
@@ -111,6 +112,7 @@ sequenceDiagram
     Note over S,R: Receiver approval and open channel required
     S->>R: Manifest and source SHA-256
     R-->>S: Receiver-owned resume offset
+    Note over S,R: Optional parallel connections; up to four checkpoints in flight
     loop Each checkpoint, up to 1 MiB
         S->>R: Binary frames, up to 16 KiB
         R->>W: Persist bytes
@@ -154,14 +156,14 @@ flowchart TD
     class X blocked
 ```
 
-| Decision                    | Implementation and reason                                                                                                                                                                                | Evidence                                                                                                     |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Bounded pipeline            | One active file, one hash ahead, 16 KiB frames, 1 MiB checkpoints, and 512 KiB sender backpressure constrain payload work.                                                                               | [Transfer engine](lib/bridge/transfer.ts), [protocol types](lib/bridge/model.ts)                             |
-| Acknowledge persisted bytes | Worker write/flush or chunk transaction completes before manifest commit and ACK. Resume truncates uncommitted tails rather than trusting a progress counter.                                            | [Recovery fixtures](tests/transfer.test.ts), [real chunk-store tests](tests/browser/indexed-staging.spec.ts) |
-| Capability-tested storage   | A full 1 MiB write/read probe selects usable OPFS or IndexedDB. Blob-cloning restrictions permit a bounded buffer retry after transaction abort; quota and integrity failures do not trigger that retry. | [Preflight tests](tests/staging-preflight.test.ts), [checkpoint store](lib/bridge/indexed-staging.ts)        |
-| Copy-specific verification  | Transfer `phase` is distinct from `scope`: `none`, `browser`, `destination`, or `exported`. Download/share initiation leaves final-copy verification pending.                                            | [Record model](lib/bridge/model.ts), [saved-copy tests](tests/storage.test.ts)                               |
-| Serialized ICE delivery     | A bounded candidate inbox waits for remote SDP, deduplicates candidates, and serializes additions, preventing an answer/candidate race.                                                                  | [Candidate inbox](lib/bridge/candidate-inbox.ts), [browser fault injection](tests/browser/bridge.spec.ts)    |
-| Explicit trust boundaries   | Approval gates the transfer engine; pairing inputs and queues are bounded; path validation rejects unsafe destinations; diagnostics omit raw addresses and file information.                             | [Connection lifecycle](lib/bridge/code-connection.ts), [Security](SECURITY.md)                               |
+| Decision                    | Implementation and reason                                                                                                                                                                                | Evidence                                                                                                                              |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Bounded pipeline            | One active file, one hash ahead, 16 KiB payload frames, 1 MiB durable checkpoints, up to four checkpoints in flight, and 64 KiB aggregate sender backpressure constrain payload work.                    | [Transfer engine](lib/bridge/transfer.ts), [parallel transport](lib/bridge/striped-channel.ts), [protocol types](lib/bridge/model.ts) |
+| Acknowledge persisted bytes | Worker write/flush or chunk transaction completes before manifest commit and ACK. Resume truncates uncommitted tails rather than trusting a progress counter.                                            | [Recovery fixtures](tests/transfer.test.ts), [real chunk-store tests](tests/browser/indexed-staging.spec.ts)                          |
+| Capability-tested storage   | A full 1 MiB write/read probe selects usable OPFS or IndexedDB. Blob-cloning restrictions permit a bounded buffer retry after transaction abort; quota and integrity failures do not trigger that retry. | [Preflight tests](tests/staging-preflight.test.ts), [checkpoint store](lib/bridge/indexed-staging.ts)                                 |
+| Copy-specific verification  | Transfer `phase` is distinct from `scope`: `none`, `browser`, `destination`, or `exported`. Download/share initiation leaves final-copy verification pending.                                            | [Record model](lib/bridge/model.ts), [saved-copy tests](tests/storage.test.ts)                                                        |
+| Serialized ICE delivery     | A bounded candidate inbox waits for remote SDP, deduplicates candidates, and serializes additions, preventing an answer/candidate race.                                                                  | [Candidate inbox](lib/bridge/candidate-inbox.ts), [browser fault injection](tests/browser/bridge.spec.ts)                             |
+| Explicit trust boundaries   | Approval gates the transfer engine; pairing inputs and queues are bounded; path validation rejects unsafe destinations; diagnostics omit raw addresses and file information.                             | [Connection lifecycle](lib/bridge/code-connection.ts), [Security](SECURITY.md)                                                        |
 
 OPFS and manifest metadata are separate persistence systems. Their ordering supports refresh/reconnect recovery; it does not establish OS power-loss durability. File identity includes both content hash and relative path, and retained verified copies must pass readback before they can be skipped.
 
@@ -171,15 +173,15 @@ The [engineering guide](docs/ENGINEERING.md) explains these tradeoffs with sourc
 
 ## Validation and boundaries
 
-Recorded through **0.3.13 on October 7, 2026** across full and targeted runs. These are executed checks, not a continuously updated CI badge.
+Recorded through **0.3.14 on October 8, 2026** across full and targeted runs. These are executed checks, not a continuously updated CI badge.
 
-| Evidence                        | What was checked                                                                                                                                                |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **103 unit/integration tests**  | Independent hashes, corruption, changed sources, checkpoints, duplicates, unsafe paths, permission/quota failures, pairing lifecycle, and deployment provenance |
-| Browser integration             | Real WebRTC transfers, approval, QR decoding, independent stored/exported hashes, interruption and refresh recovery, and corruption rejection                   |
-| Interface and capability checks | Mobile/desktop layouts, enlarged text, appearance, native-share fixtures, download bytes, wake-lock lifecycle, and history preservation                         |
-| Legacy engine                   | Actual Chromium 101 compatibility storage, public signaling, downloads, checkpoint recovery, and current layout controls                                        |
-| Physical-device reports         | Completed iPhone-to-Mac hotspot transfer; receiving, downloading, and opening files on older Pixel/iOS devices                                                  |
+| Evidence                        | What was checked                                                                                                                                        |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **125 unit/integration tests**  | Independent hashes, recovery, bounded transfer windows, ordered parallel transport, lane failure fallback, pairing lifecycle, and deployment provenance |
+| Browser integration             | Real WebRTC transfers, approval, QR decoding, independent stored/exported hashes, interruption and refresh recovery, and corruption rejection           |
+| Interface and capability checks | Mobile/desktop layouts, enlarged text, appearance, native-share fixtures, download bytes, wake-lock lifecycle, and history preservation                 |
+| Legacy engine                   | Actual Chromium 101 compatibility storage, public signaling, downloads, checkpoint recovery, and current layout controls                                |
+| Physical-device reports         | Completed iPhone-to-Mac hotspot transfer; receiving, downloading, and opening files on older Pixel/iOS devices                                          |
 
 Browser tests use synthetic files and independent Node/Web Crypto hashes. Hardware reports lack complete device/version/capacity measurements and are recorded separately from automated engine evidence in [the validation record](docs/VALIDATION.md).
 

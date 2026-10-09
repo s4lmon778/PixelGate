@@ -35,6 +35,7 @@ import { CodeConnection } from '@/lib/bridge/code-connection';
 import { pairingLink } from '@/lib/bridge/pairing';
 import { local } from '@/lib/bridge/database';
 import { Receiver, Sender } from '@/lib/bridge/transfer';
+import { StripedChannel } from '@/lib/bridge/striped-channel';
 import { dropped, selected } from '@/lib/bridge/selection';
 import {
   downloadStaged,
@@ -316,15 +317,16 @@ export default function PixelGate() {
       room: setRoom,
       status: setStatus,
       connected: (channel) => {
+        const transport = new StripedChannel(channel, role);
         setConnected(true);
         setPaused(false);
         if (role === 'send')
-          sender.current = new Sender(channel, () =>
+          sender.current = new Sender(transport, () =>
             setQueue([...currentQueue.current]),
           );
         else
           receiver.current = new Receiver(
-            channel,
+            transport,
             () => folder.current,
             (record) => {
               receivedRecords.current.set(record.id, record);

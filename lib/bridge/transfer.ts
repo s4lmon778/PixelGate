@@ -1,8 +1,10 @@
 import { local } from './database';
 import { hashFile, identity } from './hash';
+import type { TransferChannel } from './striped-channel';
 import {
   CHECKPOINT_BYTES,
   FRAME_BYTES,
+  TRANSFER_WINDOW_BYTES,
   VERSION,
   isVerified,
   safePath,
@@ -21,7 +23,7 @@ import {
   storedCopyValid,
 } from './storage';
 
-function control(channel: RTCDataChannel, value: Control) {
+function control(channel: TransferChannel, value: Control) {
   if (channel.readyState !== 'open')
     throw new Error('Connection lost. Reconnect to resume.');
   channel.send(JSON.stringify(value));
@@ -33,7 +35,8 @@ function parse(value: string): Control {
     throw new Error('Invalid transfer message.');
   return data;
 }
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const SEND_BUFFER_BYTES = 64 * 1024;
+const RESPONSE_TIMEOUT_MS = 30 * 60 * 1000;
 
 export class Receiver {
   private writer = new StagingWriter();
@@ -42,10 +45,12 @@ export class Receiver {
   private buffered = 0;
   private chain = Promise.resolve();
   private queued = 0;
+  private queuedBytes = 0;
   private closed = false;
   private compatible = false;
+  private failed = false;
   constructor(
-    private channel: RTCDataChannel,
+    private channel: TransferChannel,
     private folder: () => FileSystemDirectoryHandle | undefined,
     private changed: (r: RecordFile) => void,
     private error: (e: Error) => void,
@@ -53,11 +58,18 @@ export class Receiver {
   ) {
     channel.onmessage = (event) => {
       if (this.closed) return;
-      if (++this.queued > 160) {
+      const bytes =
+        event.data instanceof ArrayBuffer ? event.data.byteLength : 0;
+      if (
+        this.queued + 1 > TRANSFER_WINDOW_BYTES / FRAME_BYTES + 32 ||
+        this.queuedBytes + bytes > TRANSFER_WINDOW_BYTES
+      ) {
         this.error(new Error('Sender exceeded the receiving buffer.'));
         channel.close();
         return;
       }
+      this.queued++;
+      this.queuedBytes += bytes;
       this.chain = this.chain
         .then(async () => {
           if (this.closed) return;
@@ -71,6 +83,7 @@ export class Receiver {
         })
         .finally(() => {
           this.queued--;
+          this.queuedBytes -= bytes;
         });
     };
     channel.addEventListener('close', () => {
@@ -79,8 +92,8 @@ export class Receiver {
     control(channel, { type: 'hello', version: VERSION });
   }
   private async update(record: RecordFile) {
-    this.active = record;
     await local.put(record);
+    this.active = record;
     this.changed(record);
   }
   private async message(message: Control) {
@@ -97,6 +110,7 @@ export class Receiver {
         ['transferring', 'verifying'].includes(this.active.phase)
       )
         throw new Error('Another file is already active.');
+      this.failed = false;
       const manifest = validateRecord(message.file);
       if (
         manifest.id !== (await identity(manifest.sha256, manifest.relativePath))
@@ -156,7 +170,13 @@ export class Receiver {
       await this.writer.open(manifest.id, offset);
       this.buffered = 0;
       await this.update({ ...manifest, bytes: offset, phase: 'transferring' });
-      control(this.channel, { type: 'ready', id: manifest.id, offset });
+      control(this.channel, {
+        type: 'ready',
+        id: manifest.id,
+        offset,
+        receiveWindowBytes:
+          this.channel.receiveWindowBytes ?? TRANSFER_WINDOW_BYTES,
+      });
     } else if (message.type === 'finish') {
       const record = this.active;
       if (
@@ -221,6 +241,9 @@ export class Receiver {
     }
   }
   private async frame(data: unknown) {
+    // Discard the remainder of a failed pipeline until the next ordered start.
+    // Report the storage error once, retaining the last durable resume offset.
+    if (this.failed) return;
     const record = this.active;
     if (
       !(data instanceof ArrayBuffer) ||
@@ -260,6 +283,8 @@ export class Receiver {
     }
   }
   private async fail(error: Error) {
+    if (this.failed) return;
+    this.failed = true;
     try {
       await this.writer.close();
     } catch {}
@@ -314,10 +339,14 @@ export class Sender {
   private current?: RecordFile;
   private inbox: Control[] = [];
   private compatible = false;
+  private waiting = new Set<() => void>();
   constructor(
-    private channel: RTCDataChannel,
+    private channel: TransferChannel,
     private changed: (q: QueuedFile) => void,
   ) {
+    channel.bufferedAmountLowThreshold = SEND_BUFFER_BYTES / 2;
+    channel.addEventListener('bufferedamountlow', this.wake);
+    channel.addEventListener('close', this.wake);
     channel.onmessage = ({ data }) => {
       if (typeof data !== 'string') {
         channel.close();
@@ -337,8 +366,23 @@ export class Sender {
       } catch {
         channel.close();
       }
+      this.wake();
     };
     control(channel, { type: 'hello', version: VERSION });
+  }
+  private wake = () => {
+    for (const resolve of this.waiting) resolve();
+  };
+  private activity(timeout = RESPONSE_TIMEOUT_MS) {
+    return new Promise<void>((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        this.waiting.delete(done);
+        resolve();
+      };
+      const timer = setTimeout(done, timeout);
+      this.waiting.add(done);
+    });
   }
   private check() {
     if (this.cancelAll || this.cancelFile)
@@ -347,6 +391,16 @@ export class Sender {
       throw new Error(
         'Connection lost. Reconnect and reselect your files to resume.',
       );
+    const index = this.inbox.findIndex(
+      (message) => message.type === 'error' && message.id === this.current?.id,
+    );
+    if (index !== -1) {
+      const message = this.inbox.splice(index, 1)[0] as Extract<
+        Control,
+        { type: 'error' }
+      >;
+      throw new Error(message.message);
+    }
   }
   private async wait(
     type: 'ready' | 'ack' | 'result',
@@ -367,17 +421,27 @@ export class Sender {
         if (m.type === 'error') throw new Error(m.message);
         return m;
       }
-      if (Date.now() - started > 30 * 60 * 1000)
+      const remaining = RESPONSE_TIMEOUT_MS - (Date.now() - started);
+      if (remaining <= 0)
         throw new Error('Receiver did not respond. Reconnect to resume.');
-      await delay(20);
+      await this.activity(remaining);
     }
   }
   private async unpaused() {
     while (this.paused) {
       this.check();
-      await delay(100);
+      await this.activity();
     }
     this.check();
+  }
+  private async writable() {
+    while (this.channel.bufferedAmount > SEND_BUFFER_BYTES) {
+      this.check();
+      // Events refill the transport promptly. A sparse fallback also supports
+      // browser engines that occasionally miss bufferedamountlow notifications.
+      await this.activity(1000);
+    }
+    await this.unpaused();
   }
   async prepare(q: QueuedFile, sessionId: string): Promise<RecordFile> {
     q.phase = 'hashing';
@@ -417,7 +481,7 @@ export class Sender {
     await local.session({ id: sessionId, role: 'send', created: Date.now() });
     while (!this.compatible) {
       this.check();
-      await delay(20);
+      await this.activity();
     }
     const pending = queue.filter(
       (q) => !['verified', 'duplicate', 'cancelled'].includes(q.phase),
@@ -440,6 +504,7 @@ export class Sender {
       const record = prepared.record;
       this.current = record;
       try {
+        if (record.size >= 2 * CHECKPOINT_BYTES) await this.channel.prepare?.();
         await this.unpaused();
         q.phase = 'transferring';
         this.changed(q);
@@ -472,11 +537,50 @@ export class Sender {
           };
           q.phase = 'duplicate';
         } else {
+          const windowBytes =
+            ready.receiveWindowBytes === undefined
+              ? CHECKPOINT_BYTES
+              : ready.receiveWindowBytes;
+          if (
+            !Number.isSafeInteger(windowBytes) ||
+            windowBytes < CHECKPOINT_BYTES ||
+            windowBytes > TRANSFER_WINDOW_BYTES ||
+            windowBytes % CHECKPOINT_BYTES !== 0
+          )
+            throw new Error('Receiver sent an invalid transfer window.');
           let offset = ready.offset;
+          const checkpoints: number[] = [];
           q.record = { ...record, bytes: offset, phase: 'transferring' };
           this.changed(q);
+          const acknowledge = async () => {
+            const ack = (await this.wait('ack', record.id)) as Extract<
+              Control,
+              { type: 'ack' }
+            >;
+            if (ack.offset !== checkpoints.shift())
+              throw new Error(
+                'Receiver checkpoint does not match. Reconnect to resume.',
+              );
+            // Progress and resume still reflect only receiver-persisted bytes.
+            q.record = { ...record, bytes: ack.offset, phase: 'transferring' };
+            this.changed(q);
+          };
           while (offset < record.size) {
             await this.unpaused();
+            while (
+              checkpoints.length &&
+              this.inbox.some(
+                (m) =>
+                  'id' in m &&
+                  m.id === record.id &&
+                  (m.type === 'ack' || m.type === 'error'),
+              )
+            )
+              await acknowledge();
+            if (checkpoints.length >= windowBytes / CHECKPOINT_BYTES) {
+              await acknowledge();
+              continue;
+            }
             const end = Math.min(offset + CHECKPOINT_BYTES, record.size);
             const block = new Uint8Array(
               await q.file.slice(offset, end).arrayBuffer(),
@@ -485,25 +589,18 @@ export class Sender {
               throw new Error('Source file changed. Reselect it and retry.');
             const messageLimit = FRAME_BYTES;
             for (let pos = 0; pos < block.length; pos += messageLimit) {
-              this.check();
-              while (this.channel.bufferedAmount > 512 * 1024) {
-                this.check();
-                await delay(10);
-              }
+              await this.writable();
               this.channel.send(block.subarray(pos, pos + messageLimit));
+              // bufferedAmount excludes some native SCTP/OS queues. Yield after
+              // a small burst so both browsers can service packets and controls
+              // instead of flooding those hidden buffers during slow start.
+              if ((pos / messageLimit + 1) % 4 === 0)
+                await new Promise((resolve) => setTimeout(resolve, 4));
             }
-            const ack = (await this.wait('ack', record.id)) as Extract<
-              Control,
-              { type: 'ack' }
-            >;
-            if (ack.offset !== end)
-              throw new Error(
-                'Receiver checkpoint does not match. Reconnect to resume.',
-              );
             offset = end;
-            q.record = { ...record, bytes: offset, phase: 'transferring' };
-            this.changed(q);
+            checkpoints.push(end);
           }
+          while (checkpoints.length) await acknowledge();
           q.phase = 'verifying';
           this.changed(q);
           control(this.channel, { type: 'finish', id: record.id });
@@ -559,13 +656,16 @@ export class Sender {
   }
   pause() {
     this.paused = true;
+    this.wake();
   }
   resume() {
     this.paused = false;
+    this.wake();
   }
   cancel(currentOnly = false) {
     if (currentOnly) this.cancelFile = true;
     else this.cancelAll = true;
+    this.wake();
     if (this.current && this.channel.readyState === 'open')
       control(this.channel, { type: 'cancel', id: this.current.id });
   }

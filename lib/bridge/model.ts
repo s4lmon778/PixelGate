@@ -1,6 +1,7 @@
 export const VERSION = 1;
 export const FRAME_BYTES = 16 * 1024;
 export const CHECKPOINT_BYTES = 1024 * 1024;
+export const TRANSFER_WINDOW_BYTES = 4 * CHECKPOINT_BYTES;
 export type Phase =
   | 'pending'
   | 'hashing'
@@ -52,6 +53,7 @@ export type Control =
       type: 'ready';
       id: string;
       offset: number;
+      receiveWindowBytes?: number;
       duplicate?: boolean;
       scope?: Scope;
     }
