@@ -265,13 +265,11 @@ for (const backend of ['opfs', 'indexeddb']) {
       expect(destinationHash.digest('hex')).toBe(expected);
       const later = Buffer.alloc(128 * 1024 + 7, 0x46);
       const laterHash = createHash('sha256').update(later).digest('hex');
-      await sender
-        .getByLabel('Choose files', { exact: true })
-        .setInputFiles({
-          name: 'later-original.jpg',
-          mimeType: 'image/jpeg',
-          buffer: later,
-        });
+      await sender.getByLabel('Choose files', { exact: true }).setInputFiles({
+        name: 'later-original.jpg',
+        mimeType: 'image/jpeg',
+        buffer: later,
+      });
       await sender
         .getByRole('button', { name: 'Send files', exact: true })
         .last()
