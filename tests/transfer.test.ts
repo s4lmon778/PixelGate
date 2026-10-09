@@ -155,6 +155,32 @@ beforeEach(() => {
   state.failPutAtBytes = undefined;
 });
 describe('receiver-owned verification and checkpoints', () => {
+  it('contains a failed read-ahead and continues the next file with byte verification', async () => {
+    const p = peers(),
+      q = queue();
+    const slice = q[0].file.slice.bind(q[0].file);
+    vi.spyOn(q[0].file, 'slice').mockImplementation((start, end) => {
+      const blob = slice(start, end);
+      if (start === CHECKPOINT_BYTES)
+        vi.spyOn(blob, 'arrayBuffer').mockRejectedValue(
+          new Error('Source read failed'),
+        );
+      return blob;
+    });
+    const following = queue(1001)[0];
+    following.path = 'following.bin';
+    q.push(following);
+    await p.sender.run(q, 'read-ahead-error');
+    expect(q[0].phase).toBe('failed');
+    expect(q[0].error).toBe('Source read failed');
+    expect(following.phase).toBe('verified');
+    expect(
+      createHash('sha256')
+        .update(state.bytes.get(following.record!.id)!)
+        .digest('hex'),
+    ).toBe(following.record!.sha256);
+    await p.receiver.close();
+  });
   it('truncates a written tail after checkpoint metadata fails', async () => {
     state.failPutAtBytes = 2 * CHECKPOINT_BYTES;
     const p = peers(),

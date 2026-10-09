@@ -68,3 +68,11 @@ Temporary or Private sessions may discard local bytes when closed. Keep both bro
 - Files may be verified at browser, destination-folder, or reselected-export scope; reports keep these scopes separate.
 
 [Back to the project overview](../README.md) · [Documentation index](README.md)
+
+## Pixel albums and unlimited backup
+
+Keep files local to the eligible Pixel first, then let the Google Photos Android app back up the chosen device folder. The Downloads folder can be enabled once in Photos settings → Backup → Back up device folders; it does not have to be moved to DCIM. Confirm the account, backup quality, and Backup complete status in Photos, then select the media and add it to your chosen album. Album organization does not activate the storage benefit.
+
+[Google documents](https://support.google.com/pixelphone/answer/6220791?co=GENIE.Platform%3DAndroid&hl=en) unlimited Original quality backup for the original Pixel, and unlimited Storage saver for Pixel 2–5 under their model-specific terms. Storage saver may compress images or resize videos. A Google Photos API upload counts against Google account storage and is not the local Pixel backup route. [Free up space](https://support.google.com/photos/answer/6128843?co=GENIE.Platform%3DAndroid&hl=en) removes already-backed-up local copies; it does not activate unlimited storage and does not clear PixelGate staging. Use the existing saved-copy verification/clear workflow separately for staged browser copies.
+
+Chrome cannot directly hand an arbitrary-size browser Blob or unlimited file batch to Google Photos. Verified downloads stay available for large originals and whole collections; Google Photos itself documents [backup limits](https://support.google.com/photos/answer/6193313?co=GENIE.Platform%3DAndroid&hl=en), including 10 GB videos and 200 MB / 200 MP photos.

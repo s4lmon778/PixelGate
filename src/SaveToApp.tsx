@@ -455,6 +455,41 @@ export function SaveToApp({
             </a>
           </details>
         )}
+        {android && (
+          <details className="help-details">
+            <summary>Pixel albums, backup, and freeing phone space</summary>
+            <ol className="hint">
+              <li>
+                Save the originals on this Pixel. Enable backup for the Download
+                device folder once in Google Photos.
+              </li>
+              <li>
+                Open Google Photos, confirm the intended account and backup
+                quality, and wait for Backup complete. Select the media there
+                and add it to your chosen album.
+              </li>
+              <li>
+                Use Google Photos → profile → Free up space on this device when
+                you want to remove backed-up phone copies. This does not enable
+                unlimited backup or clear PixelGate’s separate browser copies.
+              </li>
+            </ol>
+            <p className="hint">
+              The original Pixel has unlimited Original quality backup. Pixel
+              2–5 offer unlimited Storage saver backup under their model’s
+              terms; Storage saver may compress media. Album selection does not
+              change those terms. Google Photos also has its own file limits,
+              including videos up to 10 GB and photos up to 200 MB or 200 MP.
+            </p>
+            <a
+              href="https://support.google.com/pixelphone/answer/6220791?co=GENIE.Platform%3DAndroid&hl=en"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Google’s Pixel backup quality rules
+            </a>
+          </details>
+        )}
         <details className="help-details">
           <summary>About saved-copy verification</summary>
           <p className="hint">

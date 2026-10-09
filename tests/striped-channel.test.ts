@@ -287,6 +287,72 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
     expect(transport.snapshot().unreceivedBytes).toBe(189);
     expect(transport.sendBufferBytes).toBe(512 * 1024);
   });
+  it('grows a bounded delivery window only after receipts and restores conservative pacing on delayed delivery', async () => {
+    let clock = 100;
+    vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    const primary = new Channel();
+    const transport = new StripedChannel(primary.native(), 'send');
+    opened.push(transport);
+    expect(transport.pacingDelayMs).toBe(4);
+    primary.receive(
+      JSON.stringify({
+        type: 'hello',
+        version: 1,
+        stripedTransport: 1,
+        stripedReceipts: 1,
+        stripedLanes: 4,
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    for (const peer of Peer.peers) {
+      peer.channel.readyState = 'open';
+      peer.channel.dispatchEvent(new Event('open'));
+    }
+    expect(transport.sendBufferBytes).toBe(64 * 1024);
+    for (let sequence = 0; sequence < 512; sequence += 16) {
+      for (let j = 0; j < 16; j++)
+        transport.send(new Uint8Array(FRAME_BYTES).buffer);
+      clock += 10;
+      primary.receive(
+        JSON.stringify({
+          type: 'pg-striped-receipt',
+          received: Array.from({ length: 16 }, (_, i) => sequence + i),
+        }),
+      );
+      for (const channel of [
+        primary,
+        ...Peer.peers.map((peer) => peer.channel),
+      ])
+        channel.bufferedAmount = 0;
+      expect(transport.sendBufferBytes).toBeLessThanOrEqual(2 * 1024 * 1024);
+    }
+    expect(transport.sendBufferBytes).toBe(2 * 1024 * 1024);
+    expect(transport.pacingDelayMs).toBe(0);
+    for (let i = 0; i < 16; i++)
+      transport.send(new Uint8Array(FRAME_BYTES).buffer);
+    clock += 300;
+    primary.receive(
+      JSON.stringify({
+        type: 'pg-striped-receipt',
+        received: Array.from({ length: 16 }, (_, i) => 512 + i),
+      }),
+    );
+    expect(transport.sendBufferBytes).toBe(256 * 1024);
+    expect(transport.pacingDelayMs).toBe(4);
+    expect(transport.snapshot().unreceivedBytes).toBe(0);
+    for (let i = 0; i < 16; i++)
+      transport.send(new Uint8Array(FRAME_BYTES).buffer);
+    clock += 1000;
+    primary.receive(
+      JSON.stringify({
+        type: 'pg-striped-receipt',
+        received: Array.from({ length: 16 }, (_, i) => 528 + i),
+      }),
+    );
+    expect(transport.sendBufferBytes).toBe(128 * 1024);
+    expect(transport.pacingDelayMs).toBe(4);
+    vi.restoreAllMocks();
+  });
   it('selectively receipts displaced packets without delivering them before the missing prefix', async () => {
     const primary = new Channel(),
       transport = new StripedChannel(primary.native(), 'receive');

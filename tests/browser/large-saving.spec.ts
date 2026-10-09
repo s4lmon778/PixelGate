@@ -23,6 +23,8 @@ for (const backend of ['opfs', 'indexeddb']) {
       for (let i = 0; i < 400; i++) {
         block.writeUInt32BE(i, 0);
         block.writeUInt32BE(400 - i, block.length - 4);
+        for (let frame = 1; frame < 64; frame++)
+          block.writeUInt32BE(i * 64 + frame, frame * 16 * 1024);
         await source.write(block);
         hash.update(block);
       }

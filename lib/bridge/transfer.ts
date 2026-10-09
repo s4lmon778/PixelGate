@@ -1,6 +1,7 @@
 import { local } from './database';
 import { hashFile, identity } from './hash';
 import type { TransferChannel } from './striped-channel';
+import { SendPacer } from './send-pacer';
 import {
   CHECKPOINT_BYTES,
   FRAME_BYTES,
@@ -506,6 +507,7 @@ export class Sender {
       if ('error' in prepared) continue;
       const record = prepared.record;
       this.current = record;
+      const pacer = new SendPacer();
       try {
         if (record.size >= 2 * CHECKPOINT_BYTES) await this.channel.prepare?.();
         await this.unpaused();
@@ -568,6 +570,18 @@ export class Sender {
             q.record = { ...record, bytes: ack.offset, phase: 'transferring' };
             this.changed(q);
           };
+          // Keep just one checkpoint read ahead while the current block travels.
+          // Resolve failures into data so cancellation cannot orphan a rejection.
+          const read = (start: number) => {
+            const end = Math.min(start + CHECKPOINT_BYTES, record.size);
+            return Promise.resolve()
+              .then(() => q.file.slice(start, end).arrayBuffer())
+              .then(
+                (data) => ({ block: new Uint8Array(data), end }),
+                (error: unknown) => ({ error }),
+              );
+          };
+          let nextBlock = offset < record.size ? read(offset) : undefined;
           while (offset < record.size) {
             await this.unpaused();
             while (
@@ -584,12 +598,17 @@ export class Sender {
               await acknowledge();
               continue;
             }
-            const end = Math.min(offset + CHECKPOINT_BYTES, record.size);
-            const block = new Uint8Array(
-              await q.file.slice(offset, end).arrayBuffer(),
-            );
-            if (block.length !== end - offset)
+            const reading = await nextBlock!;
+            if ('error' in reading) {
+              control(this.channel, { type: 'cancel', id: record.id });
+              throw reading.error;
+            }
+            const { block, end } = reading;
+            if (block.length !== end - offset) {
+              control(this.channel, { type: 'cancel', id: record.id });
               throw new Error('Source file changed. Reselect it and retry.');
+            }
+            nextBlock = end < record.size ? read(end) : undefined;
             const messageLimit = FRAME_BYTES;
             let burst = 0;
             for (let pos = 0; pos < block.length; pos += messageLimit) {
@@ -600,7 +619,7 @@ export class Sender {
               // instead of flooding those hidden buffers during slow start.
               burst += Math.min(messageLimit, block.length - pos);
               if (burst >= (this.channel.burstBytes ?? SEND_BUFFER_BYTES)) {
-                await new Promise((resolve) => setTimeout(resolve, 4));
+                await pacer.yield(this.channel.pacingDelayMs ?? 4);
                 burst = 0;
               }
             }
@@ -643,6 +662,8 @@ export class Sender {
         await local.putSender(q.record);
         this.changed(q);
         if (this.channel.readyState !== 'open') break;
+      } finally {
+        pacer.close();
       }
       this.current = undefined;
     }
