@@ -170,7 +170,7 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
           { mode },
         );
         await sending.addInitScript(
-          ({ mode, faultBytes }) => {
+          ({ mode, faultBytes, bufferReadMs }) => {
             if (mode.includes('read-delay')) {
               const read = Blob.prototype.arrayBuffer;
               Blob.prototype.arrayBuffer = async function () {
@@ -212,7 +212,30 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
               queued: 0,
               queueSum: 0,
               queueSamples: 0,
+              bufferReads: 0,
+              bufferReadWaitMilliseconds: 0,
             };
+            const buffered = Object.getOwnPropertyDescriptor(
+              RTCDataChannel.prototype,
+              'bufferedAmount',
+            )!;
+            Object.defineProperty(RTCDataChannel.prototype, 'bufferedAmount', {
+              ...buffered,
+              get() {
+                if (metrics.started && !metrics.milliseconds) {
+                  metrics.bufferReads++;
+                  if (bufferReadMs > 0) {
+                    const start = performance.now();
+                    while (performance.now() - start < bufferReadMs) {
+                      // Model a synchronous native/thread query, not Wi-Fi RTT.
+                    }
+                    metrics.bufferReadWaitMilliseconds +=
+                      performance.now() - start;
+                  }
+                }
+                return buffered.get!.call(this);
+              },
+            });
             let nextDelivery = 0;
             let delivered = 0;
             const pathQueues = new Map<
@@ -378,6 +401,9 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
             mode,
             faultBytes:
               Number(process.env.PIXELGATE_TEST_FAULT_MIB || 0) * 1024 * 1024,
+            bufferReadMs: Number(
+              process.env.PIXELGATE_TEST_BUFFER_READ_MS || 0,
+            ),
           },
         );
         const receiver = await receiving.newPage();
@@ -475,6 +501,8 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
                   sourceReads: number;
                   maximumPayloadFrameBytes: number;
                   binaryMessages: number;
+                  bufferReads: number;
+                  bufferReadWaitMilliseconds: number;
                 };
               }
             ).transferMetrics,
@@ -494,6 +522,8 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
             transport,
             maximumPayloadFrameBytes: metrics.maximumPayloadFrameBytes,
             binaryMessages: metrics.binaryMessages,
+            bufferReads: metrics.bufferReads,
+            bufferReadWaitMilliseconds: metrics.bufferReadWaitMilliseconds,
           }),
         );
         if (mode === 'closed-lane' || mode.endsWith('lost-packet')) {

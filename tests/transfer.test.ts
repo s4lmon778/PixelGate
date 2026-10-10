@@ -16,6 +16,7 @@ const state = vi.hoisted(() => ({
   opens: [] as number[],
   beforeWrite: undefined as (() => Promise<void>) | undefined,
   failPutAtBytes: undefined as number | undefined,
+  writtenBuffers: [] as ArrayBuffer[],
 }));
 vi.mock('../lib/bridge/database', () => ({
   local: {
@@ -52,7 +53,9 @@ vi.mock('../lib/bridge/storage', () => ({
     };
     write = async (offset: number, data: ArrayBuffer) => {
       await state.beforeWrite?.();
-      const block = new Uint8Array(data);
+      state.writtenBuffers.push(data);
+      // Match the actual worker's ownership transfer: detach the caller buffer.
+      const block = new Uint8Array(structuredClone(data, { transfer: [data] }));
       const old = state.bytes.get(this.id)!;
       const bytes = new Uint8Array(offset + block.length);
       bytes.set(old);
@@ -153,8 +156,39 @@ beforeEach(() => {
   state.destination = false;
   state.beforeWrite = undefined;
   state.failPutAtBytes = undefined;
+  state.writtenBuffers = [];
 });
 describe('receiver-owned verification and checkpoints', () => {
+  it('receives offset views without headers and survives detached checkpoint buffers', async () => {
+    const p = peers(),
+      q = queue();
+    const original = p.a.send.bind(p.a);
+    p.a.send = (value) => {
+      if (typeof value === 'string') return original(value);
+      p.a.binarySent += value.byteLength;
+      const wire = new Uint8Array(value.byteLength + 16).fill(0xff);
+      wire.set(value, 8);
+      queueMicrotask(() => {
+        if (p.b.readyState === 'open')
+          p.b.onmessage?.({
+            data: new Uint8Array(wire.buffer, 8, value.byteLength),
+          });
+      });
+    };
+    await p.sender.run(q, 'offset-views');
+    expect(q[0].phase).toBe('verified');
+    expect(state.writtenBuffers).toHaveLength(3);
+    expect(
+      state.writtenBuffers.every((buffer) => buffer.byteLength === 0),
+    ).toBe(true);
+    expect(new Set(state.writtenBuffers).size).toBe(3);
+    expect(
+      createHash('sha256')
+        .update(state.bytes.get(q[0].record!.id)!)
+        .digest('hex'),
+    ).toBe(q[0].record!.sha256);
+    await p.receiver.close();
+  });
   it('contains a failed read-ahead and continues the next file with byte verification', async () => {
     const p = peers(),
       q = queue();
@@ -347,27 +381,35 @@ describe('receiver-owned verification and checkpoints', () => {
       await p.receiver.close();
     },
   );
-  it('rejects receiver queue overflow with bounded payload memory', async () => {
-    let release!: () => void;
-    const blocked = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    state.beforeWrite = () => blocked;
-    const p = peers(),
-      q = queue(TRANSFER_WINDOW_BYTES + FRAME_BYTES);
-    const record = await p.sender.prepare(q[0], 'overflow');
-    p.a.send(JSON.stringify({ type: 'start', file: record }));
-    await vi.waitFor(() => expect(state.opens).toEqual([0]));
-    for (let i = 0; i <= TRANSFER_WINDOW_BYTES / FRAME_BYTES; i++)
-      p.a.send(new Uint8Array(FRAME_BYTES));
-    try {
-      await vi.waitFor(() => expect(p.a.readyState).toBe('closed'));
-      expect(p.errors[0].message).toContain('receiving buffer');
-    } finally {
-      release();
-    }
-    await p.receiver.close();
-  });
+  it.each(['buffer', 'view'] as const)(
+    'rejects receiver queue overflow with bounded %s payload memory',
+    async (kind) => {
+      let release!: () => void;
+      const blocked = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      state.beforeWrite = () => blocked;
+      const p = peers(),
+        q = queue(TRANSFER_WINDOW_BYTES + FRAME_BYTES);
+      const record = await p.sender.prepare(q[0], 'overflow');
+      p.a.send(JSON.stringify({ type: 'start', file: record }));
+      await vi.waitFor(() => expect(state.opens).toEqual([0]));
+      for (let i = 0; i <= TRANSFER_WINDOW_BYTES / FRAME_BYTES; i++) {
+        if (kind === 'view')
+          p.b.onmessage?.({
+            data: new Uint8Array(new ArrayBuffer(FRAME_BYTES + 8), 8),
+          });
+        else p.a.send(new Uint8Array(FRAME_BYTES));
+      }
+      try {
+        await vi.waitFor(() => expect(p.a.readyState).toBe('closed'));
+        expect(p.errors[0].message).toContain('receiving buffer');
+      } finally {
+        release();
+      }
+      await p.receiver.close();
+    },
+  );
   it('acknowledges reread destination copies without staging or retransmission', async () => {
     state.destination = true;
     const p = peers(() => {}, {} as FileSystemDirectoryHandle),

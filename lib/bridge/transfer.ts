@@ -61,7 +61,9 @@ export class Receiver {
     channel.onmessage = (event) => {
       if (this.closed) return;
       const bytes =
-        event.data instanceof ArrayBuffer ? event.data.byteLength : 0;
+        event.data instanceof ArrayBuffer || event.data instanceof Uint8Array
+          ? event.data.byteLength
+          : 0;
       if (
         this.queued + 1 > TRANSFER_WINDOW_BYTES / FRAME_BYTES + 32 ||
         this.queuedBytes + bytes > TRANSFER_WINDOW_BYTES
@@ -258,7 +260,10 @@ export class Receiver {
     if (this.failed) return;
     const record = this.active;
     if (
-      !(data instanceof ArrayBuffer) ||
+      !(
+        data instanceof ArrayBuffer ||
+        (data instanceof Uint8Array && data.buffer instanceof ArrayBuffer)
+      ) ||
       !record ||
       record.phase !== 'transferring'
     )
@@ -270,17 +275,25 @@ export class Receiver {
       record.bytes + this.buffered + data.byteLength > record.size
     )
       throw new Error('Invalid file frame.');
-    this.buffer.set(new Uint8Array(data), this.buffered);
+    this.buffer.set(
+      data instanceof Uint8Array ? data : new Uint8Array(data),
+      this.buffered,
+    );
     this.buffered += data.byteLength;
     if (
       this.buffered === CHECKPOINT_BYTES ||
       record.bytes + this.buffered === record.size
     ) {
       const length = this.buffered;
-      await this.writer.write(
-        record.bytes,
-        this.buffer.slice(0, length).buffer,
-      );
+      // Transfer ownership of a full checkpoint to the writer instead of
+      // copying it. Only an incomplete tail needs a precisely sized copy.
+      const checkpoint =
+        length === CHECKPOINT_BYTES
+          ? this.buffer.buffer
+          : this.buffer.slice(0, length).buffer;
+      if (length === CHECKPOINT_BYTES)
+        this.buffer = new Uint8Array(CHECKPOINT_BYTES);
+      await this.writer.write(record.bytes, checkpoint);
       this.buffered = 0;
       await this.update({
         ...record,
@@ -622,6 +635,18 @@ export class Sender {
             nextBlock = end < record.size ? read(end) : undefined;
             let burst = 0;
             for (let pos = 0; pos < block.length;) {
+              if (this.channel.sendBurst) {
+                await this.unpaused();
+                const sent = this.channel.sendBurst(block.subarray(pos));
+                if (!sent) {
+                  await this.writable();
+                  continue;
+                }
+                pos += sent;
+                if (pos < block.length)
+                  await pacer.yield(this.channel.pacingDelayMs ?? 4);
+                continue;
+              }
               await this.writable();
               const messageLimit = this.channel.sendFrameBytes ?? FRAME_BYTES;
               this.channel.send(block.subarray(pos, pos + messageLimit));

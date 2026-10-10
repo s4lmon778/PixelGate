@@ -102,13 +102,114 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe('parallel transport compatibility, ordering, and fallback', () => {
+  it('snapshots each native buffer once per burst and stops at sender credit', async () => {
+    const primary = new Channel();
+    const transport = new StripedChannel(primary.native(), 'send');
+    opened.push(transport);
+    primary.receive(
+      JSON.stringify({
+        type: 'hello',
+        version: 1,
+        stripedTransport: 1,
+        stripedReceipts: 1,
+        stripedLanes: 4,
+        stripedFrameBytes: STRIPED_FRAME_BYTES,
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    const all = [primary, ...Peer.peers.map((peer) => peer.channel)];
+    for (const channel of all) channel.readyState = 'open';
+    const native = all.map(() => 0);
+    const reads = all.map(() => 0);
+    for (const [index, channel] of all.entries()) {
+      Object.defineProperty(channel, 'bufferedAmount', {
+        get: () => {
+          reads[index]++;
+          return native[index];
+        },
+      });
+      channel.send = (wire) => {
+        channel.sent.push(wire);
+        native[index] +=
+          typeof wire === 'string' ? wire.length : wire.byteLength;
+      };
+    }
+    const input = new Uint8Array(CHECKPOINT_BYTES);
+    for (let i = 0; i < input.length; i++) input[i] = i % 251;
+    let sent = 0;
+    while (sent < input.length) {
+      reads.fill(0);
+      const count = transport.sendBurst(input.subarray(sent));
+      expect(reads).toEqual([1, 1, 1, 1, 1]);
+      if (!count) break;
+      sent += count;
+    }
+    expect(sent).toBeGreaterThan(512 * 1024 - FRAME_BYTES);
+    expect(sent).toBeLessThanOrEqual(512 * 1024 + FRAME_BYTES);
+    const frames = all
+      .flatMap((channel) => channel.sent)
+      .filter((wire): wire is ArrayBuffer => wire instanceof ArrayBuffer)
+      .sort(
+        (a, b) => new DataView(a).getUint32(4) - new DataView(b).getUint32(4),
+      );
+    const actual = new Uint8Array(sent);
+    let offset = 0;
+    for (const wire of frames) {
+      actual.set(new Uint8Array(wire, 8), offset);
+      offset += wire.byteLength - 8;
+    }
+    expect(actual).toEqual(input.subarray(0, sent));
+    expect(native.every((bytes) => bytes > 0)).toBe(true);
+    expect(transport.snapshot().unreceivedBytes).toBeLessThanOrEqual(
+      512 * 1024 + FRAME_BYTES + 8,
+    );
+    // Native drain alone cannot release unreceived bytes.
+    native.fill(0);
+    expect(transport.sendBurst(input.subarray(sent))).toBe(0);
+    primary.receive(
+      JSON.stringify({ type: 'pg-striped-ack', sequence: frames.length }),
+    );
+    expect(transport.sendBurst(input.subarray(sent))).toBeGreaterThan(0);
+  });
+  it('drops a native buffer snapshot after send throws', async () => {
+    const primary = new Channel();
+    const transport = new StripedChannel(primary.native(), 'send');
+    opened.push(transport);
+    primary.send = () => {
+      throw new Error('Native send failed');
+    };
+    expect(() => transport.sendBurst(new Uint8Array(100))).toThrow(
+      'Native send failed',
+    );
+    primary.send = Channel.prototype.send;
+    primary.bufferedAmount = CHECKPOINT_BYTES;
+    expect(transport.sendBurst(new Uint8Array(100))).toBe(0);
+    primary.bufferedAmount = 0;
+    expect(transport.sendBurst(new Uint8Array(100))).toBe(100);
+  });
+  it('limits synchronous burst work when native sending is slow', () => {
+    let clock = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    const primary = new Channel();
+    const transport = new StripedChannel(primary.native(), 'send');
+    opened.push(transport);
+    primary.send = (wire) => {
+      clock += 9;
+      Channel.prototype.send.call(primary, wire);
+    };
+    expect(transport.sendBurst(new Uint8Array(CHECKPOINT_BYTES))).toBe(
+      FRAME_BYTES,
+    );
+    expect(primary.sent).toHaveLength(1);
+    vi.restoreAllMocks();
+  });
   it('accepts larger messages only after mutual receipt/frame negotiation', () => {
     const primary = new Channel();
     const transport = new StripedChannel(primary.native(), 'receive');
     opened.push(transport);
-    const received: ArrayBuffer[] = [];
+    const received: Uint8Array[] = [];
     transport.onmessage = ({ data }) => {
-      if (data instanceof ArrayBuffer) received.push(data);
+      if (data instanceof Uint8Array) received.push(data);
     };
     primary.receive(
       JSON.stringify({
@@ -121,7 +222,10 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
     );
     expect(transport.frameBytes).toBe(STRIPED_FRAME_BYTES);
     primary.receive(JSON.stringify({ type: 'pg-striped-start' }));
-    primary.receive(frame(0, new Uint8Array(STRIPED_FRAME_BYTES).fill(19)));
+    const wire = frame(0, new Uint8Array(STRIPED_FRAME_BYTES).fill(19));
+    primary.receive(wire);
+    expect(received[0].buffer).toBe(wire);
+    expect(received[0].byteOffset).toBe(8);
     expect(received[0].byteLength).toBe(STRIPED_FRAME_BYTES);
     expect(new Uint8Array(received[0]).every((byte) => byte === 19)).toBe(true);
     primary.receive(frame(1, new Uint8Array(STRIPED_FRAME_BYTES + 1)));

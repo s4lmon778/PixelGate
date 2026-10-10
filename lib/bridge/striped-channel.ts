@@ -27,6 +27,7 @@ export type TransferChannel = Pick<
   pacingDelayMs?: number;
   frameBytes?: number;
   sendFrameBytes?: number;
+  sendBurst?: (data: Uint8Array<ArrayBuffer>) => number;
 };
 const MAGIC = 0x50475331;
 const LANES = 2;
@@ -47,6 +48,7 @@ type Packet = {
   sentAt: number;
   retries: number;
 };
+type Payload = string | ArrayBuffer | Uint8Array<ArrayBuffer>;
 
 /** Independent SCTP connections; restore the existing engine's ordered stream. */
 export class StripedChannel extends EventTarget implements TransferChannel {
@@ -62,7 +64,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
   private pending = new Map<number, Packet>();
   private pendingBytes = 0;
   private outstanding = new Map<RTCDataChannel, number>();
-  private reordered = new Map<number, string | ArrayBuffer>();
+  private reordered = new Map<number, Payload>();
   private reorderedBytes = 0;
   private threshold = 0;
   private stopped = false;
@@ -78,6 +80,8 @@ export class StripedChannel extends EventTarget implements TransferChannel {
   private highestReceived = -1;
   private replayed = 0;
   private cooldown = new Map<RTCDataChannel, number>();
+  private burstBuffers?: Map<RTCDataChannel, number>;
+  private burstBufferedBytes = 0;
   constructor(
     private primary: RTCDataChannel,
     private role: 'send' | 'receive',
@@ -253,6 +257,63 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       if (lane.channel)
         lane.channel.bufferedAmountLowThreshold = value / (this.laneCount + 1);
   }
+  /** Snapshot browser-reported buffers once per synchronous burst, then count every send.
+   * Avoid per-frame getters and asynchronous dispatch. No receipt/browser task
+   * can interleave this batch; the snapshot plus sends is conservative.
+   */
+  sendBurst(data: Uint8Array<ArrayBuffer>) {
+    if (!data.byteLength) return 0;
+    const paths = [this.primary, ...this.openLanes()];
+    this.burstBuffers = new Map(
+      paths.map((channel) => [channel, channel.bufferedAmount]),
+    );
+    try {
+      this.burstBufferedBytes = [...this.burstBuffers.values()].reduce(
+        (a, b) => a + b,
+        0,
+      );
+      const credit = this.sendBufferBytes;
+      const limit = this.burstBytes;
+      const frameBytes = this.sendFrameBytes;
+      const started = performance.now();
+      let sent = 0;
+      while (
+        sent < data.byteLength &&
+        sent < limit &&
+        Math.max(
+          this.burstBufferedBytes,
+          this.selective ? this.pendingBytes : 0,
+        ) <= credit
+      ) {
+        const frame = data.subarray(sent, sent + frameBytes);
+        this.send(frame);
+        sent += frame.byteLength;
+        // Bound main-thread occupancy even on slow devices/native send calls.
+        if (performance.now() - started >= 8) break;
+      }
+      return sent;
+    } finally {
+      // Never reuse a queue snapshot across an await, error, or browser task.
+      this.burstBuffers = undefined;
+      this.burstBufferedBytes = 0;
+    }
+  }
+  private write(
+    channel: RTCDataChannel,
+    wire: string | ArrayBuffer | Blob | ArrayBufferView<ArrayBuffer>,
+  ) {
+    Reflect.apply(channel.send, channel, [wire]);
+    if (this.burstBuffers?.has(channel)) {
+      const size =
+        typeof wire === 'string'
+          ? new TextEncoder().encode(wire).byteLength
+          : wire instanceof Blob
+            ? wire.size
+            : wire.byteLength;
+      this.burstBuffers.set(channel, this.burstBuffers.get(channel)! + size);
+      this.burstBufferedBytes += size;
+    }
+  }
   send(data: string | Blob | ArrayBuffer | ArrayBufferView<ArrayBuffer>) {
     if (typeof data === 'string') {
       const value = JSON.parse(data);
@@ -271,13 +332,13 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       this.negotiated &&
       this.openLanes().length > 0
     ) {
-      this.primary.send(JSON.stringify({ type: 'pg-striped-start' }));
+      this.write(this.primary, JSON.stringify({ type: 'pg-striped-start' }));
       this.sending = true;
       if (this.selective)
         this.retryTimer = setInterval(() => this.recoverGaps(), 100);
     }
     if (!this.sending) {
-      Reflect.apply(this.primary.send, this.primary, [data]);
+      this.write(this.primary, data);
       return;
     }
     if (this.outgoing >= 0xffffffff)
@@ -331,7 +392,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       sentAt: performance.now(),
       retries: 0,
     });
-    Reflect.apply(channel.send, channel, [wire]);
+    this.write(channel, wire);
   }
   close() {
     this.primary.close();
@@ -352,7 +413,10 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     return this.scheduler.choose(
       available,
       (channel) =>
-        Math.max(channel.bufferedAmount, this.outstanding.get(channel) ?? 0),
+        Math.max(
+          this.burstBuffers?.get(channel) ?? channel.bufferedAmount,
+          this.outstanding.get(channel) ?? 0,
+        ),
       performance.now(),
       bytes,
     );
@@ -406,7 +470,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       const lane = this.chooseLane(packet.lane);
       if (lane.bufferedAmount > this.sendBufferBytes) continue;
       try {
-        Reflect.apply(lane.send, lane, [packet.wire]);
+        this.write(lane, packet.wire);
         this.movePacket(packet, lane);
         this.replayed++;
       } catch {
@@ -434,7 +498,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
         JSON.stringify({ type: 'pg-striped-receipt', received }),
       );
   }
-  private deliver(data: string | ArrayBuffer) {
+  private deliver(data: Payload) {
     this.onmessage?.call(this.primary, new MessageEvent('message', { data }));
   }
   private receive(data: unknown, bulk: boolean) {
@@ -533,14 +597,14 @@ export class StripedChannel extends EventTarget implements TransferChannel {
           const header = new DataView(data);
           if (header.getUint32(0) !== MAGIC)
             throw new Error('Invalid parallel frame.');
-          this.reorder(header.getUint32(4), data.slice(8));
+          this.reorder(header.getUint32(4), new Uint8Array(data, 8));
         }
       } else throw new Error('Unexpected transfer data.');
     } catch {
       this.close();
     }
   }
-  private reorder(sequence: number, data: string | ArrayBuffer) {
+  private reorder(sequence: number, data: Payload) {
     if (
       !this.negotiated ||
       this.role !== 'receive' ||
@@ -718,7 +782,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
           this.movePacket(packet, this.primary);
           this.replayed++;
           try {
-            Reflect.apply(this.primary.send, this.primary, [packet.wire]);
+            this.write(this.primary, packet.wire);
           } catch {
             this.close();
             return;
