@@ -1,4 +1,4 @@
-import { FRAME_BYTES } from './model';
+import { CHECKPOINT_BYTES, FRAME_BYTES } from './model';
 
 type Observation = {
   started: number;
@@ -75,6 +75,45 @@ export class PathScheduler<T> {
     observation.samples++;
     observation.started = now;
     observation.delivered = 0;
+  }
+
+  /** Application flight budget, estimated from delivery rate × baseline RTT.
+   * Each association retains a small probe budget; its queue cannot collapse
+   * another association's window. This does not replace native SCTP control.
+   */
+  flightBudget(path: T, frameBytes: number) {
+    const observation = this.observations.get(path);
+    const floor = 2 * (frameBytes + 8);
+    if (!observation || observation.samples < 2) return 128 * 1024;
+    const baseline = Math.max(25, observation.minimumDelay);
+    const queuedDelay = Math.max(
+      0,
+      observation.delay - observation.minimumDelay,
+    );
+    const gain = queuedDelay > Math.max(150, baseline / 2) ? 1 : 2;
+    return Math.min(
+      CHECKPOINT_BYTES,
+      Math.max(
+        floor,
+        Math.ceil((observation.rate * baseline * gain) / 1000 + floor),
+      ),
+    );
+  }
+
+  baselineDelay(paths: T[]) {
+    return Math.min(
+      ...paths.map(
+        (path) => this.observations.get(path)?.minimumDelay ?? Infinity,
+      ),
+    );
+  }
+
+  delivered(paths: T[]) {
+    return paths.reduce(
+      (total, path) =>
+        total + (this.observations.get(path)?.receivedBytes ?? 0),
+      0,
+    );
   }
 
   feedback(paths: T[]) {

@@ -73,7 +73,10 @@ export class Receiver {
           ? event.data.byteLength
           : 0;
       if (
-        this.queued + 1 > TRANSFER_WINDOW_BYTES / FRAME_BYTES + 32 ||
+        this.queued + 1 >
+          TRANSFER_WINDOW_BYTES /
+            (this.channel.minimumFrameBytes ?? FRAME_BYTES) +
+            32 ||
         this.queuedBytes + bytes > TRANSFER_WINDOW_BYTES
       ) {
         this.error(new Error('Sender exceeded the receiving buffer.'));

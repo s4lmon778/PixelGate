@@ -26,6 +26,7 @@ export type TransferChannel = Pick<
   burstBytes?: number;
   pacingDelayMs?: number;
   frameBytes?: number;
+  minimumFrameBytes?: number;
   sendFrameBytes?: number;
   sendBurst?: (data: Uint8Array<ArrayBuffer>) => number;
 };
@@ -70,6 +71,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
   private stopped = false;
   private signaling = Promise.resolve();
   private selective = false;
+  private smallFrames = false;
   private laneCount = LANES;
   private negotiatedFrameBytes = FRAME_BYTES;
   private scheduler = new PathScheduler<RTCDataChannel>();
@@ -121,13 +123,19 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     return this.primary.readyState;
   }
   get bufferedAmount() {
-    const native =
-      this.primary.bufferedAmount +
-      [...this.lanes.values()].reduce(
-        (total, lane) =>
-          total + (lane.failed ? 0 : (lane.channel?.bufferedAmount ?? 0)),
-        0,
-      );
+    const paths = [this.primary, ...this.openLanes()];
+    const queues = new Map(paths.map((path) => [path, path.bufferedAmount]));
+    const native = [...queues.values()].reduce(
+      (total, bytes) => total + bytes,
+      0,
+    );
+    // The sender's event-driven wait also needs to recognize exhausted per-path
+    // credit, even when unused credit exists on a different association.
+    if (
+      this.budgeted &&
+      (!this.availableLanes(queues).length || !this.sequenceCredit)
+    )
+      return Math.max(native, this.pendingBytes, this.sendBufferBytes + 1);
     // Browser bufferedAmount excludes SCTP/OS queues. New peers also bound
     // unreceived bytes, preventing a burst from disappearing into those queues.
     return this.selective && this.sending
@@ -143,7 +151,47 @@ export class StripedChannel extends EventTarget implements TransferChannel {
   get frameBytes() {
     return this.selective ? this.negotiatedFrameBytes : FRAME_BYTES;
   }
+  get minimumFrameBytes() {
+    return this.smallFrames ? 8 * 1024 - 8 : FRAME_BYTES;
+  }
+  private get sequenceCredit() {
+    return (
+      this.outgoing - this.acknowledged <
+      TRANSFER_WINDOW_BYTES / FRAME_BYTES + 32
+    );
+  }
+  private get budgeted() {
+    return this.selective && this.sending && this.frameBytes > FRAME_BYTES;
+  }
+  private flightBudget(channel: RTCDataChannel) {
+    return this.scheduler.flightBudget(channel, this.preferredFrameBytes);
+  }
+  private get preferredFrameBytes() {
+    const delay = this.scheduler.baselineDelay([
+      this.primary,
+      ...this.openLanes(),
+    ]);
+    return this.smallFrames && Number.isFinite(delay) && delay > 100
+      ? Math.min(this.frameBytes, 8 * 1024 - 8)
+      : this.frameBytes;
+  }
+  private availableLanes(queues = this.burstBuffers) {
+    const paths = this.healthyLanes();
+    const usable = paths.length ? paths : [this.primary, ...this.openLanes()];
+    return usable.filter(
+      (channel) =>
+        Math.max(
+          queues?.get(channel) ?? channel.bufferedAmount,
+          this.outstanding.get(channel) ?? 0,
+        ) < this.flightBudget(channel),
+    );
+  }
   get sendFrameBytes() {
+    if (this.budgeted)
+      return this.scheduler.delivered([this.primary, ...this.openLanes()]) >=
+        CHECKPOINT_BYTES / 2
+        ? this.preferredFrameBytes
+        : FRAME_BYTES;
     // Large messages reduce receiver work on healthy links. Keep small frames
     // during warmup/slow delivery so one message cannot dominate a weak path.
     const { timelyBytes, queueDelay } = this.deliveryFeedback();
@@ -152,6 +200,14 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       : FRAME_BYTES;
   }
   get sendBufferBytes() {
+    if (this.budgeted)
+      return Math.min(
+        TRANSFER_WINDOW_BYTES - 64 * 1024,
+        this.healthyLanes().reduce(
+          (total, channel) => total + this.flightBudget(channel),
+          0,
+        ) || 128 * 1024,
+      );
     if (!this.selective || !this.sending) return 64 * 1024;
     const { timelyBytes, queueDelay } = this.deliveryFeedback();
     if (queueDelay > 750) return 128 * 1024;
@@ -171,6 +227,11 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     return 512 * 1024;
   }
   get pacingDelayMs() {
+    if (this.budgeted)
+      return this.scheduler.delivered([this.primary, ...this.openLanes()]) >=
+        CHECKPOINT_BYTES / 2
+        ? 0
+        : 4;
     // Transport receipts bound the hidden queues. Once delivery is established,
     // yield a browser task without imposing a timer delay on every healthy burst.
     const { timelyBytes, queueDelay } = this.deliveryFeedback();
@@ -197,6 +258,11 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     );
   }
   get burstBytes() {
+    if (this.budgeted)
+      return Math.min(
+        512 * 1024,
+        Math.max(64 * 1024, this.sendBufferBytes / 4),
+      );
     const { timelyBytes, queueDelay } = this.deliveryFeedback();
     if (!this.selective || !this.sending || queueDelay > 150) return 64 * 1024;
     if (
@@ -211,7 +277,16 @@ export class StripedChannel extends EventTarget implements TransferChannel {
   }
   snapshot() {
     const channels = [this.primary, ...this.openLanes()];
-    const receivedPaths = channels.map((channel, index) => {
+    const receivedChannels = [
+      ...new Set([
+        this.primary,
+        ...[...this.lanes.values()].flatMap((lane) =>
+          lane.channel ? [lane.channel] : [],
+        ),
+        ...this.incomingPaths.keys(),
+      ]),
+    ];
+    const receivedPaths = receivedChannels.map((channel, index) => {
       const path = this.incomingPaths.get(channel);
       const now = performance.now();
       if (path && now - path.sampledAt >= 250) {
@@ -243,6 +318,10 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       pacingDelayMs: this.pacingDelayMs,
       sendBufferBytes: this.sendBufferBytes,
       sendFrameBytes: this.sendFrameBytes,
+      flowControl: this.budgeted ? 'per-path-bandwidth-delay' : 'legacy',
+      pathFlightBudgets: this.budgeted
+        ? channels.map((channel) => this.flightBudget(channel))
+        : undefined,
       deprioritizedConnections: [...this.cooldown.values()].filter(
         (until) => until > performance.now(),
       ).length,
@@ -285,7 +364,10 @@ export class StripedChannel extends EventTarget implements TransferChannel {
         )
           finish();
       };
-      const timer = setTimeout(finish, 500);
+      const timer = setTimeout(
+        finish,
+        this.selective && this.frameBytes > FRAME_BYTES ? 5000 : 500,
+      );
       this.addEventListener('laneschanged', changed);
       this.addEventListener('close', finish);
       changed();
@@ -323,6 +405,8 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       while (
         sent < data.byteLength &&
         sent < limit &&
+        (!this.budgeted ||
+          (this.sequenceCredit && this.availableLanes().length > 0)) &&
         Math.max(
           this.burstBufferedBytes,
           this.selective ? this.pendingBytes : 0,
@@ -367,6 +451,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
           stripedReceipts: 1,
           stripedLanes: MAX_LANES,
           stripedFrameBytes: STRIPED_FRAME_BYTES,
+          stripedSmallFrames: 1,
         });
     }
     if (
@@ -453,6 +538,12 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       (channel) => (this.cooldown.get(channel) ?? 0) <= performance.now(),
     );
     if (healthy.length) available = healthy;
+    if (this.budgeted) {
+      const credited = this.availableLanes().filter((channel) =>
+        available.includes(channel),
+      );
+      if (credited.length) available = credited;
+    }
     return this.scheduler.choose(
       available,
       (channel) =>
@@ -581,6 +672,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
           ) {
             this.negotiated = true;
             this.selective = value.stripedReceipts === 1;
+            this.smallFrames = this.selective && value.stripedSmallFrames === 1;
             this.negotiatedFrameBytes =
               Number.isSafeInteger(value.stripedFrameBytes) &&
               value.stripedFrameBytes >= FRAME_BYTES

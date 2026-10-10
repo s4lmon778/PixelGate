@@ -1,6 +1,7 @@
 import { test, expect, chromium } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { writeFile, readFile } from 'node:fs/promises';
+import { UdpImpairment } from './udp-impairment';
 
 test('parallel connections hide ACK latency, survive lane loss, and verify stored bytes', async ({
   browser,
@@ -88,6 +89,7 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
   const receivingBrowser =
     browserName === 'webkit'
       ? await chromium.launch({
+          executablePath: process.env.PIXELGATE_TEST_CHROMIUM_EXECUTABLE,
           args: ['--disable-features=WebRtcHideLocalIpsWithMdns'],
         })
       : browser;
@@ -95,7 +97,14 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
     for (const mode of selectedModes) {
       const receiving = await receivingBrowser.newContext();
       const sending = await browser.newContext();
+      const impairment = process.env.PIXELGATE_TEST_UDP_DELAY_MS
+        ? new UdpImpairment(Number(process.env.PIXELGATE_TEST_UDP_DELAY_MS))
+        : undefined;
       try {
+        if (impairment) {
+          await impairment.install(receiving);
+          await impairment.install(sending);
+        }
         if (mode.includes('storage-delay')) {
           await receiving.addInitScript(() =>
             Object.defineProperty(navigator.storage, 'getDirectory', {
@@ -127,6 +136,7 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
             const metrics = {
               started: 0,
               bytes: 0,
+              readyWindows: [] as number[],
               acks: [] as { offset: number; ms: number; received: number }[],
             };
             Object.assign(window, { receiveMetrics: metrics });
@@ -157,6 +167,8 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
                   delete message.receiveWindowBytes;
                   data = JSON.stringify(message);
                 }
+                if (message.type === 'ready')
+                  metrics.readyWindows.push(message.receiveWindowBytes);
                 if (message.type === 'ack') {
                   metrics.acks.push({
                     offset: message.offset,
@@ -515,7 +527,9 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
           .last()
           .click();
         await expect(sender.locator('.file-status').first())
-          .toHaveText('Browser copy verified', { timeout: 60000 })
+          .toHaveText('Browser copy verified', {
+            timeout: process.env.PIXELGATE_TEST_UDP_DELAY_MS ? 180000 : 60000,
+          })
           .catch(async (error) => {
             console.log(
               JSON.stringify({
@@ -566,6 +580,15 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
           .textContent()
           .catch(() => null);
         const transport = report ? JSON.parse(report).transfer : undefined;
+        if (impairment) {
+          expect(impairment.forwardedBytes).toBeGreaterThan(payload.length);
+          const rtt = report
+            ? JSON.parse(report).selectedRoute?.roundTripMs
+            : undefined;
+          expect(rtt).toBeGreaterThanOrEqual(
+            Number(process.env.PIXELGATE_TEST_UDP_DELAY_MS) * 2 * 0.8,
+          );
+        }
         const receivingReportText = await receiver
           .getByLabel('Connection report', { exact: true })
           .textContent();
@@ -602,6 +625,7 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
             binaryMessages: metrics.binaryMessages,
             bufferReads: metrics.bufferReads,
             bufferReadWaitMilliseconds: metrics.bufferReadWaitMilliseconds,
+            forwardedUdpBytes: impairment?.forwardedBytes,
           }),
         );
         if (
@@ -645,7 +669,7 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
           ...metrics,
           ...{ receiverMetrics, transport, receivingReport },
         });
-        const storedHash = await receiver.evaluate(async () => {
+        const storedHash = await receiver.evaluate(async (storageMode) => {
           const database = await new Promise<IDBDatabase>((resolve) => {
             const request = indexedDB.open('pixelbridge-v1', 3);
             request.onsuccess = () => resolve(request.result);
@@ -659,7 +683,7 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
           });
           database.close();
           let file: Blob;
-          if (navigator.storage.getDirectory) {
+          if (storageMode === 'opfs') {
             const root = await (
               await navigator.storage.getDirectory()
             ).getDirectoryHandle('pixelbridge');
@@ -693,7 +717,7 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
           return Array.from(new Uint8Array(hash), (byte) =>
             byte.toString(16).padStart(2, '0'),
           ).join('');
-        });
+        }, receivingReport.storageMode);
         expect(storedHash).toBe(expected);
         if (mode === 'pipeline-local') {
           await sender
@@ -759,6 +783,7 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
           ).toHaveCount(0);
         }
       } finally {
+        impairment?.close();
         await sending.close();
         await receiving.close();
       }
@@ -775,7 +800,11 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
   if (baseline) {
     if (process.env.PIXELGATE_TEST_COMPARE_MODES) {
       for (let index = 0; index < measurements.length; index += 2)
-        if (measurements[index].mode.startsWith('baseline'))
+        if (
+          measurements[index].mode.startsWith('baseline') &&
+          measurements[index + 1]?.mode ===
+            measurements[index].mode.replace(/^baseline/, 'pipeline')
+        )
           expect(measurements[index + 1].milliseconds).toBeLessThan(
             measurements[index].milliseconds * 1.25,
           );
