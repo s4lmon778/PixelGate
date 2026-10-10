@@ -79,6 +79,36 @@ describe('delivery-aware scheduling', () => {
     scheduler.clear();
     expect(scheduler.snapshot(['path']).paths[0].receivedBytes).toBe(0);
   });
+  it('sizes independent flight budgets from bandwidth and baseline delay within memory limits', () => {
+    const scheduler = new PathScheduler<string>();
+    learn(scheduler, 'fast', 100);
+    learn(scheduler, 'slow', 400);
+    const frame = 64 * 1024 - 8;
+    expect(scheduler.flightBudget('new', frame)).toBe(128 * 1024);
+    expect(scheduler.flightBudget('fast', frame)).toBeGreaterThanOrEqual(
+      128 * 1024,
+    );
+    expect(scheduler.flightBudget('slow', frame)).toBeGreaterThanOrEqual(
+      128 * 1024,
+    );
+    const fast = scheduler.flightBudget('fast', frame);
+    const slow = scheduler.flightBudget('slow', frame);
+    for (let i = 0; i < 5; i++) {
+      scheduler.sent('slow', 3000 + i * 1000, FRAME_BYTES);
+      scheduler.received('slow', FRAME_BYTES, 3000 + i * 1000, 5000 + i * 1000);
+    }
+    expect(scheduler.flightBudget('fast', frame)).toBe(fast);
+    expect(scheduler.flightBudget('slow', frame)).toBeLessThan(slow);
+    expect(scheduler.flightBudget('slow', frame)).toBeGreaterThanOrEqual(
+      128 * 1024,
+    );
+    const saturated = new PathScheduler<string>();
+    for (let now = 0; now < 400; now += 100) {
+      saturated.sent('path', now, FRAME_BYTES);
+      saturated.received('path', 100 * 1024 * 1024, now, now + 100);
+    }
+    expect(saturated.flightBudget('path', frame)).toBe(1024 * 1024);
+  });
   it('distinguishes stable high latency from queue growth and isolates path feedback', () => {
     const scheduler = new PathScheduler<string>();
     learn(scheduler, 'distant', 800);

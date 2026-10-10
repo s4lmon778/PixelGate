@@ -102,6 +102,28 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe('parallel transport compatibility, ordering, and fallback', () => {
+  it('retains received-byte totals after a bulk path closes', () => {
+    const { primary, transport } = receiver();
+    opened.push(transport);
+    primary.receive(JSON.stringify({ type: 'pg-lane', index: 0 }));
+    const peer = Peer.peers[0];
+    peer.channel.readyState = 'open';
+    (
+      peer as unknown as {
+        ondatachannel: (event: { channel: RTCDataChannel }) => void;
+      }
+    ).ondatachannel({ channel: peer.channel.native() });
+    primary.receive(JSON.stringify({ type: 'pg-striped-start' }));
+    peer.channel.receive(frame(0, new Uint8Array(16)));
+    primary.receive(frame(1, new Uint8Array(8)));
+    peer.channel.close();
+    const report = transport.snapshot();
+    expect(report.connections).toBe(1);
+    expect(report.deliveredBytes).toBe(24);
+    expect(
+      report.paths?.reduce((total, path) => total + path.receivedBytes, 0),
+    ).toBe(40);
+  });
   it('measures actual received wire bytes and distinguishes a reorder stall from delivered bytes', async () => {
     const { primary, transport } = receiver();
     opened.push(transport);
@@ -170,6 +192,7 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
         stripedReceipts: 1,
         stripedLanes: 4,
         stripedFrameBytes: STRIPED_FRAME_BYTES,
+        stripedSmallFrames: 1,
       }),
     );
     await vi.advanceTimersByTimeAsync(0);
@@ -200,8 +223,8 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
       if (!count) break;
       sent += count;
     }
-    expect(sent).toBeGreaterThan(512 * 1024 - FRAME_BYTES);
-    expect(sent).toBeLessThanOrEqual(512 * 1024 + FRAME_BYTES);
+    expect(sent).toBeGreaterThan(transport.sendBufferBytes - FRAME_BYTES);
+    expect(sent).toBeLessThanOrEqual(transport.sendBufferBytes + FRAME_BYTES);
     const frames = all
       .flatMap((channel) => channel.sent)
       .filter((wire): wire is ArrayBuffer => wire instanceof ArrayBuffer)
@@ -217,7 +240,7 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
     expect(actual).toEqual(input.subarray(0, sent));
     expect(native.every((bytes) => bytes > 0)).toBe(true);
     expect(transport.snapshot().unreceivedBytes).toBeLessThanOrEqual(
-      512 * 1024 + FRAME_BYTES + 8,
+      transport.sendBufferBytes + FRAME_BYTES + 8,
     );
     // Native drain alone cannot release unreceived bytes.
     native.fill(0);
@@ -274,6 +297,7 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
         stripedTransport: 1,
         stripedReceipts: 1,
         stripedFrameBytes: STRIPED_FRAME_BYTES,
+        stripedSmallFrames: 1,
       }),
     );
     expect(transport.frameBytes).toBe(STRIPED_FRAME_BYTES);
@@ -303,6 +327,39 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
     primary.receive(JSON.stringify({ type: 'pg-striped-start' }));
     primary.receive(frame(0, new Uint8Array(FRAME_BYTES + 1)));
     expect(primary.readyState).toBe('closed');
+  });
+  it('bounds the sequence window even when selective receipts release displaced small frames', async () => {
+    const primary = new Channel();
+    const transport = new StripedChannel(primary.native(), 'send');
+    opened.push(transport);
+    primary.receive(
+      JSON.stringify({
+        type: 'hello',
+        version: 1,
+        stripedTransport: 1,
+        stripedReceipts: 1,
+        stripedLanes: 4,
+        stripedFrameBytes: STRIPED_FRAME_BYTES,
+        stripedSmallFrames: 1,
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    const all = [primary, ...Peer.peers.map((peer) => peer.channel)];
+    for (const channel of all) channel.readyState = 'open';
+    for (let sequence = 0; sequence < 287; sequence++) {
+      for (const channel of all) channel.bufferedAmount = 0;
+      transport.send(new Uint8Array(8 * 1024 - 8));
+      if (sequence > 0)
+        primary.receive(
+          JSON.stringify({ type: 'pg-striped-receipt', received: [sequence] }),
+        );
+    }
+    for (const channel of all) channel.bufferedAmount = 0;
+    expect(transport.sendBurst(new Uint8Array(64 * 1024))).toBe(0);
+    expect(transport.bufferedAmount).toBeGreaterThan(transport.sendBufferBytes);
+    primary.receive(JSON.stringify({ type: 'pg-striped-ack', sequence: 286 }));
+    expect(transport.sendBurst(new Uint8Array(64 * 1024))).toBeGreaterThan(0);
+    expect(transport.minimumFrameBytes).toBe(8 * 1024 - 8);
   });
   it('tries the user-supplied local address on a bulk peer without exporting it', async () => {
     const primary = new Channel();
@@ -563,9 +620,13 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
     expect(transport.pacingDelayMs).toBe(4);
     vi.restoreAllMocks();
   });
-  it.each([20, 800])(
-    'keeps healthy siblings running after a path stalls at %i ms baseline latency',
-    async (latency) => {
+  it.each([
+    { latency: 20, smallFrames: 1 },
+    { latency: 800, smallFrames: 1 },
+    { latency: 800, smallFrames: undefined },
+  ])(
+    'keeps healthy siblings running after a path stalls at $latency ms with small-frame capability $smallFrames',
+    async ({ latency, smallFrames }) => {
       vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
       const primary = new Channel();
       const transport = new StripedChannel(primary.native(), 'send');
@@ -578,6 +639,7 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
           stripedReceipts: 1,
           stripedLanes: 4,
           stripedFrameBytes: STRIPED_FRAME_BYTES,
+          stripedSmallFrames: smallFrames,
         }),
       );
       await vi.advanceTimersByTimeAsync(0);
@@ -598,9 +660,17 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
           }),
         );
       }
-      expect(transport.sendBufferBytes).toBe(TRANSFER_WINDOW_BYTES - 64 * 1024);
+      expect(transport.sendBufferBytes).toBeGreaterThanOrEqual(64 * 1024);
+      expect(transport.sendBufferBytes).toBeLessThanOrEqual(
+        TRANSFER_WINDOW_BYTES - 64 * 1024,
+      );
       expect(transport.pacingDelayMs).toBe(0);
-      expect(transport.sendFrameBytes).toBe(STRIPED_FRAME_BYTES);
+      expect(transport.minimumFrameBytes).toBe(
+        smallFrames ? 8 * 1024 - 8 : FRAME_BYTES,
+      );
+      expect(transport.sendFrameBytes).toBe(
+        latency > 100 && smallFrames ? 8 * 1024 - 8 : STRIPED_FRAME_BYTES,
+      );
       for (const channel of all) channel.bufferedAmount = 0;
       for (let i = 0; i < 4; i++)
         transport.send(new Uint8Array(FRAME_BYTES).buffer);
@@ -614,9 +684,14 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
       await vi.advanceTimersByTimeAsync(Math.max(300, latency * 3));
       expect(transport.snapshot().deprioritizedConnections).toBe(1);
       expect(transport.snapshot().replayedPackets).toBe(1);
-      expect(transport.sendBufferBytes).toBe(TRANSFER_WINDOW_BYTES - 64 * 1024);
+      expect(transport.sendBufferBytes).toBeGreaterThanOrEqual(64 * 1024);
+      expect(transport.sendBufferBytes).toBeLessThanOrEqual(
+        TRANSFER_WINDOW_BYTES - 64 * 1024,
+      );
       expect(transport.pacingDelayMs).toBe(0);
-      expect(transport.sendFrameBytes).toBe(STRIPED_FRAME_BYTES);
+      expect(transport.sendFrameBytes).toBe(
+        latency > 100 && smallFrames ? 8 * 1024 - 8 : STRIPED_FRAME_BYTES,
+      );
       primary.receive(
         JSON.stringify({ type: 'pg-striped-receipt', received: [641] }),
       );
@@ -624,7 +699,7 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
       vi.restoreAllMocks();
     },
   );
-  it('fills a larger warmed window within receiver credit and reduces it when lanes close', async () => {
+  it('sizes warmed path budgets within receiver credit and removes closed paths', async () => {
     let clock = 100;
     vi.spyOn(performance, 'now').mockImplementation(() => clock);
     const primary = new Channel();
@@ -638,6 +713,7 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
         stripedReceipts: 1,
         stripedLanes: 4,
         stripedFrameBytes: STRIPED_FRAME_BYTES,
+        stripedSmallFrames: 1,
       }),
     );
     await vi.advanceTimersByTimeAsync(0);
@@ -658,16 +734,21 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
         }),
       );
     }
-    expect(transport.sendBufferBytes).toBe(TRANSFER_WINDOW_BYTES - 64 * 1024);
-    expect(transport.burstBytes).toBe(512 * 1024);
+    expect(transport.sendBufferBytes).toBeGreaterThanOrEqual(64 * 1024);
+    expect(transport.sendBufferBytes).toBeLessThanOrEqual(
+      TRANSFER_WINDOW_BYTES - 64 * 1024,
+    );
+    expect(transport.burstBytes).toBeLessThanOrEqual(512 * 1024);
     expect(transport.pacingDelayMs).toBe(0);
     // Even the largest allowed frame leaves space for transport control.
     expect(
       transport.sendBufferBytes + STRIPED_FRAME_BYTES + 8,
     ).toBeLessThanOrEqual(TRANSFER_WINDOW_BYTES);
+    const previousBudget = transport.sendBufferBytes;
     Peer.peers[0].channel.close();
     Peer.peers[1].channel.close();
-    expect(transport.sendBufferBytes).toBe(3 * CHECKPOINT_BYTES);
+    expect(transport.sendBufferBytes).toBeLessThan(previousBudget);
+
     expect(transport.snapshot().unreceivedBytes).toBe(0);
     for (const channel of all) channel.bufferedAmount = 0;
     for (let i = 0; i < 16; i++)
@@ -679,12 +760,14 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
         received: Array.from({ length: 16 }, (_, i) => 2560 + i),
       }),
     );
-    // Small-frame delivery must not keep the largest warmed window/burst.
+    // A temporary queue cannot force every healthy path back to tiny frames.
     expect(transport.snapshot().queuedDelayMs).toBeGreaterThan(100);
     expect(transport.snapshot().queuedDelayMs).toBeLessThan(150);
-    expect(transport.sendFrameBytes).toBe(FRAME_BYTES);
-    expect(transport.sendBufferBytes).toBe(2 * CHECKPOINT_BYTES);
-    expect(transport.burstBytes).toBe(256 * 1024);
+    expect(transport.sendFrameBytes).toBe(8 * 1024 - 8);
+    expect(transport.sendBufferBytes).toBeGreaterThanOrEqual(3 * 16 * 1024);
+    expect(transport.sendBufferBytes).toBeLessThanOrEqual(
+      TRANSFER_WINDOW_BYTES - 64 * 1024,
+    );
     vi.restoreAllMocks();
   });
   it('selectively receipts displaced packets without delivering them before the missing prefix', async () => {

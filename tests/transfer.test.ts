@@ -104,6 +104,9 @@ class Channel {
   listeners = new Map<string, (() => void)[]>();
   transform?: (message: Control) => Control;
   binarySent = 0;
+  sendFrameBytes?: number;
+  frameBytes?: number;
+  minimumFrameBytes?: number;
   send(value: string | Uint8Array) {
     if (typeof value === 'string' && this.transform)
       value = JSON.stringify(this.transform(JSON.parse(value)));
@@ -272,38 +275,43 @@ describe('receiver-owned verification and checkpoints', () => {
     ).toBe(q[0].record!.sha256);
     await resumed.receiver.close();
   });
-  it('fills only the advertised window while storage stalls, then verifies every byte', async () => {
-    let release!: () => void;
-    const blocked = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    state.beforeWrite = () => blocked;
-    const p = peers(),
-      q = queue(TRANSFER_WINDOW_BYTES + CHECKPOINT_BYTES + 123);
-    const run = p.sender.run(q, 'pipeline');
-    try {
-      await vi.waitFor(() =>
-        expect(p.a.binarySent).toBe(TRANSFER_WINDOW_BYTES),
-      );
-      expect(q[0].record?.bytes).toBe(0);
-      expect(state.files.get(q[0].record!.id)?.bytes).toBe(0);
-      expect(p.errors).toEqual([]);
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      expect(p.a.binarySent).toBe(TRANSFER_WINDOW_BYTES);
-    } finally {
-      release();
-    }
-    await run;
-    expect(q[0].phase).toBe('verified');
-    expect(state.batchSizes.some((size) => size > 1)).toBe(true);
-    expect(p.a.binarySent).toBe(q[0].file.size);
-    expect(
-      createHash('sha256')
-        .update(state.bytes.get(q[0].record!.id)!)
-        .digest('hex'),
-    ).toBe(q[0].record!.sha256);
-    await p.receiver.close();
-  });
+  it.each([FRAME_BYTES, 8 * 1024 - 8])(
+    'fills only the advertised window with %i-byte frames while storage stalls, then verifies every byte',
+    async (frameBytes) => {
+      let release!: () => void;
+      const blocked = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      state.beforeWrite = () => blocked;
+      const p = peers(),
+        q = queue(TRANSFER_WINDOW_BYTES + CHECKPOINT_BYTES + 123);
+      p.a.sendFrameBytes = frameBytes;
+      p.b.minimumFrameBytes = frameBytes;
+      const run = p.sender.run(q, 'pipeline');
+      try {
+        await vi.waitFor(() =>
+          expect(p.a.binarySent).toBe(TRANSFER_WINDOW_BYTES),
+        );
+        expect(q[0].record?.bytes).toBe(0);
+        expect(state.files.get(q[0].record!.id)?.bytes).toBe(0);
+        expect(p.errors).toEqual([]);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(p.a.binarySent).toBe(TRANSFER_WINDOW_BYTES);
+      } finally {
+        release();
+      }
+      await run;
+      expect(q[0].phase).toBe('verified');
+      expect(state.batchSizes.some((size) => size > 1)).toBe(true);
+      expect(p.a.binarySent).toBe(q[0].file.size);
+      expect(
+        createHash('sha256')
+          .update(state.bytes.get(q[0].record!.id)!)
+          .digest('hex'),
+      ).toBe(q[0].record!.sha256);
+      await p.receiver.close();
+    },
+  );
   it('keeps one checkpoint in flight with an older receiver', async () => {
     let release!: () => void;
     const blocked = new Promise<void>((resolve) => {
