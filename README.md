@@ -181,7 +181,7 @@ Recorded through **0.3.20 on October 10, 2026** across full and targeted runs. T
 
 | Evidence                        | What was checked                                                                                                                                                                           |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **172 unit/integration tests**  | Independent hashes, recovery, latency-relative bounded transfer windows, retained reports, ordered parallel transport, lane failure fallback, pairing lifecycle, and deployment provenance |
+| **176 unit/integration tests**  | Independent hashes, recovery, latency-relative bounded transfer windows, retained reports, ordered parallel transport, lane failure fallback, pairing lifecycle, and deployment provenance |
 | Browser integration             | Real WebRTC transfers, approval, QR decoding, independent stored/exported hashes, interruption and refresh recovery, and corruption rejection                                              |
 | Interface and capability checks | Mobile/desktop layouts, enlarged text, appearance, native-share fixtures, download bytes, wake-lock lifecycle, and history preservation                                                    |
 | Legacy engine                   | Actual Chromium 101 compatibility storage, public signaling, downloads, checkpoint recovery, and current layout controls                                                                   |
