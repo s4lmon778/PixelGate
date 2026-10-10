@@ -82,6 +82,12 @@ export class StripedChannel extends EventTarget implements TransferChannel {
   private cooldown = new Map<RTCDataChannel, number>();
   private burstBuffers?: Map<RTCDataChannel, number>;
   private burstBufferedBytes = 0;
+  private incomingPaths = new Map<
+    RTCDataChannel,
+    { bytes: number; sampledBytes: number; sampledAt: number; rate: number }
+  >();
+  private deliveredBytes = 0;
+  private lastDeliveryAt = 0;
   constructor(
     private primary: RTCDataChannel,
     private role: 'send' | 'receive',
@@ -89,7 +95,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
   ) {
     super();
     this.senderAddress = role === 'receive' ? lanAddress(senderAddress) : '';
-    primary.onmessage = ({ data }) => this.receive(data, false);
+    primary.onmessage = ({ data }) => this.receive(data, false, primary);
     primary.addEventListener('bufferedamountlow', () =>
       this.dispatchEvent(new Event('bufferedamountlow')),
     );
@@ -204,25 +210,62 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     return 64 * 1024;
   }
   snapshot() {
-    return {
-      connections:
-        (this.readyState === 'open' ? 1 : 0) + this.openLanes().length,
-      mode: this.sending || this.receiving ? 'parallel' : 'single',
-      selectiveReceipts: this.selective,
+    const channels = [this.primary, ...this.openLanes()];
+    const receivedPaths = channels.map((channel, index) => {
+      const path = this.incomingPaths.get(channel);
+      const now = performance.now();
+      if (path && now - path.sampledAt >= 250) {
+        path.rate =
+          ((path.bytes - path.sampledBytes) * 1000) / (now - path.sampledAt);
+        path.sampledAt = now;
+        path.sampledBytes = path.bytes;
+      }
+      return {
+        path: index + 1,
+        receivedBytes: path?.bytes ?? 0,
+        deliveryBytesPerSecond: Math.round(path?.rate ?? 0),
+      };
+    });
+    const senderMeasurements = {
       unreceivedBytes: this.pendingBytes,
-      reorderedBytes: this.reorderedBytes,
+      oldestUnreceivedMs: Math.round(
+        Math.max(
+          0,
+          ...[...this.pending.values()].map(
+            (packet) => performance.now() - packet.sentAt,
+          ),
+        ),
+      ),
       receiptDelayMs: Math.round(this.delay),
       queuedDelayMs: Math.round(this.deliveryFeedback().queueDelay),
       replayedPackets: this.replayed,
       pacingBurstBytes: this.burstBytes,
       pacingDelayMs: this.pacingDelayMs,
       sendBufferBytes: this.sendBufferBytes,
-      frameBytes: this.frameBytes,
       sendFrameBytes: this.sendFrameBytes,
       deprioritizedConnections: [...this.cooldown.values()].filter(
         (until) => until > performance.now(),
       ).length,
       ...this.scheduler.snapshot([this.primary, ...this.openLanes()]),
+      measurement: 'sender-receipts' as const,
+    };
+    const outgoing: Partial<typeof senderMeasurements> =
+      this.role === 'send' ? senderMeasurements : {};
+    return {
+      connections:
+        (this.readyState === 'open' ? 1 : 0) + this.openLanes().length,
+      mode: this.sending || this.receiving ? 'parallel' : 'single',
+      selectiveReceipts: this.selective,
+      reorderedBytes: this.reorderedBytes,
+      deliveredBytes: this.deliveredBytes,
+      deliveryIdleMs: this.lastDeliveryAt
+        ? Math.round(performance.now() - this.lastDeliveryAt)
+        : 0,
+      ...outgoing,
+      ...(this.role === 'receive'
+        ? { paths: receivedPaths, measurement: 'receiver-wire-bytes' as const }
+        : {}),
+      frameBytes: this.frameBytes,
     };
   }
   async prepare() {
@@ -458,9 +501,15 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     let count = 0;
     for (const [sequence, packet] of this.pending) {
       if (
-        sequence >= this.highestReceived ||
-        packet.retries >= 3 ||
-        now - packet.sentAt < Math.max(250, Math.min(2000, this.delay * 3))
+        now - packet.sentAt <
+        Math.min(
+          10000,
+          Math.max(
+            sequence < this.highestReceived ? 250 : 2000,
+            this.delay * 3,
+          ) *
+            2 ** Math.min(packet.retries, 3),
+        )
       )
         continue;
       // Moving a missing packet off a slow lane must not immediately make that
@@ -499,10 +548,27 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       );
   }
   private deliver(data: Payload) {
+    if (typeof data !== 'string') {
+      this.deliveredBytes += data.byteLength;
+      this.lastDeliveryAt = performance.now();
+    }
     this.onmessage?.call(this.primary, new MessageEvent('message', { data }));
   }
-  private receive(data: unknown, bulk: boolean) {
+  private receive(data: unknown, bulk: boolean, channel: RTCDataChannel) {
     if (this.stopped) return;
+    if (data instanceof ArrayBuffer) {
+      let path = this.incomingPaths.get(channel);
+      if (!path) {
+        path = {
+          bytes: 0,
+          sampledBytes: 0,
+          sampledAt: performance.now(),
+          rate: 0,
+        };
+        this.incomingPaths.set(channel, path);
+      }
+      path.bytes += data.byteLength;
+    }
     try {
       if (typeof data === 'string') {
         if (data.length > 32000) throw new Error('Transfer control too large.');
@@ -702,7 +768,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     lane.channel = channel;
     channel.binaryType = 'arraybuffer';
     channel.bufferedAmountLowThreshold = this.threshold / (this.laneCount + 1);
-    channel.onmessage = ({ data }) => this.receive(data, true);
+    channel.onmessage = ({ data }) => this.receive(data, true, channel);
     channel.addEventListener('open', () => {
       clearTimeout(lane.timer);
       lane.lanRoute?.stop();

@@ -6,6 +6,144 @@ const workerAsset = readdirSync('dist/assets').find((name) =>
   name.startsWith('staging.worker-'),
 )!;
 
+test('strict multi-checkpoint commits roll back atomically and resume across refresh', async ({
+  page,
+}) => {
+  await page.goto('./');
+  const workerURL = new URL(`assets/${workerAsset}`, page.url()).href;
+  await page.route(workerURL, async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({
+      response,
+      body:
+        `
+      const put = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function(value, ...args) {
+        if (this.name === 'chunks' && (value.bytes?.size ?? value.bytes?.byteLength) === 7)
+          throw new DOMException('Injected quota failure inside batch', 'QuotaExceededError');
+        return Reflect.apply(put, this, [value, ...args]);
+      };
+    ` + (await response.text()),
+    });
+  });
+  const result = await page.evaluate(async (url) => {
+    const worker = new Worker(url);
+    let sequence = 0;
+    const call = (action: string, extra: object = {}) =>
+      new Promise<{ error?: string }>((resolve) => {
+        worker.onmessage = ({ data }) => resolve(data);
+        worker.postMessage({
+          id: ++sequence,
+          action,
+          backend: 'indexeddb',
+          ...extra,
+        });
+      });
+    const id = 'b'.repeat(64),
+      checkpoint = 1024 * 1024;
+    await call('open', { fileId: id, offset: 0 });
+    await call('write', {
+      offset: 0,
+      bytes: new Uint8Array(checkpoint).fill(11).buffer,
+    });
+    const rejected = await call('write-batch', {
+      offset: checkpoint,
+      blocks: [
+        new Uint8Array(checkpoint).fill(22).buffer,
+        new Uint8Array(7).buffer,
+      ],
+    });
+    const opened = indexedDB.open('pixelgate-staging-v1', 1);
+    const db = await new Promise<IDBDatabase>((resolve) => {
+      opened.onsuccess = () => resolve(opened.result);
+    });
+    const length = await new Promise<number>((resolve) => {
+      const r = db.transaction('files').objectStore('files').get(id);
+      r.onsuccess = () => resolve(r.result.size);
+    });
+    const chunks = await new Promise<number>((resolve) => {
+      const r = db
+        .transaction('chunks')
+        .objectStore('chunks')
+        .count(IDBKeyRange.bound([id, 0], [id, Number.MAX_SAFE_INTEGER]));
+      r.onsuccess = () => resolve(r.result);
+    });
+    await call('open', { fileId: id, offset: checkpoint });
+    const committed = await call('write-batch', {
+      offset: checkpoint,
+      blocks: [
+        new Uint8Array(checkpoint).fill(22).buffer,
+        new Uint8Array(checkpoint).fill(33).buffer,
+        new Uint8Array(23).fill(44).buffer,
+      ],
+    });
+    await call('close');
+    db.close();
+    worker.terminate();
+    return { rejected, length, chunks, committed };
+  }, workerURL);
+  expect(result.rejected.error).toContain('storage is full');
+  expect(result.length).toBe(1024 * 1024);
+  expect(result.chunks).toBe(1);
+  expect(result.committed.error).toBeUndefined();
+  await page.reload();
+  const resumed = await page.evaluate(async (url) => {
+    const worker = new Worker(url);
+    await new Promise<void>((resolve) => {
+      worker.onmessage = ({ data }) => {
+        if (data.error) throw new Error(data.error);
+        resolve();
+      };
+      worker.postMessage({
+        id: 1,
+        action: 'open',
+        backend: 'indexeddb',
+        fileId: 'b'.repeat(64),
+        offset: 3 * 1024 * 1024,
+      });
+    });
+    worker.terminate();
+    const db = await new Promise<IDBDatabase>((resolve) => {
+      const r = indexedDB.open('pixelgate-staging-v1', 1);
+      r.onsuccess = () => resolve(r.result);
+    });
+    const blocks = await new Promise<{ bytes: Blob | ArrayBuffer }[]>(
+      (resolve) => {
+        const r = db
+          .transaction('chunks')
+          .objectStore('chunks')
+          .getAll(
+            IDBKeyRange.bound(
+              ['b'.repeat(64), 0],
+              ['b'.repeat(64), Number.MAX_SAFE_INTEGER],
+            ),
+          );
+        r.onsuccess = () => resolve(r.result);
+      },
+    );
+    db.close();
+    return Promise.all(
+      blocks.map(async (block) => {
+        const bytes = new Uint8Array(
+          await new Blob([block.bytes]).arrayBuffer(),
+        );
+        return {
+          length: bytes.length,
+          marker: bytes[0],
+          intact: bytes.every((byte) => byte === bytes[0]),
+        };
+      }),
+    );
+  }, workerURL);
+  expect(resumed).toEqual(
+    [11, 22, 33].map((marker) => ({
+      length: 1024 * 1024,
+      marker,
+      intact: true,
+    })),
+  );
+});
+
 test('compatibility checkpoints survive refresh, reconcile tails, reject gaps, and roll back quota failures', async ({
   page,
 }) => {

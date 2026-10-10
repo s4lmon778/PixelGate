@@ -3,6 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 vi.mock('../lib/bridge/indexed-staging', () => ({
   openIndexed: vi.fn(),
   writeIndexed: vi.fn(),
+  writeIndexedBatch: vi.fn(),
 }));
 
 let size: number;
@@ -94,6 +95,27 @@ it('handles valid short writes at advancing offsets and checks final stored leng
     0, 3, 6,
   ]);
   expect(size).toBe(8);
+});
+
+it('flushes a contiguous batch once, validates its final size, and rejects unbounded batches', async () => {
+  const blocks = [
+    new Uint8Array(1024 * 1024).buffer,
+    new Uint8Array(23).buffer,
+  ];
+  access.flush.mockClear();
+  expect((await call('write-batch', { offset: 0, blocks })).ok).toBe(true);
+  expect(size).toBe(1024 * 1024 + 23);
+  expect(access.flush).toHaveBeenCalledOnce();
+  expect(access.write.mock.calls.map(([, options]) => options.at)).toEqual([
+    0,
+    1024 * 1024,
+  ]);
+  const bad = await call('write-batch', {
+    offset: size,
+    blocks: Array(5).fill(blocks[0]),
+  });
+  expect(bad.error).toContain('Invalid staging batch');
+  expect(size).toBe(1024 * 1024 + 23);
 });
 
 it('rejects a successful count when the file did not grow to the checkpoint end', async () => {

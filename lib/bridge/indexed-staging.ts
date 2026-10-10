@@ -187,16 +187,33 @@ export async function writeIndexed(
   offset: number,
   bytes: ArrayBuffer,
 ) {
+  return writeIndexedBatch(id, offset, [bytes]);
+}
+
+export async function writeIndexedBatch(
+  id: string,
+  offset: number,
+  blocks: ArrayBuffer[],
+) {
   checked(id, offset);
   if (
-    bytes.byteLength < 1 ||
-    bytes.byteLength > CHECKPOINT_BYTES ||
-    !Number.isSafeInteger(offset + bytes.byteLength)
+    blocks.length < 1 ||
+    blocks.length > 4 ||
+    blocks.some(
+      (bytes, index) =>
+        !(bytes instanceof ArrayBuffer) ||
+        bytes.byteLength < 1 ||
+        bytes.byteLength > CHECKPOINT_BYTES ||
+        (index < blocks.length - 1 && bytes.byteLength !== CHECKPOINT_BYTES),
+    )
   )
+    throw new Error('Invalid staging checkpoint.');
+  const length = blocks.reduce((total, bytes) => total + bytes.byteLength, 0);
+  if (!Number.isSafeInteger(offset + length))
     throw new Error('Invalid staging checkpoint.');
   // Bytes and length commit atomically; acknowledgment waits for completion.
   const database = await db();
-  const commit = (data: Blob | ArrayBuffer) =>
+  const commit = (data: (Blob | ArrayBuffer)[]) =>
     new Promise<void>((resolve, reject) => {
       const tx = startTransaction(database, 'readwrite');
       let error: unknown;
@@ -210,21 +227,25 @@ export async function writeIndexed(
         () => {
           if (!request.result || request.result.size !== offset)
             throw new Error('Stored offset changed. Reconnect to resume.');
-          tx.objectStore('chunks').put({
-            fileId: id,
-            offset,
-            bytes: data,
-          });
-          files.put({ id, size: offset + bytes.byteLength });
+          let position = offset;
+          for (const bytes of data) {
+            tx.objectStore('chunks').put({
+              fileId: id,
+              offset: position,
+              bytes,
+            });
+            position += bytes instanceof Blob ? bytes.size : bytes.byteLength;
+          }
+          files.put({ id, size: offset + length });
         },
         (value) => {
           error = value;
         },
       );
     });
-  if (bufferChunks) return commit(bytes);
+  if (bufferChunks) return commit(blocks);
   try {
-    await commit(new Blob([bytes]));
+    await commit(blocks.map((bytes) => new Blob([bytes])));
   } catch (error) {
     // The first transaction must abort before retrying. Retry once only for
     // unsupported/failed Blob cloning, never quota or permission failures.
@@ -234,7 +255,7 @@ export async function writeIndexed(
       )
     )
       throw error;
-    await commit(bytes);
+    await commit(blocks);
     bufferChunks = true;
   }
 }

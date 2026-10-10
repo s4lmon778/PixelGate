@@ -47,6 +47,14 @@ export class Receiver {
   private chain = Promise.resolve();
   private queued = 0;
   private queuedBytes = 0;
+  private entries: { data: unknown; consumed: boolean; bytes: number }[] = [];
+  private stage = 'idle';
+  private stageStarted = performance.now();
+  private acceptedBytes = 0;
+  private lastFrameAt = 0;
+  private commits = 0;
+  private lastCommitMs = 0;
+  private lastBatchBytes = 0;
   private closed = false;
   private compatible = false;
   private failed = false;
@@ -74,26 +82,52 @@ export class Receiver {
       }
       this.queued++;
       this.queuedBytes += bytes;
+      const entry = { data: event.data as unknown, consumed: false, bytes };
+      this.entries.push(entry);
       this.chain = this.chain
         .then(async () => {
+          if (entry.consumed) return;
+          this.entries.shift();
           if (this.closed) return;
           try {
-            if (typeof event.data === 'string')
-              await this.message(parse(event.data));
-            else await this.frame(event.data);
+            if (typeof entry.data === 'string')
+              await this.message(parse(entry.data));
+            else await this.frame(entry.data);
           } catch (error) {
             await this.fail(error as Error);
           }
         })
         .finally(() => {
-          this.queued--;
-          this.queuedBytes -= bytes;
+          if (!entry.consumed) {
+            this.queued--;
+            this.queuedBytes -= bytes;
+          }
         });
     };
     channel.addEventListener('close', () => {
       void this.close();
     });
     control(channel, { type: 'hello', version: VERSION });
+  }
+  snapshot() {
+    return {
+      stage: this.stage,
+      stageElapsedMs: Math.round(performance.now() - this.stageStarted),
+      acceptedBytes: this.acceptedBytes,
+      durableBytes: this.active?.bytes ?? 0,
+      frameIdleMs: this.lastFrameAt
+        ? Math.round(performance.now() - this.lastFrameAt)
+        : 0,
+      queuedBytes: this.queuedBytes,
+      bufferedBytes: this.buffered,
+      storageCommits: this.commits,
+      lastCommitMs: Math.round(this.lastCommitMs),
+      lastBatchBytes: this.lastBatchBytes,
+    };
+  }
+  private processing(stage: string) {
+    this.stage = stage;
+    this.stageStarted = performance.now();
   }
   private async update(record: RecordFile) {
     await local.put(record);
@@ -109,6 +143,7 @@ export class Receiver {
     }
     if (!this.compatible) throw new Error('Transfer handshake required.');
     if (message.type === 'start') {
+      this.processing('opening-storage');
       if (
         this.active &&
         ['transferring', 'verifying'].includes(this.active.phase)
@@ -180,6 +215,9 @@ export class Receiver {
       await this.writer.open(manifest.id, offset);
       this.buffered = 0;
       await this.update({ ...manifest, bytes: offset, phase: 'transferring' });
+      this.acceptedBytes = offset;
+      this.commits = 0;
+      this.processing('waiting-for-bytes');
       control(this.channel, {
         type: 'ready',
         id: manifest.id,
@@ -188,6 +226,7 @@ export class Receiver {
           this.channel.receiveWindowBytes ?? TRANSFER_WINDOW_BYTES,
       });
     } else if (message.type === 'finish') {
+      this.processing('verifying');
       const record = this.active;
       if (
         !record ||
@@ -238,6 +277,7 @@ export class Receiver {
       }
       await this.update(result);
       control(this.channel, { type: 'result', file: result });
+      this.processing('complete');
     } else if (message.type === 'complete') {
       this.completed?.();
     } else if (
@@ -268,11 +308,81 @@ export class Receiver {
       record.phase !== 'transferring'
     )
       throw new Error('Unexpected file bytes.');
+    this.append(data, record.bytes, record);
+    if (
+      this.buffered !== CHECKPOINT_BYTES &&
+      record.bytes + this.buffered !== record.size
+    )
+      return;
+    const blocks = [this.checkpoint()];
+    let length = blocks[0].byteLength;
+    // Coalesce only checkpoints that have already arrived. No batching timer,
+    // extra receive credit, or wait for bytes from a legacy one-checkpoint peer.
+    while (
+      blocks.length < TRANSFER_WINDOW_BYTES / CHECKPOINT_BYTES &&
+      record.bytes + length < record.size
+    ) {
+      const needed = Math.min(
+        CHECKPOINT_BYTES,
+        record.size - record.bytes - length,
+      );
+      let available = 0;
+      for (const entry of this.entries) {
+        if (!(
+          entry.data instanceof ArrayBuffer || entry.data instanceof Uint8Array
+        ))
+          break;
+        available += entry.data.byteLength;
+        if (available >= needed) break;
+      }
+      if (available < needed) break;
+      while (this.buffered < needed) {
+        const entry = this.entries.shift()!;
+        entry.consumed = true;
+        const data = entry.data;
+        entry.data = undefined;
+        this.queued--;
+        this.queuedBytes -= entry.bytes;
+        this.append(data, record.bytes + length, record);
+      }
+      const block = this.checkpoint();
+      length += block.byteLength;
+      blocks.push(block);
+    }
+    this.processing('writing-storage');
+    const started = performance.now();
+    this.lastBatchBytes = length;
+    const sizes = blocks.map((block) => block.byteLength);
+    if (blocks.length === 1) await this.writer.write(record.bytes, blocks[0]);
+    else await this.writer.writeBatch(record.bytes, blocks);
+    this.processing('saving-checkpoint');
+    await this.update({
+      ...record,
+      bytes: record.bytes + length,
+      updated: Date.now(),
+    });
+    this.lastCommitMs = performance.now() - started;
+    this.commits++;
+    // Each original checkpoint ACK follows the same completed storage batch and
+    // manifest commit. Older senders still receive their expected offsets.
+    let offset = record.bytes;
+    for (const size of sizes) {
+      offset += size;
+      control(this.channel, { type: 'ack', id: record.id, offset });
+    }
+    this.processing('waiting-for-bytes');
+  }
+  private append(data: unknown, offset: number, record: RecordFile) {
+    if (!(
+      data instanceof ArrayBuffer ||
+      (data instanceof Uint8Array && data.buffer instanceof ArrayBuffer)
+    ))
+      throw new Error('Unexpected file bytes.');
     if (
       data.byteLength < 1 ||
       data.byteLength > (this.channel.frameBytes ?? FRAME_BYTES) ||
       this.buffered + data.byteLength > CHECKPOINT_BYTES ||
-      record.bytes + this.buffered + data.byteLength > record.size
+      offset + this.buffered + data.byteLength > record.size
     )
       throw new Error('Invalid file frame.');
     this.buffer.set(
@@ -280,36 +390,27 @@ export class Receiver {
       this.buffered,
     );
     this.buffered += data.byteLength;
-    if (
-      this.buffered === CHECKPOINT_BYTES ||
-      record.bytes + this.buffered === record.size
-    ) {
-      const length = this.buffered;
-      // Transfer ownership of a full checkpoint to the writer instead of
-      // copying it. Only an incomplete tail needs a precisely sized copy.
-      const checkpoint =
-        length === CHECKPOINT_BYTES
-          ? this.buffer.buffer
-          : this.buffer.slice(0, length).buffer;
-      if (length === CHECKPOINT_BYTES)
-        this.buffer = new Uint8Array(CHECKPOINT_BYTES);
-      await this.writer.write(record.bytes, checkpoint);
-      this.buffered = 0;
-      await this.update({
-        ...record,
-        bytes: record.bytes + length,
-        updated: Date.now(),
-      });
-      control(this.channel, {
-        type: 'ack',
-        id: record.id,
-        offset: record.bytes + length,
-      });
-    }
+    this.acceptedBytes += data.byteLength;
+    this.lastFrameAt = performance.now();
+  }
+  private checkpoint() {
+    const length = this.buffered;
+    // Transfer ownership of a full checkpoint to the writer instead of
+    // copying it. Only an incomplete tail needs a precisely sized copy.
+    const checkpoint =
+      length === CHECKPOINT_BYTES
+        ? this.buffer.buffer
+        : this.buffer.slice(0, length).buffer;
+    if (length === CHECKPOINT_BYTES)
+      this.buffer = new Uint8Array(CHECKPOINT_BYTES);
+    this.buffered = 0;
+    return checkpoint;
   }
   private async fail(error: Error) {
     if (this.failed) return;
     this.failed = true;
+    this.processing('paused-after-error');
+    this.error(error);
     try {
       await this.writer.close();
     } catch {}
@@ -329,7 +430,6 @@ export class Receiver {
           message: error.message,
         });
     }
-    this.error(error);
   }
   pause() {
     if (this.channel.readyState === 'open')

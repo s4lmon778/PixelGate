@@ -1,4 +1,9 @@
-import { openIndexed, writeIndexed } from './indexed-staging';
+import {
+  openIndexed,
+  writeIndexed,
+  writeIndexedBatch,
+} from './indexed-staging';
+import { CHECKPOINT_BYTES } from './model';
 
 interface Access {
   write(data: Uint8Array, opts: { at: number }): number;
@@ -49,29 +54,52 @@ self.onmessage = ({ data }) => {
           await handle.truncate(data.offset);
           await handle.flush();
         }
-      } else if (data.action === 'write') {
+      } else if (data.action === 'write' || data.action === 'write-batch') {
+        const blocks: ArrayBuffer[] =
+          data.action === 'write' ? [data.bytes] : data.blocks;
+        if (
+          !Array.isArray(blocks) ||
+          blocks.length < 1 ||
+          blocks.length > 4 ||
+          blocks.some(
+            (block, index) =>
+              !(block instanceof ArrayBuffer) ||
+              block.byteLength < 1 ||
+              block.byteLength > CHECKPOINT_BYTES ||
+              (index < blocks.length - 1 &&
+                block.byteLength !== CHECKPOINT_BYTES),
+          )
+        )
+          throw new Error('Invalid staging batch.');
+        const length = blocks.reduce((sum, block) => sum + block.byteLength, 0);
         if (indexedId) {
-          await writeIndexed(indexedId, data.offset, data.bytes);
+          if (data.action === 'write')
+            await writeIndexed(indexedId, data.offset, data.bytes);
+          else await writeIndexedBatch(indexedId, data.offset, blocks);
         } else {
           if (!handle) throw new Error('No staging file open.');
-          const bytes = new Uint8Array(data.bytes);
-          let written = 0;
-          while (written < bytes.length) {
-            const n = handle.write(bytes.subarray(written), {
-              at: data.offset + written,
-            });
-            if (
-              !Number.isSafeInteger(n) ||
-              n <= 0 ||
-              n > bytes.length - written
-            )
-              throw new Error(
-                'Browser storage rejected this checkpoint. Save and clear verified files, or retry in a regular browser tab.',
-              );
-            written += n;
+          let position = data.offset;
+          for (const block of blocks) {
+            const bytes = new Uint8Array(block);
+            let written = 0;
+            while (written < bytes.length) {
+              const n = handle.write(bytes.subarray(written), {
+                at: position + written,
+              });
+              if (
+                !Number.isSafeInteger(n) ||
+                n <= 0 ||
+                n > bytes.length - written
+              )
+                throw new Error(
+                  'Browser storage rejected this checkpoint. Save and clear verified files, or retry in a regular browser tab.',
+                );
+              written += n;
+            }
+            position += bytes.length;
           }
           await handle.flush();
-          if ((await handle.getSize()) !== data.offset + bytes.length)
+          if ((await handle.getSize()) !== data.offset + length)
             throw new Error(
               'Browser storage did not retain the complete checkpoint. Retry in a regular browser tab.',
             );

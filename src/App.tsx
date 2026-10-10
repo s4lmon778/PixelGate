@@ -39,6 +39,7 @@ import { StripedChannel } from '@/lib/bridge/striped-channel';
 import {
   retainedConnectionReport,
   retainConnectionReport,
+  downloadConnectionReport,
   clearConnectionReport,
   type ConnectionReport,
 } from '@/lib/bridge/connection-report';
@@ -135,6 +136,7 @@ export default function PixelGate() {
   const photosFolder = useRef(false);
   const currentQueue = useRef<QueuedFile[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
+  const mediaInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
   const verifyInput = useRef<HTMLInputElement>(null);
   const qrDialog = useRef<HTMLDialogElement>(null);
@@ -156,6 +158,8 @@ export default function PixelGate() {
         storageMode,
         ...room.diagnostics,
         transfer: transport.current?.snapshot(),
+        receiving: receiver.current?.snapshot(),
+        routeStatsScope: 'primary-connection',
       }
     : undefined;
   const connectionReport = currentReport ?? savedReport;
@@ -169,6 +173,8 @@ export default function PixelGate() {
       storageMode,
       ...room.diagnostics,
       transfer: transport.current.snapshot(),
+      receiving: receiver.current?.snapshot(),
+      routeStatsScope: 'primary-connection',
     };
     retainConnectionReport(report);
     setSavedReport(report);
@@ -1401,6 +1407,15 @@ export default function PixelGate() {
                           </button>
                           <button
                             className="text-button"
+                            onClick={() =>
+                              downloadConnectionReport(connectionReport)
+                            }
+                          >
+                            <ArrowDownToLine size={14} /> Download connection
+                            report
+                          </button>
+                          <button
+                            className="text-button"
                             onClick={() => {
                               clearConnectionReport();
                               setSavedReport(undefined);
@@ -1454,6 +1469,15 @@ export default function PixelGate() {
                               files.
                             </p>
                             <div className="button-row">
+                              {/Android/i.test(navigator.userAgent) && (
+                                <button
+                                  className="button"
+                                  disabled={running || busy}
+                                  onClick={() => mediaInput.current?.click()}
+                                >
+                                  <File size={15} /> Choose photos &amp; videos
+                                </button>
+                              )}
                               <button
                                 className="button"
                                 disabled={running || busy}
@@ -1481,6 +1505,20 @@ export default function PixelGate() {
                             multiple
                             hidden
                             aria-label="Choose files"
+                            onChange={(e) => {
+                              const files = e.target.files;
+                              if (files)
+                                void guarded(() => addFiles(selected(files)));
+                              e.target.value = '';
+                            }}
+                          />
+                          <input
+                            ref={mediaInput}
+                            type="file"
+                            accept="image/*,video/*"
+                            multiple
+                            hidden
+                            aria-label="Choose photos and videos"
                             onChange={(e) => {
                               const files = e.target.files;
                               if (files)
@@ -1608,23 +1646,20 @@ export default function PixelGate() {
                           <SaveToApp
                             folderControl={
                               <>
-                                {/Android/i.test(navigator.userAgent) && (
-                                  <button
-                                    className="button primary"
-                                    disabled={
-                                      busy ||
-                                      !!active ||
-                                      typeof (window as BrowserFolderWindow)
-                                        .showDirectoryPicker !== 'function'
-                                    }
-                                    onClick={() =>
-                                      void guarded(() => selectFolder(true))
-                                    }
-                                  >
-                                    <Folder size={16} aria-hidden="true" />
-                                    <span>Save to Photos folder</span>
-                                  </button>
-                                )}
+                                {/Android/i.test(navigator.userAgent) &&
+                                  typeof (window as BrowserFolderWindow)
+                                    .showDirectoryPicker === 'function' && (
+                                    <button
+                                      className="button primary"
+                                      disabled={busy || !!active}
+                                      onClick={() =>
+                                        void guarded(() => selectFolder(true))
+                                      }
+                                    >
+                                      <Folder size={16} aria-hidden="true" />
+                                      <span>Save to Photos folder</span>
+                                    </button>
+                                  )}
                                 <button
                                   className="button"
                                   disabled={
@@ -1644,7 +1679,7 @@ export default function PixelGate() {
                             }
                             folderHint={
                               typeof (window as BrowserFolderWindow)
-                                .showDirectoryPicker === 'function' && (
+                                .showDirectoryPicker === 'function' ? (
                                 <p className="hint destination-hint">
                                   Choose a folder before receiving to save and
                                   verify files there automatically, preserving
@@ -1663,7 +1698,7 @@ export default function PixelGate() {
                                     </>
                                   )}
                                 </p>
-                              )
+                              ) : null
                             }
                             folderAccessAvailable={
                               typeof (window as BrowserFolderWindow)

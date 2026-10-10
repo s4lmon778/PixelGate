@@ -96,3 +96,13 @@ The signaling broker is a trust dependency. A six-digit code and SHA-256 do not 
 **Code:** [pairing envelope](../lib/bridge/pairing.ts), [SDP validation](../lib/pairing-validation.ts), [privacy-limited diagnostics](../lib/bridge/route-diagnostics.ts), [CSP](../index.html).
 
 [Project overview](../README.md) · [Validation record](VALIDATION.md)
+
+## Receiver stalls and Android selection · 0.3.20
+
+The Pixel photographs confirm Chrome 101, IndexedDB, five open connections and a 479 ms primary ICE RTT. They do not identify the stall cause: earlier receiver path rates were sender-only defaults, and primary byte stats do not aggregate the extra connections. Receiver diagnostics now record actual incoming path bytes, unique delivery, queued/reordered bytes, processing stage, durable offset and storage batch timing, with a JSON download that does not require email.
+
+A missing tail with no higher received sequence, or a gap whose first three replay copies vanish, previously stopped application recovery. Both now retry with bounded queue credit, eight packets per tick and exponential backoff capped at ten seconds. Healthy delivery, reliable SCTP channels, duplicate suppression and full readback SHA-256 remain in place. Storage/manifest operations no longer wait indefinitely; failure retains the previous durable prefix. Already queued checkpoints share a strict IndexedDB transaction or OPFS flush, followed by one manifest commit and the original ordered acknowledgements. Nothing waits for an additional checkpoint to form a batch.
+
+Chrome 101’s Android `SelectFileDialog` distinguishes generic file requests from image/video-only requests. The dedicated Android media input requests the latter, preserving the unrestricted file/folder inputs and original-byte transfer. This is supported by the pinned Chromium implementation, not an emulated Android gallery test. The grey unsupported Photos folder shortcut is hidden; its existing download and device-folder backup fallback is explained. Modern browser folder saving, native sharing and download verification retain their paths.
+
+References: [Chrome 101 picker implementation](https://chromium.googlesource.com/chromium/src/+/101.0.4951.15/ui/android/java/src/org/chromium/ui/base/SelectFileDialog.java), [IndexedDB atomic commits and durability](https://www.w3.org/TR/IndexedDB/), [Dexie bulk transactions](<https://dexie.org/docs/Table/Table.bulkPut()>), [Google’s Chrome 138 support notice for Android 9](https://support.google.com/chrome/thread/352616098/sunsetting-chrome-support-for-android-8-0-oreo-and-android-9-0-pie?hl=en-GB).

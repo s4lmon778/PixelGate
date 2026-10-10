@@ -34,7 +34,11 @@ export class StagingWriter {
   private preferredBackend: StagingBackend;
   private jobs = new Map<
     number,
-    { resolve: () => void; reject: (e: Error) => void }
+    {
+      resolve: () => void;
+      reject: (e: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
   >();
   constructor(private backend: StagingBackend = stagingBackend()) {
     this.preferredBackend = backend;
@@ -42,6 +46,7 @@ export class StagingWriter {
       const j = this.jobs.get(data.id);
       if (!j) return;
       this.jobs.delete(data.id);
+      clearTimeout(j.timer);
       if (data.error)
         j.reject(
           Object.assign(new Error(data.error), {
@@ -54,9 +59,17 @@ export class StagingWriter {
       this.failed = new Error(
         'Browser storage worker failed. Reload to resume.',
       );
-      for (const j of this.jobs.values()) j.reject(this.failed);
-      this.jobs.clear();
+      this.stop(this.failed);
     };
+  }
+  private stop(error: Error) {
+    this.failed = error;
+    for (const job of this.jobs.values()) {
+      clearTimeout(job.timer);
+      job.reject(error);
+    }
+    this.jobs.clear();
+    this.worker.terminate();
   }
   private call(
     action: string,
@@ -66,11 +79,24 @@ export class StagingWriter {
     if (this.failed) return Promise.reject(this.failed);
     const id = ++this.seq;
     return new Promise<void>((resolve, reject) => {
-      this.jobs.set(id, { resolve, reject });
-      this.worker.postMessage(
-        { id, action, backend: this.backend, ...extra },
-        transfers,
+      const timer = setTimeout(
+        () =>
+          this.stop(
+            new Error(
+              'Local storage stopped responding. The last saved checkpoint is retained. Reload both devices and reconnect to resume.',
+            ),
+          ),
+        action === 'write' || action === 'write-batch' ? 60000 : 120000,
       );
+      this.jobs.set(id, { resolve, reject, timer });
+      try {
+        this.worker.postMessage(
+          { id, action, backend: this.backend, ...extra },
+          transfers,
+        );
+      } catch (error) {
+        this.stop(error as Error);
+      }
     });
   }
   async open(fileId: string, offset: number) {
@@ -84,6 +110,9 @@ export class StagingWriter {
   }
   write(offset: number, bytes: ArrayBuffer) {
     return this.call('write', { offset, bytes }, [bytes]);
+  }
+  writeBatch(offset: number, blocks: ArrayBuffer[]) {
+    return this.call('write-batch', { offset, blocks }, blocks);
   }
   close() {
     return this.call('close');

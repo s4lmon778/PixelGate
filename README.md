@@ -23,7 +23,9 @@ PixelGate moves files between computers, phones, and tablets using their browser
 
 The app is a static **TypeScript / React / Vite** build hosted on GitHub Pages. **PeerJS** exchanges connection metadata for six-digit pairing; it carries no file payloads. No native app, account, cloud media storage, or TURN relay is required.
 
-> **Status:** experimental. The current app is **0.3.19**. Automated checks exercise integrity and recovery; browser capabilities, available storage, and network policies still determine usability. Large-file and physical-device boundaries are documented below.
+> **Status:** experimental. The current app is **0.3.20**. Automated checks exercise integrity and recovery; browser capabilities, available storage, and network policies still determine usability. Large-file and physical-device boundaries are documented below.
+
+Android senders have **Choose photos & videos** for the media library and **Choose files** for documents. Direct **Save to Photos folder** appears only when the browser supports choosing a local folder; older Chrome uses verified downloads with Photos device-folder backup. Updating the browser can enable the folder option without changing the Android system.
 
 <div align="center">
   <img src="docs/assets/controls-demo.gif" alt="PixelGate's screen-awake switch animates between sun and moon while the appearance menu switches between Light and Dark" width="960" />
@@ -175,7 +177,7 @@ The [engineering guide](docs/ENGINEERING.md) explains these tradeoffs with sourc
 
 ## Validation and boundaries
 
-Recorded through **0.3.19 on October 9, 2026** across full and targeted runs. These are executed checks, not a continuously updated CI badge.
+Recorded through **0.3.20 on October 10, 2026** across full and targeted runs. These are executed checks, not a continuously updated CI badge.
 
 | Evidence                        | What was checked                                                                                                                                                                           |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

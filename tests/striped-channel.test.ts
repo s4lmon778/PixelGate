@@ -102,6 +102,62 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe('parallel transport compatibility, ordering, and fallback', () => {
+  it('measures actual received wire bytes and distinguishes a reorder stall from delivered bytes', async () => {
+    const { primary, transport } = receiver();
+    opened.push(transport);
+    primary.receive(JSON.stringify({ type: 'pg-striped-start' }));
+    primary.receive(frame(1, new Uint8Array(16)));
+    expect(transport.snapshot()).toMatchObject({
+      measurement: 'receiver-wire-bytes',
+      deliveredBytes: 0,
+      reorderedBytes: 16,
+      paths: [{ path: 1, receivedBytes: 24 }],
+    });
+    primary.receive(frame(0, new Uint8Array(8)));
+    primary.receive(frame(0, new Uint8Array(8)));
+    expect(transport.snapshot()).toMatchObject({
+      deliveredBytes: 24,
+      reorderedBytes: 0,
+      paths: [{ path: 1, receivedBytes: 56 }],
+    });
+  });
+  it('recovers the last packet without a later receipt, and keeps retrying with backoff after three lost copies', async () => {
+    vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
+    const primary = new Channel();
+    const transport = new StripedChannel(primary.native(), 'send');
+    opened.push(transport);
+    primary.receive(
+      JSON.stringify({
+        type: 'hello',
+        version: 1,
+        stripedTransport: 1,
+        stripedReceipts: 1,
+        stripedLanes: 4,
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    for (const peer of Peer.peers) {
+      peer.channel.readyState = 'open';
+      peer.channel.dispatchEvent(new Event('open'));
+    }
+    transport.send(new Uint8Array([42]).buffer);
+    const all = [primary, ...Peer.peers.map((peer) => peer.channel)];
+    await vi.advanceTimersByTimeAsync(1900);
+    expect(transport.snapshot().replayedPackets).toBe(0);
+    for (const channel of all) channel.bufferedAmount = 0;
+    await vi.advanceTimersByTimeAsync(29000);
+    expect(transport.snapshot().replayedPackets).toBeGreaterThan(3);
+    expect(transport.snapshot().replayedPackets).toBeLessThan(8);
+    expect(transport.snapshot().unreceivedBytes).toBe(9);
+    primary.receive(
+      JSON.stringify({ type: 'pg-striped-receipt', received: [0] }),
+    );
+    expect(transport.snapshot().unreceivedBytes).toBe(0);
+    const replays = transport.snapshot().replayedPackets;
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(transport.snapshot().replayedPackets).toBe(replays);
+    vi.restoreAllMocks();
+  });
   it('snapshots each native buffer once per burst and stops at sender credit', async () => {
     const primary = new Channel();
     const transport = new StripedChannel(primary.native(), 'send');

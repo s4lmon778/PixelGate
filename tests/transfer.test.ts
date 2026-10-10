@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   beforeWrite: undefined as (() => Promise<void>) | undefined,
   failPutAtBytes: undefined as number | undefined,
   writtenBuffers: [] as ArrayBuffer[],
+  batchSizes: [] as number[],
 }));
 vi.mock('../lib/bridge/database', () => ({
   local: {
@@ -62,6 +63,14 @@ vi.mock('../lib/bridge/storage', () => ({
       bytes.set(block, offset);
       if (state.corrupt) bytes[0] ^= 1;
       state.bytes.set(this.id, bytes);
+    };
+    writeBatch = async (offset: number, blocks: ArrayBuffer[]) => {
+      state.batchSizes.push(blocks.length);
+      for (const block of blocks) {
+        const length = block.byteLength;
+        await this.write(offset, block);
+        offset += length;
+      }
     };
     close = async () => {};
     dispose = async () => {};
@@ -157,6 +166,7 @@ beforeEach(() => {
   state.beforeWrite = undefined;
   state.failPutAtBytes = undefined;
   state.writtenBuffers = [];
+  state.batchSizes = [];
 });
 describe('receiver-owned verification and checkpoints', () => {
   it('receives offset views without headers and survives detached checkpoint buffers', async () => {
@@ -285,6 +295,7 @@ describe('receiver-owned verification and checkpoints', () => {
     }
     await run;
     expect(q[0].phase).toBe('verified');
+    expect(state.batchSizes.some((size) => size > 1)).toBe(true);
     expect(p.a.binarySent).toBe(q[0].file.size);
     expect(
       createHash('sha256')

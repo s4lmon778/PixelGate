@@ -68,15 +68,45 @@ async function save(file: RecordFile, role: 'send' | 'receive') {
       [role === 'send' ? 'sentFiles' : 'files', 'history'],
       'readwrite',
     );
-    tx.objectStore(role === 'send' ? 'sentFiles' : 'files').put(value);
-    tx.objectStore('history').put({
-      ...value,
-      historyKey: `${role}:${file.sessionId}:${file.id}`,
-    });
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () =>
+    const timer = setTimeout(() => {
+      reject(
+        new Error(
+          'Checkpoint storage stopped responding. Reload and reconnect to resume from the last saved checkpoint.',
+        ),
+      );
+      try {
+        tx.abort();
+      } catch {
+        /* A commit already in progress cannot be aborted. */
+      }
+    }, 60000);
+    tx.oncomplete = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    tx.onerror = () => {
+      clearTimeout(timer);
+      reject(tx.error);
+    };
+    tx.onabort = () => {
+      clearTimeout(timer);
       reject(tx.error ?? new Error('Local history write failed.'));
+    };
+    try {
+      tx.objectStore(role === 'send' ? 'sentFiles' : 'files').put(value);
+      tx.objectStore('history').put({
+        ...value,
+        historyKey: `${role}:${file.sessionId}:${file.id}`,
+      });
+    } catch (error) {
+      clearTimeout(timer);
+      reject(error);
+      try {
+        tx.abort();
+      } catch {
+        /* Already aborted or committing. */
+      }
+    }
   });
 }
 export const local = {

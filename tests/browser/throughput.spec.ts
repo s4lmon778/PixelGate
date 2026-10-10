@@ -1,6 +1,6 @@
 import { test, expect, chromium } from '@playwright/test';
 import { createHash } from 'node:crypto';
-import { writeFile } from 'node:fs/promises';
+import { writeFile, readFile } from 'node:fs/promises';
 
 test('parallel connections hide ACK latency, survive lane loss, and verify stored bytes', async ({
   browser,
@@ -96,6 +96,32 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
       const receiving = await receivingBrowser.newContext();
       const sending = await browser.newContext();
       try {
+        if (mode.includes('storage-delay')) {
+          await receiving.addInitScript(() =>
+            Object.defineProperty(navigator.storage, 'getDirectory', {
+              value: undefined,
+            }),
+          );
+          // Emulate a slow commit notification in the isolated worker, keeping
+          // real IndexedDB transactions, strict durability and stored bytes.
+          await receiving.route(
+            '**/assets/staging.worker-*.js',
+            async (route) => {
+              const response = await route.fetch();
+              await route.fulfill({
+                response,
+                body:
+                  `
+              const completion = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, 'oncomplete');
+              Object.defineProperty(IDBTransaction.prototype, 'oncomplete', {
+                ...completion,
+                set(callback) { completion.set.call(this, event => setTimeout(() => callback.call(this, event), 100)); }
+              });
+            ` + (await response.text()),
+              });
+            },
+          );
+        }
         await receiving.addInitScript(
           ({ mode }) => {
             const metrics = {
@@ -245,10 +271,38 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
             const observed = new WeakSet<RTCDataChannel>();
             const delayedLanes = new WeakSet<RTCDataChannel>();
             let assignedDelayedLane = false;
+            let droppedCopies = 0;
+            let droppedSequence = -1;
             Object.assign(window, { transferMetrics: metrics });
             const original = RTCDataChannel.prototype.send;
             RTCDataChannel.prototype.send = function (data) {
               if (typeof data !== 'string') {
+                if (
+                  mode.endsWith('lost-tail') &&
+                  data instanceof ArrayBuffer &&
+                  data.byteLength === 119 &&
+                  metrics.bytes > 1024 * 1024 &&
+                  !metrics.droppedLane
+                ) {
+                  metrics.droppedLane = true;
+                  return;
+                }
+                if (
+                  mode.endsWith('repeated-loss') &&
+                  data instanceof ArrayBuffer
+                ) {
+                  const sequence = new DataView(data).getUint32(4);
+                  if (
+                    droppedSequence < 0 &&
+                    this.label === 'pixelgate-bulk-v1' &&
+                    metrics.bytes > (faultBytes || 1024 * 1024)
+                  )
+                    droppedSequence = sequence;
+                  if (sequence === droppedSequence && droppedCopies++ < 4) {
+                    metrics.droppedLane = true;
+                    return;
+                  }
+                }
                 if (
                   mode.endsWith('lost-packet') &&
                   this.label === 'pixelgate-bulk-v1' &&
@@ -512,6 +566,30 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
           .textContent()
           .catch(() => null);
         const transport = report ? JSON.parse(report).transfer : undefined;
+        const receivingReportText = await receiver
+          .getByLabel('Connection report', { exact: true })
+          .textContent();
+        const receivingReport = receivingReportText
+          ? JSON.parse(receivingReportText)
+          : undefined;
+        if (receivingReport?.receiving) {
+          expect(receivingReport.receiving.durableBytes).toBe(payload.length);
+          expect(receivingReport.receiving.acceptedBytes).toBe(payload.length);
+          expect(receivingReport.transfer.measurement).toBe(
+            'receiver-wire-bytes',
+          );
+          expect(receivingReport.transfer.deliveredBytes).toBe(payload.length);
+          expect(
+            receivingReport.transfer.paths.reduce(
+              (total: number, path: { receivedBytes: number }) =>
+                total + path.receivedBytes,
+              0,
+            ),
+          ).toBeGreaterThanOrEqual(payload.length);
+          expect(receivingReport.transfer).not.toHaveProperty(
+            'sendBufferBytes',
+          );
+        }
         console.log(
           JSON.stringify({
             mode,
@@ -526,7 +604,12 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
             bufferReadWaitMilliseconds: metrics.bufferReadWaitMilliseconds,
           }),
         );
-        if (mode === 'closed-lane' || mode.endsWith('lost-packet')) {
+        if (
+          mode === 'closed-lane' ||
+          mode.endsWith('lost-packet') ||
+          mode.endsWith('lost-tail') ||
+          mode.endsWith('repeated-loss')
+        ) {
           expect(metrics.droppedLane).toBe(true);
           expect(metrics.bytes).toBeGreaterThanOrEqual(payload.length);
         } else if (mode.endsWith('slow-lane'))
@@ -535,8 +618,7 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
           expect(metrics.bytes).toBeGreaterThanOrEqual(payload.length);
         else if (transport?.replayedPackets) {
           // Natural transport recovery can replay retained frames as well.
-          // At most three retries per packet; the independent stored hash below
-          // is the byte-integrity assertion, not a ban on legitimate replays.
+          // Independent stored hashing verifies legitimately replayed bytes.
           expect(metrics.bytes).toBeGreaterThanOrEqual(payload.length);
           expect(metrics.bytes).toBeLessThanOrEqual(payload.length * 4);
         } else expect(metrics.bytes).toBe(payload.length);
@@ -561,12 +643,9 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
         measurements.push({
           mode,
           ...metrics,
-          ...{ receiverMetrics, transport },
+          ...{ receiverMetrics, transport, receivingReport },
         });
         const storedHash = await receiver.evaluate(async () => {
-          const root = await (
-            await navigator.storage.getDirectory()
-          ).getDirectoryHandle('pixelbridge');
           const database = await new Promise<IDBDatabase>((resolve) => {
             const request = indexedDB.open('pixelbridge-v1', 3);
             request.onsuccess = () => resolve(request.result);
@@ -579,9 +658,34 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
             request.onsuccess = () => resolve(request.result);
           });
           database.close();
-          const file = await (
-            await root.getFileHandle(records[0].id)
-          ).getFile();
+          let file: Blob;
+          if (navigator.storage.getDirectory) {
+            const root = await (
+              await navigator.storage.getDirectory()
+            ).getDirectoryHandle('pixelbridge');
+            file = await (await root.getFileHandle(records[0].id)).getFile();
+          } else {
+            const staged = await new Promise<IDBDatabase>((resolve) => {
+              const request = indexedDB.open('pixelgate-staging-v1', 1);
+              request.onsuccess = () => resolve(request.result);
+            });
+            const chunks = await new Promise<{ bytes: Blob | ArrayBuffer }[]>(
+              (resolve) => {
+                const request = staged
+                  .transaction('chunks')
+                  .objectStore('chunks')
+                  .getAll(
+                    IDBKeyRange.bound(
+                      [records[0].id, 0],
+                      [records[0].id, Number.MAX_SAFE_INTEGER],
+                    ),
+                  );
+                request.onsuccess = () => resolve(request.result);
+              },
+            );
+            file = new Blob(chunks.map((chunk) => chunk.bytes));
+            staged.close();
+          }
           const hash = await crypto.subtle.digest(
             'SHA-256',
             await file.arrayBuffer(),
@@ -601,6 +705,23 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
           const saved = await sender
             .getByLabel('Connection report', { exact: true })
             .textContent();
+          await sender
+            .getByText('Connection diagnostics', { exact: true })
+            .click();
+          const downloading = sender.waitForEvent('download');
+          await sender
+            .getByRole('button', {
+              name: 'Download connection report',
+              exact: true,
+            })
+            .click();
+          const diagnosticFile = await downloading;
+          expect(diagnosticFile.suggestedFilename()).toBe(
+            'PixelGate-connection-send.json',
+          );
+          expect(
+            JSON.parse(await readFile((await diagnosticFile.path())!, 'utf8')),
+          ).toEqual(JSON.parse(saved!));
           expect(saved).not.toContain('throughput.bin');
           expect(saved).not.toContain(expected);
           const withoutBrowserVersion = JSON.parse(saved!);
@@ -654,9 +775,10 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
   if (baseline) {
     if (process.env.PIXELGATE_TEST_COMPARE_MODES) {
       for (let index = 0; index < measurements.length; index += 2)
-        expect(measurements[index + 1].milliseconds).toBeLessThan(
-          measurements[index].milliseconds * 1.25,
-        );
+        if (measurements[index].mode.startsWith('baseline'))
+          expect(measurements[index + 1].milliseconds).toBeLessThan(
+            measurements[index].milliseconds * 1.25,
+          );
       return;
     }
     if (mixedPeers) return;

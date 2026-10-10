@@ -249,10 +249,11 @@ export function SaveToApp({
       {folderHint}
       {android && !folderAccessAvailable && (
         <p className="hint destination-hint">
-          To save straight into a local Photos folder, update Chrome through the
-          Play Store to version 132 or newer and reopen PixelGate. Save to
-          Photos folder becomes available when this browser supports it.
-          Downloads remain available here.
+          This browser cannot choose a Photos folder. For photos and videos,
+          download verified originals, then open Google Photos → Collections →
+          On this device → Download and enable that device folder’s backup.
+          Update Chrome through the Play Store to version 132 or newer and
+          reopen PixelGate to enable direct folder saving where supported.
         </p>
       )}
       <details className="help-details">

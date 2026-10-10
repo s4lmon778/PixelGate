@@ -3,6 +3,83 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { encodePair } from '../../lib/bridge/pairing';
 
+test('Pixel sending opens the media picker and retains the generic files picker', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    userAgent:
+      'Mozilla/5.0 (Linux; Android 9; Pixel XL) AppleWebKit/537.36 Chrome/101.0.0.0 Mobile Safari/537.36',
+    viewport: { width: 360, height: 740 },
+  });
+  try {
+    const page = await context.newPage();
+    await page.addInitScript(() =>
+      Object.defineProperty(window, 'showDirectoryPicker', {
+        value: undefined,
+      }),
+    );
+    await page.goto('./');
+    const photo = {
+      name: 'Pixel-original.jpg',
+      mimeType: 'image/jpeg',
+      buffer: Buffer.from('Original image selection bytes'),
+    };
+    const video = {
+      name: 'Pixel-original.mp4',
+      mimeType: 'video/mp4',
+      buffer: Buffer.from('Original video selection bytes'),
+    };
+    const choosing = page.waitForEvent('filechooser');
+    await page
+      .getByRole('button', { name: 'Choose photos & videos', exact: true })
+      .click();
+    const chooser = await choosing;
+    expect(chooser.isMultiple()).toBe(true);
+    expect(await chooser.element().getAttribute('accept')).toBe(
+      'image/*,video/*',
+    );
+    expect(await chooser.element().getAttribute('capture')).toBeNull();
+    await chooser.setFiles([photo, video]);
+    await expect(page.getByText(photo.name, { exact: true })).toBeVisible();
+    await expect(page.getByText(video.name, { exact: true })).toBeVisible();
+    const pickingFile = page.waitForEvent('filechooser');
+    await page
+      .getByRole('button', { name: 'Choose files', exact: true })
+      .click();
+    const files = await pickingFile;
+    expect(await files.element().getAttribute('accept')).toBeNull();
+    await files.setFiles({
+      name: 'Document.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('Unrestricted file selection'),
+    });
+    await expect(page.getByText('Document.txt', { exact: true })).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.setViewportSize({ width: 320, height: 740 });
+    await page.addStyleTag({ content: 'html { font-size: 200%; }' });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page
+      .getByRole('button', { name: 'Receive files', exact: true })
+      .click();
+    await expect(
+      page.getByRole('button', { name: 'Save to Photos folder', exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByText(/This browser cannot choose a Photos folder/),
+    ).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
 async function seed(page: Page, staging = true) {
   await page.goto('./');
   await expect(

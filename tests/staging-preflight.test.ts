@@ -7,6 +7,7 @@ const state = vi.hoisted(() => ({
   bytes: new Uint8Array(),
   opens: [] as string[],
   terminated: 0,
+  silent: false,
 }));
 vi.mock('../lib/bridge/staging.worker?worker', () => ({
   default: class {
@@ -18,6 +19,7 @@ vi.mock('../lib/bridge/staging.worker?worker', () => ({
       action: string;
       bytes?: ArrayBuffer;
     }) {
+      if (state.silent) return;
       let name = '';
       if (message.action === 'open') {
         state.opens.push(message.backend);
@@ -59,6 +61,7 @@ beforeEach(() => {
   state.bytes = new Uint8Array();
   state.opens = [];
   state.terminated = 0;
+  state.silent = false;
   vi.stubGlobal('navigator', {
     storage: {
       getDirectory: async () => {
@@ -66,6 +69,30 @@ beforeEach(() => {
       },
     },
   });
+});
+
+it('rejects a hung storage write, terminates its worker, and refuses later writes', async () => {
+  vi.useFakeTimers();
+  try {
+    const { StagingWriter } = await import('../lib/bridge/storage');
+    const writer = new StagingWriter('indexeddb');
+    state.silent = true;
+    const write = writer.write(0, new Uint8Array(1024).buffer);
+    const rejected = expect(write).rejects.toThrow(
+      'last saved checkpoint is retained',
+    );
+    await vi.advanceTimersByTimeAsync(59999);
+    expect(state.terminated).toBe(0);
+    await vi.advanceTimersByTimeAsync(1);
+    await rejected;
+    expect(state.terminated).toBe(1);
+    await expect(
+      writer.write(1024, new Uint8Array(1024).buffer),
+    ).rejects.toThrow('Local storage stopped responding');
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it.each(['UnknownError', 'NotSupportedError', 'SecurityError'])(
