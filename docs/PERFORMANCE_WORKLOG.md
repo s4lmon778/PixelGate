@@ -425,3 +425,10 @@ exercise the moving beam, reduced motion and reciprocal pause/resume in modern
 Chromium and actual Chromium 101. Light/dark screenshots at phone widths were
 inspected; no horizontal page overflow was found. These browser checks do not
 establish a physical-phone speed gain.
+
+Published source `dfadb0b85f1e6ed3364cc23e9b7bebadfcb83364`; Pages commit
+`edc99792880059020edf029a8ebc4bb22de1a4e6` reports built with no error. Live HTML,
+all four assets and the distributed license match the tested build byte for
+byte. A fresh 360-pixel live browser shows 0.3.25 without page errors or
+horizontal overflow. Its first smoke check used an obsolete storage heading;
+the fixture was corrected to the current File cache label and passed.
