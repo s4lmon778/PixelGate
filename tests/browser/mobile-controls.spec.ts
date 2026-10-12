@@ -746,7 +746,7 @@ for (const backend of ['opfs', 'indexeddb']) {
       'Ephemeral macOS WebKit does not expose durable OPFS.',
     );
     if (backend === 'indexeddb')
-      await page.addInitScript(() => {
+      await page.context().addInitScript(() => {
         Object.defineProperty(Navigator.prototype, 'storage', {
           configurable: true,
           value: {
@@ -826,6 +826,28 @@ for (const backend of ['opfs', 'indexeddb']) {
       }),
     ).toHaveCount(0);
     await expect(inline.locator('.file-row')).toHaveCount(3);
+    const otherTab = await page.context().newPage();
+    await otherTab.goto('./');
+    await otherTab
+      .getByRole('button', { name: 'Receive files', exact: true })
+      .click();
+    const otherList = otherTab.getByRole('region', {
+      name: 'Received files',
+      exact: true,
+    });
+    await expect(otherList.locator('.file-row')).toHaveCount(3);
+    if (backend === 'indexeddb') {
+      await otherList.getByRole('checkbox').check();
+      await otherTab
+        .getByRole('button', { name: 'Prepare selected files', exact: true })
+        .click();
+      await expect(
+        otherTab.getByRole('button', {
+          name: 'Download verified files',
+          exact: true,
+        }),
+      ).toBeVisible();
+    }
     const before = await snapshot(page);
     const clear = inline.getByRole('button', {
       name: /^Clear verified staging/,
@@ -845,7 +867,18 @@ for (const backend of ['opfs', 'indexeddb']) {
       page.getByRole('status').filter({ hasText: 'staged copies cleared' }),
     ).toContainText('2 staged copies cleared');
     await expect(clear).toBeDisabled();
-    await expect(inline.getByText(/Cache cleared/)).toHaveCount(2);
+    await expect(inline.getByText(/Cache cleared/)).toHaveCount(0);
+    await expect(inline.locator('.file-row')).toHaveCount(1);
+    await expect(otherList.locator('.file-row')).toHaveCount(1);
+    await expect(
+      otherTab.getByRole('button', {
+        name: 'Download verified files',
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await expect(otherTab.locator('.staging-cache-size')).toHaveText(
+      `File cache: ${backend === 'opfs' ? 10 : 5} B`,
+    );
     await expect(inline.getByRole('checkbox')).toHaveCount(0);
     const after = await snapshot(page);
     const records = after.records as {
@@ -920,7 +953,12 @@ for (const backend of ['opfs', 'indexeddb']) {
     await page
       .getByRole('button', { name: 'Receive files', exact: true })
       .click();
-    await expect(page.getByText(/Cache cleared/)).toHaveCount(2);
+    await expect(page.getByText(/Cache cleared/)).toHaveCount(0);
+    await expect(
+      page
+        .getByRole('region', { name: 'Received files', exact: true })
+        .locator('.file-row'),
+    ).toHaveCount(1);
     await page.getByRole('button', { name: 'History', exact: true }).click();
     await expect(page.locator('.file-row')).toHaveCount(4);
     await expect(page.getByText(/Cache cleared/)).toHaveCount(3);
@@ -931,8 +969,103 @@ for (const backend of ['opfs', 'indexeddb']) {
     await expect(
       page.getByRole('button', { name: 'Verify exported files', exact: true }),
     ).toBeVisible();
+    await otherTab.close();
   });
 }
+
+test('saved cache becomes empty even when the browser allowance estimate stays unchanged', async ({
+  page,
+  browserName,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'storage', {
+      configurable: true,
+      value: {
+        estimate: () => Promise.resolve({ quota: 10000000, usage: 1000 }),
+      },
+    });
+  });
+  await seed(page, browserName === 'webkit' ? 'buffers' : true);
+  await page.evaluate(async () => {
+    const open = (name: string, version: number) =>
+      new Promise<IDBDatabase>((resolve) => {
+        const request = indexedDB.open(name, version);
+        request.onsuccess = () => resolve(request.result);
+      });
+    const db = await open('pixelbridge-v1', 3);
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(['files', 'history'], 'readwrite');
+      const read = tx.objectStore('files').getAll();
+      read.onsuccess = () => {
+        for (const record of read.result) {
+          if (record.phase === 'paused') {
+            tx.objectStore('files').delete(record.id);
+            tx.objectStore('history').delete(
+              `receive:${record.sessionId}:${record.id}`,
+            );
+          } else {
+            record.downloaded = true;
+            tx.objectStore('files').put(record);
+          }
+        }
+      };
+      tx.oncomplete = () => resolve();
+    });
+    db.close();
+    const staging = await open('pixelgate-staging-v1', 1);
+    await new Promise<void>((resolve) => {
+      const tx = staging.transaction(['files', 'chunks'], 'readwrite');
+      tx.objectStore('files').delete('c'.repeat(64));
+      tx.objectStore('chunks').delete(['c'.repeat(64), 0]);
+      tx.oncomplete = () => resolve();
+    });
+    staging.close();
+  });
+  await page.reload();
+  await page
+    .getByRole('button', { name: 'Receive files', exact: true })
+    .click();
+  const allowance = page.getByText(/^Browser allowance estimate:/);
+  const before = await allowance.textContent();
+  page.once('dialog', (dialog) => void dialog.accept());
+  await page.getByRole('button', { name: /^Clear verified staging/ }).click();
+  await expect(page.locator('.staging-cache-size')).toHaveText(
+    'File cache: 0 B',
+  );
+  await expect(page.locator('.file-row')).toHaveCount(0);
+  expect(await allowance.textContent()).toBe(before);
+  const empty = await page.evaluate(async () => {
+    const request = indexedDB.open('pixelgate-staging-v1', 1);
+    const db = await new Promise<IDBDatabase>((resolve) => {
+      request.onsuccess = () => resolve(request.result);
+    });
+    const counts = await Promise.all(
+      ['files', 'chunks'].map(
+        (store) =>
+          new Promise<number>((resolve) => {
+            const count = db.transaction(store).objectStore(store).count();
+            count.onsuccess = () => resolve(count.result);
+          }),
+      ),
+    );
+    db.close();
+    return counts;
+  });
+  expect(empty).toEqual([0, 0]);
+  await page.reload();
+  await page
+    .getByRole('button', { name: 'Receive files', exact: true })
+    .click();
+  await expect(page.locator('.file-row')).toHaveCount(0);
+  await expect(page.locator('.staging-cache-size')).toHaveText(
+    'File cache: 0 B',
+  );
+  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await expect(page.locator('.file-row')).toHaveCount(2);
+  await expect(page.getByRole('button', { name: /^Save photo/ })).toHaveCount(
+    0,
+  );
+});
 
 test('sender file selection stays inside the list and limits the pending send selection', async ({
   page,

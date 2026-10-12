@@ -649,8 +649,19 @@ test('real peer transfer, readback, manual export verification, and reconnect', 
           args: ['--disable-features=WebRtcHideLocalIpsWithMdns'],
         })
       : browser;
-  const receiverContext = await receiverBrowser.newContext();
-  const senderContext = await browser.newContext();
+  const receiverContext = await receiverBrowser.newContext({
+    userAgent:
+      'Mozilla/5.0 (Linux; Android 9; Pixel XL) AppleWebKit/537.36 Chrome/101.0.0.0 Mobile Safari/537.36',
+  });
+  const mobileSender = testInfo.project.name === 'chromium';
+  const senderContext = await browser.newContext(
+    mobileSender
+      ? {
+          userAgent:
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
+        }
+      : {},
+  );
   const receiver = await receiverContext.newPage();
   const sender = await senderContext.newPage();
   const pageErrors: string[] = [];
@@ -733,6 +744,44 @@ test('real peer transfer, readback, manual export verification, and reconnect', 
   await expect(receiver.getByText('Connected', { exact: true })).toBeVisible({
     timeout: 45000,
   });
+  for (const page of [receiver, sender]) {
+    const visual = page.getByRole('group', {
+      name: `${mobileSender ? 'Phone' : 'Computer'} sender to Phone receiver`,
+      exact: true,
+    });
+    await expect(visual).toBeVisible();
+    await expect(visual.locator('.connection-device').first()).toHaveAttribute(
+      'data-device',
+      mobileSender ? 'phone' : 'computer',
+    );
+    await expect(visual.locator('.connection-device').last()).toHaveAttribute(
+      'data-device',
+      'phone',
+    );
+    await expect(visual.getByLabel('Ready', { exact: true })).toBeVisible();
+    await page.setViewportSize({ width: 360, height: 740 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  }
+  await expect(sender.getByText('Sender · you', { exact: true })).toBeVisible();
+  await expect(
+    receiver.getByText('Receiver · you', { exact: true }),
+  ).toBeVisible();
+  await receiver.getByRole('button', { name: 'Pause', exact: true }).click();
+  for (const page of [receiver, sender])
+    await expect(page.locator('.connection-direction')).toHaveAttribute(
+      'aria-label',
+      'Paused',
+    );
+  await receiver.getByRole('button', { name: 'Resume', exact: true }).click();
+  for (const page of [receiver, sender])
+    await expect(page.locator('.connection-direction')).toHaveAttribute(
+      'aria-label',
+      'Ready',
+    );
   const bytes = Buffer.alloc(8 * 1024 * 1024 + 111);
   for (let i = 0; i < bytes.length; i++) bytes[i] = i % 251;
   const expected = createHash('sha256').update(bytes).digest('hex');
@@ -780,7 +829,12 @@ test('real peer transfer, readback, manual export verification, and reconnect', 
   await receiver.screenshot({
     path: `test-results/mobile-connected-receive-${testInfo.project.name}.png`,
   });
-  const stored = await receiver.evaluate(async () => {
+  const selectedStorage = JSON.parse(
+    (await receiver
+      .getByLabel('Connection report', { exact: true })
+      .textContent())!,
+  ).storageMode;
+  const stored = await receiver.evaluate(async (backend) => {
     const d = await new Promise<IDBDatabase>((resolve, reject) => {
       const r = indexedDB.open('pixelbridge-v1', 3);
       r.onsuccess = () => resolve(r.result);
@@ -792,14 +846,38 @@ test('real peer transfer, readback, manual export verification, and reconnect', 
         r.onsuccess = () => resolve(r.result);
       },
     );
-    const file = await (
-      await (
+    d.close();
+    let file: Blob;
+    if (backend === 'opfs') {
+      const dir = await (
         await navigator.storage.getDirectory()
-      ).getDirectoryHandle('pixelbridge')
-    ).getFileHandle(records[0].id);
+      ).getDirectoryHandle('pixelbridge');
+      file = await (await dir.getFileHandle(records[0].id)).getFile();
+    } else {
+      const request = indexedDB.open('pixelgate-staging-v1', 1);
+      const db = await new Promise<IDBDatabase>((resolve) => {
+        request.onsuccess = () => resolve(request.result);
+      });
+      const chunks = await new Promise<{ bytes: Blob | ArrayBuffer }[]>(
+        (resolve) => {
+          const read = db
+            .transaction('chunks')
+            .objectStore('chunks')
+            .getAll(
+              IDBKeyRange.bound(
+                [records[0].id, 0],
+                [records[0].id, Number.MAX_SAFE_INTEGER],
+              ),
+            );
+          read.onsuccess = () => resolve(read.result);
+        },
+      );
+      db.close();
+      file = new Blob(chunks.map((chunk) => chunk.bytes));
+    }
     const digest = await crypto.subtle.digest(
       'SHA-256',
-      await (await file.getFile()).arrayBuffer(),
+      await file.arrayBuffer(),
     );
     return {
       sha: records[0].sha256,
@@ -807,9 +885,19 @@ test('real peer transfer, readback, manual export verification, and reconnect', 
         .map((x) => x.toString(16).padStart(2, '0'))
         .join(''),
     };
-  });
+  }, selectedStorage);
   expect(stored.sha).toBe(expected);
   expect(stored.independent).toBe(expected);
+  await expect
+    .poll(
+      async () =>
+        JSON.parse(
+          (await sender
+            .getByLabel('Connection report', { exact: true })
+            .textContent())!,
+        ).sending?.stage,
+    )
+    .toBe('idle');
   const downloadEvent = receiver.waitForEvent('download');
   await receiver
     .getByRole('button', { name: 'Prepare selected files', exact: true })

@@ -6,6 +6,8 @@ import { KeepAwake } from './KeepAwake';
 import { SaveToApp } from './SaveToApp';
 import { ThemeMenu } from './ThemeMenu';
 import { TransferFiles } from './TransferFiles';
+import { DeviceConnection } from './DeviceConnection';
+import { deviceKind, peerDevice, type DeviceKind } from '@/lib/bridge/device';
 import { version } from '../package.json';
 import {
   ArrowDownToLine,
@@ -52,6 +54,7 @@ import {
   prepareStaging,
   stagingBackend,
   stagingUsage,
+  releaseDownloadUrls,
   type StagingBackend,
   verifyExport,
 } from '@/lib/bridge/storage';
@@ -103,6 +106,8 @@ export default function PixelGate() {
   const [folderName, setFolderName] = useState('Manual download');
   const [capacityLabel, setCapacityLabel] = useState('Checking…');
   const [cachedBytes, setCachedBytes] = useState<number>();
+  const [remoteDevice, setRemoteDevice] = useState<DeviceKind>();
+  const localDevice = useMemo(() => deviceKind(), []);
   const [storageMode, setStorageMode] =
     useState<StagingBackend>(stagingBackend);
   const [dragging, setDragging] = useState(false);
@@ -129,6 +134,7 @@ export default function PixelGate() {
   );
   const session = useRef('');
   const transferClock = useRef(new TransferClock());
+  const knownCleared = useRef(new Set<string>());
   const baseBytes = useRef(0);
   const releaseLock = useRef<(() => void) | undefined>(undefined);
 
@@ -142,6 +148,7 @@ export default function PixelGate() {
         ...room.diagnostics,
         transfer: transport.current?.snapshot(),
         receiving: receiver.current?.snapshot(),
+        sending: sender.current?.snapshot(),
         routeStatsScope: 'primary-connection',
       }
     : undefined;
@@ -157,6 +164,7 @@ export default function PixelGate() {
       ...room.diagnostics,
       transfer: transport.current.snapshot(),
       receiving: receiver.current?.snapshot(),
+      sending: sender.current?.snapshot(),
       routeStatsScope: 'primary-connection',
     };
     retainConnectionReport(report);
@@ -172,6 +180,21 @@ export default function PixelGate() {
     const cleared = new Set(
       stored.filter((r) => r.stagingCleared).map((r) => r.id),
     );
+    if ([...cleared].some((id) => !knownCleared.current.has(id))) {
+      // Other tabs may still hold prepared Files and object URLs. Release them
+      // when durable cleanup arrives, including when a suspended tab resumes.
+      for (const id of cleared) releaseDownloadUrls(id);
+      setCacheRevision((revision) => revision + 1);
+      for (const record of stored)
+        if (record.stagingCleared && receivedRecords.current.has(record.id))
+          receivedRecords.current.set(record.id, record);
+      setReceived((previous) =>
+        previous.map((record) =>
+          cleared.has(record.id) ? { ...record, stagingCleared: true } : record,
+        ),
+      );
+    }
+    knownCleared.current = cleared;
     setHistory(
       records
         .map((record) =>
@@ -190,6 +213,24 @@ export default function PixelGate() {
         : 'Estimate unavailable',
     );
   }, []);
+  useEffect(() => {
+    const changed = (event: StorageEvent) => {
+      if (event.key === 'pixelgate-staging-cleanup')
+        void refresh().catch((error) => setProblem(errorText(error)));
+    };
+    const resumed = () => {
+      if (document.visibilityState === 'visible')
+        void refresh().catch((error) => setProblem(errorText(error)));
+    };
+    window.addEventListener('storage', changed);
+    window.addEventListener('focus', resumed);
+    document.addEventListener('visibilitychange', resumed);
+    return () => {
+      window.removeEventListener('storage', changed);
+      window.removeEventListener('focus', resumed);
+      document.removeEventListener('visibilitychange', resumed);
+    };
+  }, [refresh]);
   useEffect(() => {
     session.current = crypto.randomUUID();
     const importPairing = () => {
@@ -311,6 +352,7 @@ export default function PixelGate() {
     releaseLock.current?.();
     releaseLock.current = undefined;
     setConnected(false);
+    setRemoteDevice(undefined);
     setRoom(undefined);
     setQr(undefined);
     setResponse('');
@@ -369,14 +411,33 @@ export default function PixelGate() {
           pairingMode === 'code' && role === 'receive' ? senderAddress : '',
         );
         transport.current = transfer;
+        transfer.addEventListener('peer-device', (event) => {
+          if (transport.current === transfer)
+            setRemoteDevice(peerDevice((event as CustomEvent).detail));
+        });
         setConnected(true);
         setPaused(false);
+        const peerPaused = (paused: boolean) => {
+          if (transport.current !== transfer) return;
+          setPaused(paused);
+          if (paused) transferClock.current.pause();
+          else transferClock.current.resume();
+          setNotice(
+            paused
+              ? 'The other device paused the transfer. Return to its transfer tab, then choose Resume.'
+              : '',
+          );
+        };
         if (role === 'send')
-          sender.current = new Sender(transfer, (q) => {
-            if (q.phase === 'transferring')
-              transferClock.current.start(baseBytes.current);
-            setQueue([...currentQueue.current]);
-          });
+          sender.current = new Sender(
+            transfer,
+            (q) => {
+              if (q.phase === 'transferring')
+                transferClock.current.start(baseBytes.current);
+              setQueue([...currentQueue.current]);
+            },
+            peerPaused,
+          );
         else
           receiver.current = new Receiver(
             transfer,
@@ -410,6 +471,7 @@ export default function PixelGate() {
               void refresh().catch(() => {});
             },
             () => photosFolder.current,
+            peerPaused,
           );
       },
       error: (e) => {
@@ -585,16 +647,21 @@ export default function PixelGate() {
             },
           )
         : await cleanup();
-    // Remount inline saving to release prepared File/Blob references as well as
-    // deleting the durable bytes and revoking associated download URLs.
-    setCacheRevision((revision) => revision + 1);
+    if (result.cleared.length) {
+      try {
+        // No file names or identifiers are stored in this cross-tab signal.
+        localStorage.setItem('pixelgate-staging-cleanup', crypto.randomUUID());
+      } catch {
+        // Restricted storage still reconciles on focus or visibility changes.
+      }
+    }
     if (result.errors.length) setProblem(result.errors.slice(0, 3).join(' · '));
     for (const record of await local.receivedFiles())
       if (receivedRecords.current.has(record.id))
         receivedRecords.current.set(record.id, record);
     setReceived([...receivedRecords.current.values()].reverse());
     setNotice(
-      `${result.cleared.length} staged copies cleared · ${formatBytes(result.bytes)} of file cache removed. Reports remain on this device.`,
+      `${result.cleared.length} staged copies cleared · ${formatBytes(result.bytes)} of file cache removed. Cleared files are removed from the receiving list; receipts remain in History.`,
     );
     await refresh();
   }
@@ -931,8 +998,10 @@ export default function PixelGate() {
                   transfer.
                 </p>
                 <p>
-                  Estimated staging space is this browser’s remaining allowance
-                  for received copies. Estimates vary by browser, profile, and
+                  File cache counts the copies currently stored by PixelGate and
+                  updates after cleanup. Cleared files leave the receiving list;
+                  their receipts remain in History. The browser allowance
+                  estimate can lag after deletion and varies by profile and
                   device; this is not a guarantee of free disk space or a limit
                   on the total you can transfer. Each file must fit alongside
                   copies still staged here. Save or download, verify, then clear
@@ -1141,10 +1210,13 @@ export default function PixelGate() {
                       ) : (
                         <div className="paired-content">
                           {connected ? (
-                            <p className="connected-note">
-                              <LockKeyhole size={15} />
-                              Encrypted connection established
-                            </p>
+                            <DeviceConnection
+                              local={localDevice}
+                              peer={remoteDevice}
+                              role={role}
+                              moving={!!active}
+                              paused={paused}
+                            />
                           ) : role === 'receive' ? (
                             <>
                               <div className="qr-row">
@@ -1730,15 +1802,20 @@ export default function PixelGate() {
                             className="storage-card"
                             aria-label="Browser staging storage"
                           >
-                            <div className="storage-heading">
-                              <span>Estimated staging space</span>
-                              <strong>{capacityLabel}</strong>
+                            <div
+                              className="storage-heading staging-cache-size"
+                              role="status"
+                            >
+                              <span>File cache:</span>{' '}
+                              <strong>
+                                {cachedBytes === undefined
+                                  ? 'Unavailable'
+                                  : formatBytes(cachedBytes)}
+                              </strong>
                             </div>
-                            <div className="staging-cache-size" role="status">
-                              File cache:{' '}
-                              {cachedBytes === undefined
-                                ? 'Unavailable'
-                                : formatBytes(cachedBytes)}
+                            <div className="hint">
+                              Browser allowance estimate: {capacityLabel} · may
+                              update later
                             </div>
                             <details>
                               <summary>How storage works</summary>

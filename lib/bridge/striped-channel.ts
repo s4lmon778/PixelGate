@@ -1,6 +1,7 @@
 import { CandidateInbox } from './candidate-inbox';
 import { PathScheduler } from './path-scheduler';
 import { LanRoute, lanAddress } from './lan-route';
+import { deviceKind, peerDevice } from './device';
 import { validateSignal } from '../pairing-validation';
 import {
   CHECKPOINT_BYTES,
@@ -377,6 +378,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       if (value.type === 'hello')
         data = JSON.stringify({
           ...value,
+          deviceKind: deviceKind(),
           stripedTransport: 1,
           stripedReceipts: 1,
           stripedLanes: MAX_LANES,
@@ -588,6 +590,12 @@ export class StripedChannel extends EventTarget implements TransferChannel {
         if (data.length > 32000) throw new Error('Transfer control too large.');
         const value = JSON.parse(data);
         if (value.type === 'hello') {
+          if (value.version === VERSION)
+            this.dispatchEvent(
+              new CustomEvent('peer-device', {
+                detail: peerDevice(value.deviceKind),
+              }),
+            );
           if (
             !this.negotiated &&
             value.version === VERSION &&

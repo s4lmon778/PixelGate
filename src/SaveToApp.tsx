@@ -302,13 +302,15 @@ export function SaveToApp({
       </div>
       <TransferFiles
         records={[
-          ...records.filter((r) => !availableIds.has(r.id) && !isVerified(r)),
+          ...records.filter(
+            (r) =>
+              !r.stagingCleared && !availableIds.has(r.id) && !isVerified(r),
+          ),
           ...choices,
           ...records.filter(
             (r) =>
               !availableIds.has(r.id) && isVerified(r) && !r.stagingCleared,
           ),
-          ...records.filter((r) => r.stagingCleared),
         ]}
         label="Received files"
         empty={empty}

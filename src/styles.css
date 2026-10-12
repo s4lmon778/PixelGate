@@ -962,11 +962,6 @@ h1 {
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
-.staging-cache-size {
-  color: var(--muted);
-  font-size: 12px;
-  margin-top: 4px;
-}
 .storage-card p {
   color: var(--muted);
   margin: 8px 0;
@@ -1238,6 +1233,89 @@ h1 {
   font-size: 0.8125rem;
   color: var(--green);
   margin: 8px 0 0;
+}
+.device-connection {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.connection-flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 58px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.connection-device {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--accent);
+}
+.connection-device:last-child {
+  justify-content: flex-end;
+}
+.connection-device > svg {
+  flex-shrink: 0;
+}
+.connection-device strong,
+.connection-device small {
+  display: block;
+  font-size: 0.8125rem;
+}
+.connection-device small,
+.connection-direction small {
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+.connection-direction {
+  text-align: center;
+}
+.connection-track {
+  position: relative;
+  height: 2px;
+  margin: 9px 0;
+  background: var(--accent);
+}
+.connection-track > svg {
+  position: absolute;
+  right: -2px;
+  top: -6px;
+  color: var(--accent);
+}
+.connection-dot {
+  display: none;
+  position: absolute;
+  top: -3px;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+.moving .connection-dot {
+  display: block;
+  animation: connection-travel 1.4s linear infinite;
+}
+@keyframes connection-travel {
+  from {
+    transform: translateX(0);
+    opacity: 0.25;
+  }
+  20% {
+    opacity: 1;
+  }
+  to {
+    transform: translateX(48px);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .moving .connection-dot {
+    animation: none;
+    left: 40%;
+  }
 }
 .queue-controls {
   display: flex;

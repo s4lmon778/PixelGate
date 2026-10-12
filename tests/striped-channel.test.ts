@@ -103,6 +103,32 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe('parallel transport compatibility, ordering, and fallback', () => {
+  it('exchanges broad device kinds in existing hellos without changing legacy transfer behavior', () => {
+    const primary = new Channel();
+    const transport = new StripedChannel(primary.native(), 'receive');
+    opened.push(transport);
+    vi.stubGlobal('navigator', {
+      userAgent: 'Mozilla/5.0 (iPhone) Mobile',
+      maxTouchPoints: 5,
+    });
+    transport.send(JSON.stringify({ type: 'hello', version: 1 }));
+    const hello = JSON.parse(primary.sent[0] as string);
+    expect(hello.deviceKind).toBe('phone');
+    expect(JSON.stringify(hello)).not.toContain('Mozilla');
+    const received: unknown[] = [];
+    transport.addEventListener('peer-device', (event) =>
+      received.push((event as CustomEvent).detail),
+    );
+    primary.receive(
+      JSON.stringify({ type: 'hello', version: 1, deviceKind: 'computer' }),
+    );
+    primary.receive(JSON.stringify({ type: 'hello', version: 1 }));
+    primary.receive(
+      JSON.stringify({ type: 'hello', version: 1, deviceKind: '<img>' }),
+    );
+    expect(received).toEqual(['computer', null, null]);
+    expect(primary.readyState).toBe('open');
+  });
   it('keeps received-byte totals in diagnostics after a bulk lane closes', () => {
     const { primary, transport } = receiver();
     opened.push(transport);

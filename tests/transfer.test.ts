@@ -140,14 +140,22 @@ function peers(
   b.peer = a;
   a.transform = senderTransform;
   const errors: Error[] = [];
+  const pauses = { send: [] as boolean[], receive: [] as boolean[] };
   const receiver = new Receiver(
     b as unknown as RTCDataChannel,
     () => folder,
     update,
     (e) => errors.push(e),
+    undefined,
+    undefined,
+    (paused) => pauses.receive.push(paused),
   );
-  const sender = new Sender(a as unknown as RTCDataChannel, () => {});
-  return { a, b, sender, receiver, errors };
+  const sender = new Sender(
+    a as unknown as RTCDataChannel,
+    () => {},
+    (paused) => pauses.send.push(paused),
+  );
+  return { a, b, sender, receiver, errors, pauses };
 }
 function queue(size = 2 * 1024 * 1024 + 123): QueuedFile[] {
   const bytes = new Uint8Array(size);
@@ -173,6 +181,69 @@ beforeEach(() => {
   state.batchSizes = [];
 });
 describe('receiver-owned verification and checkpoints', () => {
+  it('distinguishes a pending source read from storage or transport waits', async () => {
+    const p = peers();
+    const q = queue();
+    const slice = q[0].file.slice.bind(q[0].file);
+    let release: (() => void) | undefined;
+    vi.spyOn(q[0].file, 'slice').mockImplementation((start, end, type) => {
+      const part = slice(start, end, type);
+      if (start === CHECKPOINT_BYTES) {
+        const read = part.arrayBuffer.bind(part);
+        vi.spyOn(part, 'arrayBuffer').mockImplementation(
+          () =>
+            new Promise<ArrayBuffer>((resolve, reject) => {
+              release = () => {
+                void read().then(resolve, reject);
+              };
+            }),
+        );
+      }
+      return part;
+    });
+    const run = p.sender.run(q, 'source-read-diagnostics');
+    try {
+      await expect.poll(() => p.sender.snapshot().stage).toBe('reading-source');
+      expect(p.a.binarySent).toBe(CHECKPOINT_BYTES);
+      expect(p.sender.snapshot().paused).toBe(false);
+      expect(p.receiver.snapshot().stage).toBe('waiting-for-bytes');
+    } finally {
+      release?.();
+    }
+    await run;
+    expect(p.sender.snapshot().stage).toBe('idle');
+    expect(q[0].phase).toBe('verified');
+    expect(p.errors).toEqual([]);
+    await p.receiver.close();
+  });
+  it('reports sender pauses to the receiver and resumes without losing original bytes', async () => {
+    const p = peers();
+    p.sender.pause();
+    await expect.poll(() => p.receiver.snapshot().paused).toBe(true);
+    expect(p.receiver.snapshot().stage).toBe('paused-by-sender');
+    expect(p.pauses.receive).toEqual([true]);
+    const q = queue();
+    const run = p.sender.run(q, 'pause-observation');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(p.a.binarySent).toBe(0);
+    p.receiver.resume();
+    await run;
+    expect(p.pauses.send).toEqual([false]);
+    expect(p.receiver.snapshot().paused).toBe(false);
+    expect(q[0].phase).toBe('verified');
+    expect(
+      createHash('sha256')
+        .update(state.bytes.get(q[0].record!.id)!)
+        .digest('hex'),
+    ).toBe(q[0].record!.sha256);
+    p.sender.pause();
+    await expect.poll(() => p.receiver.snapshot().paused).toBe(true);
+    p.sender.resume();
+    await expect.poll(() => p.receiver.snapshot().paused).toBe(false);
+    expect(p.pauses.receive).toEqual([true, true, false]);
+    expect(p.errors).toEqual([]);
+    await p.receiver.close();
+  });
   it('closes an invalid window handshake before any payload or storage opens', async () => {
     const p = peers(undefined, undefined, (message) =>
       message.type === 'hello'

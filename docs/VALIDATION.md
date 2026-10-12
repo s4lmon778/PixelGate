@@ -1,5 +1,35 @@
 # Validation record
 
+## Cache presentation, device visual, and pause diagnostics · 0.3.24
+
+- Cleared copies leave the receiving list immediately and after reload; History
+  retains receipts. The exact staged-byte count is primary and reaches **0 B**
+  when the saved cache is empty, even when Chrome’s quota estimate is unchanged.
+  Open tabs release prepared copies and object URLs; partials and saved originals
+  remain protected. Both IndexedDB and OPFS are exercised.
+- Connected device visuals distinguish phone, tablet and computer categories,
+  show sender → receiver, and label the local endpoint. A real synthetic
+  transfer checks the moving dot, reduced-motion preference and synchronized
+  pause/resume at 360 pixels without page overflow. The device identities in
+  these browser fixtures are emulated; this is not hardware certification.
+- Existing sender/receiver pause messages now update peer UI and clocks. Source
+  wait-stage diagnostics separate source reading, network backpressure and
+  checkpoint/verification waits. These are diagnostic/display fixes, not a
+  measured throughput gain. **0.3.23 transport settings are retained** under
+  the user’s instruction to identify the slowdown before considering rollback.
+- 197 unit cases, TypeScript, ESLint and production build pass. The broad browser
+  run passes 72 cases with 17 skips; one initial Chromium native-discovery
+  timeout passes in an unchanged isolated rerun. Final targeted checks pass
+  15 cases (3 skips) across Chromium/Firefox/WebKit and 4 in actual Chromium 101.
+- Current Pixel photos show all five paths open, 18 ms primary ICE RTT, responsive
+  storage (89 ms average, 122 ms maximum commit) and over 20 seconds without a
+  frame. This identifies a wait upstream of storage at that moment, but does
+  not distinguish sender pause, source wait, transport fault or Wi-Fi trouble.
+  A matched local 1% native-loss experiment gives roughly 12 seconds on both
+  actual 0.3.22 and 0.3.23 for 32 MiB with independently matching bytes. The
+  reported 170 KB/s phone result remains unexplained; no rollback or claimed
+  physical speed improvement follows from that model.
+
 ## Adaptive message size and storage window · 0.3.23 · October 11, 2026
 
 - Capable peers explicitly negotiate up to eight MiB of durable checkpoint credit through the optional `maxTransferWindowBytes` hello capability. Older senders receive at most four MiB, older receivers retain their advertised window, and single-connection fallback keeps one checkpoint. Stored chunks remain one MiB and need no migration. ACKs still follow completed strict IndexedDB transactions or OPFS flush plus manifest commit. Queue limits follow the negotiated credit, invalid capabilities close before storage opens, and credit is rechecked for every file.
@@ -9,7 +39,7 @@
 - At 200 ms native RTT with ordinary OPFS, 64 MiB + 111 bytes improve **31.036 → 12.964 s** Send to Verified; a second candidate run takes **17.295 s**. Four disk-backed no-delay 400 MiB runs all pass: two baseline/candidate pairs take **11.056 / 11.495 s** and **11.861 / 11.648 s**. This control is effectively unchanged. Earlier nonpersistent 128-MiB attempts rejected a native OPFS write in both versions; those failed transfers are excluded, and all storage guards are retained. No particular engine defect or physical Pixel limit is established.
 - Extended published-engine preservation checks pass a **WebKit → Chromium 5 GiB + 23-byte** original, actual downloaded-byte hash, streamed folder save and independent destination-file hash across the 4 GiB boundary. Source hash + transfer + staging readback take **107.223 s**; folder copy + readback take **39.068 s**. A later 128 KiB + 7-byte original automatically uses the same folder and matches. A genuine **WebKit → WebKit 768 MiB + 23-byte** original naturally uses IndexedDB, reaches staged verification in **18.288 s**, and downloads with an independently matching hash. These validate preserved behavior, not a physical phone speedup.
 - The reusable `scripts/benchmark-native-transfer.mjs` fixture uses fresh disk-backed receiver profiles, records payload and end-to-end time separately, checks every open connection is proxied, and removes synthetic files/profiles afterward. Published prior-version assets and source metadata are retained under `releases/<version>/`; original hashed asset URLs also remain available for open pages. Local publisher fixtures verify provenance, immutable prior copies, source cleanliness, asset retention and deployment history.
-- The compact mobile layout and actual cached-byte cleanup from 0.3.22 are preserved. The user's **50% physical iPhone-to-Pixel goal remains unconfirmed**. The five-hour continuation remains active, and measured hardware timing is required before claiming completion.
+- The compact mobile layout and actual cached-byte cleanup from 0.3.22 are preserved. The user's **50% physical iPhone-to-Pixel goal remains unconfirmed**. The five-hour continuation was deleted at the user’s request; measured hardware timing is required before claiming completion.
 
 ## Cached bytes and transfer timing · 0.3.22 · October 11, 2026
 

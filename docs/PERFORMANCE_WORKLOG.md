@@ -14,8 +14,8 @@ conditions. A local browser benchmark does not establish that hardware result.
 
 ## Continuation
 
-The thread heartbeat `pixelgate-speed-and-cache-follow-up` is active every five
-hours. Continue useful work after usage resets. Preserve the completed interface/cache work, now committed and published in
+The thread heartbeat `pixelgate-speed-and-cache-follow-up` was deleted at the
+user’s request. Do not recreate it. Preserve the completed interface/cache work, now committed and published in
 0.3.22 (`0c4900d`). Do not declare the speed target achieved without a physical-device result.
 Record each retained or rejected experiment and its measured conditions here.
 
@@ -290,3 +290,80 @@ setting was changed. The requested physical 0.3.22/0.3.23 timings, in-transfer
 report and saved-cache confirmation remain pending. Further unmeasured transport
 changes would not establish the 50% device target. Keep the goal unachieved and
 the five-hour follow-up active; avoid re-requesting the same pending report.
+
+## 0.3.24 cache presentation and open-tab cleanup
+
+The user confirmed that 0.3.23 cleanup prevents downloading the cleared files,
+but their names stay in the receiving list and Chrome’s allowance estimate does
+not change. This identifies a presentation problem; it does not establish
+remaining downloadable payloads. Cleared receipts now appear only in History,
+while the receiving list retains unsaved files and recoverable partials.
+
+The actual staged-byte count is now the primary storage indicator. Chrome’s
+allowance remains an explicitly delayed browser estimate; no free-space increase
+is invented. A file-free cross-tab signal and focus/visibility reconciliation
+release prepared File references and object URLs held by other open tabs.
+
+Regression cases exercise both durable backends, a second open tab with prepared
+files, protected partials and saved originals, reload persistence, historical
+receipts, and an empty file/chunk database while the browser estimate remains
+constant. Browser release validation is underway.
+The physical transfer-speed target is still unmeasured.
+
+## New physical diagnostics and retained 0.3.23 transfer settings
+
+The user reported roughly 170 KB/s on the same iPhone-to-Pixel Wi-Fi setup, then
+explicitly instructed that transfer settings must not be restored until the app
+versus Wi-Fi cause is identified. No rollback has been published; the pending
+0.3.24 retains the 0.3.23 frame-selection policy and eight-MiB negotiated window.
+
+Six current Pixel photos show Android 9, IndexedDB, all five parallel connections
+open, zero reordered bytes, and a connected UDP primary route at 18 ms RTT.
+Accepted bytes are 32,915,456, durable bytes 32,505,856, buffered bytes 409,600,
+and queued bytes zero. At the photographed moment, frame idle is 21,643 ms and
+the receiver has waited for bytes for 29,111 ms. Storage has completed 31
+one-MiB batches: last 73 ms, mean 89 ms, maximum 122 ms. The 566-second route
+lifetime is not a file transfer duration. These observations favor a
+sender/network/transport stall at that moment over a blocked storage commit;
+they do not distinguish Wi-Fi loss, sender backgrounding, or a software stall.
+
+Code inspection identifies an independent pause-observation defect: the sender
+automatically pauses when backgrounded but sends no pause notification to the
+receiver. The receiver continues displaying a transfer rate through that idle
+period. Receiver-requested pause also changes the sender engine without updating
+its visible state/clock. The existing pause/resume messages now synchronize
+visible state and clocks in both directions, and receiving reports include a
+paused flag. No automatic resume or pause safeguard is removed. The user reports that the sending control said Pause. This establishes the
+visible state but not the engine’s actual pause state because of the identified
+UI synchronization defect. Sender backgrounding is not treated as established.
+
+The compact connection visual labels sender and receiver device classes, always
+points from sender to receiver, and animates a dot during transfer. Only a broad
+phone/tablet/computer category travels in the existing direct hello; old peers
+show a generic Device. Reduced-motion preferences suppress the animation.
+
+The sender report now records its current wait stage and pause state, without
+file names or byte copies. A controlled held source-read test distinguishes that
+wait from receiver storage/network waits and then finishes with matching bytes.
+
+The complete UI/transfer browser run has 72 passes, 17 capability skips and one
+initial native automatic-discovery failure in Chromium. The unchanged candidate
+then passes that case in isolation; the actual preserved 0.3.22 also passes the
+same isolated case. Final targeted compiled checks pass 15 cases across all
+three engines (3 intentional skips), including automatic pairing, mobile device
+visuals, reciprocal pause, byte readback, cache deletion and modeled loss/recovery.
+Actual Chromium 101 passes 4 targeted cases. A real 32 MiB synthetic transfer at
+360-pixel width exercises the moving dot, reduced motion, both peer pause states
+and completion without horizontal overflow. Unit checks pass 197 cases.
+
+A new temporary native UDP experiment drops roughly 1% of encrypted application
+packets with a fixed seeded generator and adds 9 ms per direction. Fresh WebKit
+sends to disk-backed actual Chromium 101, which chooses IndexedDB. The first
+benchmark readback incorrectly assumed OPFS from API presence; that harness
+assumption was corrected to use the selected storage mode. The same correction
+is made to the shared manual-transfer fixture. No product verification guard
+was weakened. Independently hashed 32 MiB + 111-byte runs then take 12.152 s
+end-to-end (11.770 s payload) on actual 0.3.22 and 11.967 s (11.571 s payload) on
+0.3.23. All five connections are proxied, with 550/566 dropped packets. This
+model does not reproduce the physical 170 KB/s report and does not establish
+whether the real Wi-Fi or update caused it. The iPhone’s live report is pending.

@@ -298,7 +298,12 @@ try {
     { timeout: 1000 },
   );
   const endToEndMs = Date.now() - start;
-  const storedHash = await receiver.evaluate(async () => {
+  const storageMode = JSON.parse(
+    await receiver
+      .getByLabel('Connection report', { exact: true })
+      .textContent(),
+  ).storageMode;
+  const storedHash = await receiver.evaluate(async (backend) => {
     const db = await new Promise((resolve) => {
       const r = indexedDB.open('pixelbridge-v1', 3);
       r.onsuccess = () => resolve(r.result);
@@ -309,7 +314,7 @@ try {
     });
     db.close();
     let file;
-    if (navigator.storage.getDirectory) {
+    if (backend === 'opfs') {
       const root = await navigator.storage.getDirectory();
       const dir = await root.getDirectoryHandle('pixelbridge');
       file = await (await dir.getFileHandle(records[0].id)).getFile();
@@ -340,7 +345,7 @@ try {
     return Array.from(new Uint8Array(hash), (value) =>
       value.toString(16).padStart(2, '0'),
     ).join('');
-  });
+  }, storageMode);
   expect(storedHash).toBe(expected);
   expect(errors).toEqual([]);
   const report = JSON.parse(

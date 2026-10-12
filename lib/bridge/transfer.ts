@@ -64,6 +64,7 @@ export class Receiver {
   private peerWindow = LEGACY_TRANSFER_WINDOW_BYTES;
   private receiveWindow = LEGACY_TRANSFER_WINDOW_BYTES;
   private failed = false;
+  private paused = false;
   constructor(
     private channel: TransferChannel,
     private folder: () => FileSystemDirectoryHandle | undefined,
@@ -71,6 +72,7 @@ export class Receiver {
     private error: (e: Error) => void,
     private completed?: () => void,
     private flattenDestination: () => boolean = () => false,
+    private pausedChanged: (paused: boolean) => void = () => {},
   ) {
     channel.onmessage = (event) => {
       if (this.closed) return;
@@ -122,6 +124,7 @@ export class Receiver {
   snapshot() {
     return {
       stage: this.stage,
+      paused: this.paused,
       stageElapsedMs: Math.round(performance.now() - this.stageStarted),
       acceptedBytes: this.acceptedBytes,
       durableBytes: this.active?.bytes ?? 0,
@@ -301,6 +304,10 @@ export class Receiver {
       await this.update(result);
       control(this.channel, { type: 'result', file: result });
       this.processing('complete');
+    } else if (message.type === 'pause' || message.type === 'resume') {
+      this.paused = message.type === 'pause';
+      this.pausedChanged(this.paused);
+      this.processing(this.paused ? 'paused-by-sender' : 'waiting-for-bytes');
     } else if (message.type === 'complete') {
       this.completed?.();
     } else if (
@@ -459,6 +466,7 @@ export class Receiver {
     }
   }
   pause() {
+    this.paused = true;
     if (this.channel.readyState === 'open')
       control(this.channel, { type: 'pause' });
   }
@@ -473,6 +481,7 @@ export class Receiver {
     return result;
   }
   resume() {
+    this.paused = false;
     if (this.channel.readyState === 'open')
       control(this.channel, { type: 'resume' });
   }
@@ -496,6 +505,8 @@ export class Receiver {
 
 export class Sender {
   paused = false;
+  private stage = 'idle';
+  private stageStarted = performance.now();
   private cancelAll = false;
   private cancelFile = false;
   private current?: RecordFile;
@@ -505,6 +516,7 @@ export class Sender {
   constructor(
     private channel: TransferChannel,
     private changed: (q: QueuedFile) => void,
+    private pausedChanged: (paused: boolean) => void = () => {},
   ) {
     channel.bufferedAmountLowThreshold = SEND_BUFFER_BYTES / 2;
     channel.addEventListener('bufferedamountlow', this.wake);
@@ -519,9 +531,10 @@ export class Sender {
         if (message.type === 'hello') {
           this.compatible = message.version === VERSION;
           if (!this.compatible) channel.close();
-        } else if (message.type === 'pause') this.paused = true;
-        else if (message.type === 'resume') this.paused = false;
-        else {
+        } else if (message.type === 'pause' || message.type === 'resume') {
+          this.paused = message.type === 'pause';
+          this.pausedChanged(this.paused);
+        } else {
           if (this.inbox.length > 100) channel.close();
           else this.inbox.push(message);
         }
@@ -539,6 +552,18 @@ export class Sender {
   private wake = () => {
     for (const resolve of this.waiting) resolve();
   };
+  snapshot() {
+    return {
+      stage: this.stage,
+      stageElapsedMs: Math.round(performance.now() - this.stageStarted),
+      paused: this.paused,
+    };
+  }
+  private processing(stage: string) {
+    if (stage === this.stage) return;
+    this.stage = stage;
+    this.stageStarted = performance.now();
+  }
   private activity(timeout = RESPONSE_TIMEOUT_MS) {
     return new Promise<void>((resolve) => {
       const done = () => {
@@ -572,6 +597,7 @@ export class Sender {
     type: 'ready' | 'ack' | 'result',
     id: string,
   ): Promise<Control> {
+    this.processing(`waiting-for-${type}`);
     const started = Date.now();
     while (true) {
       this.check();
@@ -605,12 +631,14 @@ export class Sender {
       this.channel.bufferedAmount >
       (this.channel.sendBufferBytes ?? SEND_BUFFER_BYTES)
     ) {
+      this.processing('network-backpressure');
       this.check();
       // Events refill the transport promptly. A sparse fallback also supports
       // browser engines that occasionally miss bufferedamountlow notifications.
       await this.activity(1000);
     }
     await this.unpaused();
+    this.processing('sending');
   }
   async prepare(q: QueuedFile, sessionId: string): Promise<RecordFile> {
     q.phase = 'hashing';
@@ -646,6 +674,7 @@ export class Sender {
     }
   }
   async run(queue: QueuedFile[], sessionId: string) {
+    this.processing('waiting-for-handshake');
     this.cancelAll = false;
     await local.session({ id: sessionId, role: 'send', created: Date.now() });
     while (!this.compatible) {
@@ -665,6 +694,7 @@ export class Sender {
     for (let i = 0; i < pending.length; i++) {
       const q = pending[i];
       this.cancelFile = false;
+      this.processing('preparing-source');
       const prepared = await next!;
       next =
         pending[i + 1] && !this.cancelAll ? prepare(pending[i + 1]) : undefined;
@@ -674,7 +704,10 @@ export class Sender {
       this.current = record;
       const pacer = new SendPacer();
       try {
-        if (record.size >= 2 * CHECKPOINT_BYTES) await this.channel.prepare?.();
+        if (record.size >= 2 * CHECKPOINT_BYTES) {
+          this.processing('preparing-connections');
+          await this.channel.prepare?.();
+        }
         await this.unpaused();
         q.phase = 'transferring';
         this.changed(q);
@@ -763,7 +796,9 @@ export class Sender {
               await acknowledge();
               continue;
             }
+            this.processing('reading-source');
             const reading = await nextBlock!;
+            this.processing('sending');
             if ('error' in reading) {
               control(this.channel, { type: 'cancel', id: record.id });
               throw reading.error;
@@ -784,8 +819,11 @@ export class Sender {
                   continue;
                 }
                 pos += sent;
-                if (pos < block.length)
+                if (pos < block.length) {
+                  this.processing('yielding-to-browser');
                   await pacer.yield(this.channel.pacingDelayMs ?? 4);
+                  this.processing('sending');
+                }
                 continue;
               }
               await this.writable();
@@ -797,7 +835,9 @@ export class Sender {
               burst += Math.min(messageLimit, block.length - pos);
               pos += messageLimit;
               if (burst >= (this.channel.burstBytes ?? SEND_BUFFER_BYTES)) {
+                this.processing('yielding-to-browser');
                 await pacer.yield(this.channel.pacingDelayMs ?? 4);
+                this.processing('sending');
                 burst = 0;
               }
             }
@@ -859,13 +899,18 @@ export class Sender {
     }
     if (this.channel.readyState === 'open' && !this.cancelAll)
       control(this.channel, { type: 'complete', sessionId });
+    this.processing('idle');
   }
   pause() {
     this.paused = true;
+    if (this.channel.readyState === 'open')
+      control(this.channel, { type: 'pause' });
     this.wake();
   }
   resume() {
     this.paused = false;
+    if (this.channel.readyState === 'open')
+      control(this.channel, { type: 'resume' });
     this.wake();
   }
   cancel(currentOnly = false) {
