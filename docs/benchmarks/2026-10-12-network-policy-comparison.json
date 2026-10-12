@@ -1,0 +1,412 @@
+{
+  "date": "2026-10-12",
+  "baselineVersion": "0.3.26",
+  "baselineSourceCommit": "b465196a59685b4d2dac5955bc5280b0cd20ce68",
+  "sender": "Playwright WebKit 26.0",
+  "receiver": "actual Chromium 101.0.4951.15, new persistent IndexedDB profile",
+  "condition": {
+    "bytes": 33554543,
+    "nativeOneWayDelayMs": 9,
+    "encryptedApplicationLossPermille": 10
+  },
+  "variants": {
+    "median": "use lower median queue delay only when at least three paths have finite measurements; otherwise keep maximum",
+    "medium": "cap warmed near-link payload frames at 32768 bytes; all other framing policy unchanged",
+    "median-medium": "both experiments"
+  },
+  "limitations": [
+    "one run per variant/seed",
+    "same seeds do not mean identical dropped messages when timing and packet grouping differ",
+    "synthetic local model, not physical Wi-Fi speed"
+  ],
+  "runs": [
+    {
+      "variant": "baseline",
+      "seed": 7,
+      "sendToVerifiedMs": 13526,
+      "payloadToFinishMs": 13172,
+      "bytes": 33554543,
+      "replayedPackets": 3,
+      "proxyDroppedPackets": 559,
+      "applicationPackets": 59046,
+      "connectionsProxied": 5,
+      "independentStoredHashMatched": true
+    },
+    {
+      "variant": "baseline",
+      "seed": 13,
+      "sendToVerifiedMs": 10728,
+      "payloadToFinishMs": 10384,
+      "bytes": 33554543,
+      "replayedPackets": 0,
+      "proxyDroppedPackets": 594,
+      "applicationPackets": 58873,
+      "connectionsProxied": 5,
+      "independentStoredHashMatched": true
+    },
+    {
+      "variant": "baseline",
+      "seed": 31,
+      "sendToVerifiedMs": 12887,
+      "payloadToFinishMs": 12528,
+      "bytes": 33554543,
+      "replayedPackets": 3,
+      "proxyDroppedPackets": 648,
+      "applicationPackets": 60495,
+      "connectionsProxied": 5,
+      "independentStoredHashMatched": true
+    },
+    {
+      "variant": "median",
+      "seed": 7,
+      "sendToVerifiedMs": 13523,
+      "payloadToFinishMs": 13200,
+      "bytes": 33554543,
+      "replayedPackets": 3,
+      "proxyDroppedPackets": 546,
+      "applicationPackets": 57739,
+      "connectionsProxied": 5,
+      "independentStoredHashMatched": true
+    },
+    {
+      "variant": "median",
+      "seed": 13,
+      "sendToVerifiedMs": 12674,
+      "payloadToFinishMs": 12336.000000000002,
+      "bytes": 33554543,
+      "replayedPackets": 2,
+      "proxyDroppedPackets": 603,
+      "applicationPackets": 59894,
+      "connectionsProxied": 5,
+      "independentStoredHashMatched": true
+    },
+    {
+      "variant": "median",
+      "seed": 31,
+      "sendToVerifiedMs": 12201,
+      "payloadToFinishMs": 11871,
+      "bytes": 33554543,
+      "replayedPackets": 1,
+      "proxyDroppedPackets": 640,
+      "applicationPackets": 59266,
+      "connectionsProxied": 5,
+      "independentStoredHashMatched": true
+    },
+    {
+      "variant": "medium",
+      "seed": 7,
+      "sendToVerifiedMs": 12152,
+      "payloadToFinishMs": 11809.000000000002,
+      "bytes": 33554543,
+      "replayedPackets": 2,
+      "proxyDroppedPackets": 564,
+      "applicationPackets": 59687,
+      "connectionsProxied": 5,
+      "independentStoredHashMatched": true
+    },
+    {
+      "variant": "medium",
+      "seed": 13,
+      "sendToVerifiedMs": 13770,
+      "payloadToFinishMs": 13402.000000000002,
+      "bytes": 33554543,
+      "replayedPackets": 9,
+      "proxyDroppedPackets": 596,
+      "applicationPackets": 59117,
+      "connectionsProxied": 5,
+      "independentStoredHashMatched": true
+    },
+    {
+      "variant": "medium",
+      "seed": 31,
+      "sendToVerifiedMs": 11459,
+      "payloadToFinishMs": 11127,
+      "bytes": 33554543,
+      "replayedPackets": 0,
+      "proxyDroppedPackets": 653,
+      "applicationPackets": 61346,
+      "connectionsProxied": 5,
+      "independentStoredHashMatched": true
+    },
+    {
+      "variant": "median-medium",
+      "seed": 7,
+      "sendToVerifiedMs": 10655,
+      "payloadToFinishMs": 10301,
+      "bytes": 33554543,
+      "replayedPackets": 4,
+      "proxyDroppedPackets": 551,
+      "applicationPackets": 58209,
+      "connectionsProxied": 5,
+      "independentStoredHashMatched": true
+    },
+    {
+      "variant": "median-medium",
+      "seed": 13,
+      "sendToVerifiedMs": 11156,
+      "payloadToFinishMs": 10809,
+      "bytes": 33554543,
+      "replayedPackets": 0,
+      "proxyDroppedPackets": 601,
+      "applicationPackets": 59796,
+      "connectionsProxied": 5,
+      "independentStoredHashMatched": true
+    },
+    {
+      "variant": "median-medium",
+      "seed": 31,
+      "sendToVerifiedMs": 13076,
+      "payloadToFinishMs": 12738,
+      "bytes": 33554543,
+      "replayedPackets": 12,
+      "proxyDroppedPackets": 649,
+      "applicationPackets": 60568,
+      "connectionsProxied": 5,
+      "independentStoredHashMatched": true
+    }
+  ],
+  "decision": "Do not retain or publish any of the three alternatives: no consistent speed gain across loss patterns or unequal/shared path controls.",
+  "applicationPathControls": [
+    {
+      "candidate": "median",
+      "mode": "baseline-paths-symmetric-local",
+      "firstPayloadToFinishMs": 3332.3000000715256,
+      "averageQueuedBytes": 616528.68,
+      "replayedPackets": 0,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16777327
+    },
+    {
+      "candidate": "median",
+      "mode": "pipeline-paths-symmetric-local",
+      "firstPayloadToFinishMs": 3286.399999976158,
+      "averageQueuedBytes": 657889.9841549295,
+      "replayedPackets": 0,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16777327
+    },
+    {
+      "candidate": "median",
+      "mode": "baseline-paths-asymmetric-local",
+      "firstPayloadToFinishMs": 4025.2999999523163,
+      "averageQueuedBytes": 518904.74761904764,
+      "replayedPackets": 2,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16810095
+    },
+    {
+      "candidate": "median",
+      "mode": "pipeline-paths-asymmetric-local",
+      "firstPayloadToFinishMs": 4023.100000023842,
+      "averageQueuedBytes": 520918.2573529412,
+      "replayedPackets": 1,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16793711
+    },
+    {
+      "candidate": "median",
+      "mode": "baseline-paths-moderate-local",
+      "firstPayloadToFinishMs": 3706.5999999046326,
+      "averageQueuedBytes": 564585.0350877193,
+      "replayedPackets": 0,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16777327
+    },
+    {
+      "candidate": "median",
+      "mode": "pipeline-paths-moderate-local",
+      "firstPayloadToFinishMs": 3796.2999999523163,
+      "averageQueuedBytes": 545906.9594320487,
+      "replayedPackets": 0,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16777327
+    },
+    {
+      "candidate": "median",
+      "mode": "baseline-paths-shared-local",
+      "firstPayloadToFinishMs": 16038.799999952316,
+      "averageQueuedBytes": 346246.3721413721,
+      "replayedPackets": 0,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16777327
+    },
+    {
+      "candidate": "median",
+      "mode": "pipeline-paths-shared-local",
+      "firstPayloadToFinishMs": 16037.800000071526,
+      "averageQueuedBytes": 362329.6819126819,
+      "replayedPackets": 0,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16777327
+    },
+    {
+      "candidate": "medium",
+      "mode": "baseline-paths-symmetric-local",
+      "firstPayloadToFinishMs": 3290.5,
+      "averageQueuedBytes": 623299.9646643109,
+      "replayedPackets": 0,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16777327
+    },
+    {
+      "candidate": "medium",
+      "mode": "pipeline-paths-symmetric-local",
+      "firstPayloadToFinishMs": 3243.5,
+      "averageQueuedBytes": 573374.9776,
+      "replayedPackets": 0,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16777327
+    },
+    {
+      "candidate": "medium",
+      "mode": "baseline-paths-asymmetric-local",
+      "firstPayloadToFinishMs": 4028.7999999523163,
+      "averageQueuedBytes": 522007.7346625767,
+      "replayedPackets": 2,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16810095
+    },
+    {
+      "candidate": "medium",
+      "mode": "pipeline-paths-asymmetric-local",
+      "firstPayloadToFinishMs": 3997.2999999523163,
+      "averageQueuedBytes": 577431.9850340136,
+      "replayedPackets": 3,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16842863
+    },
+    {
+      "candidate": "medium",
+      "mode": "baseline-paths-moderate-local",
+      "firstPayloadToFinishMs": 3695.5,
+      "averageQueuedBytes": 582945.460130719,
+      "replayedPackets": 0,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16777327
+    },
+    {
+      "candidate": "medium",
+      "mode": "pipeline-paths-moderate-local",
+      "firstPayloadToFinishMs": 3712.399999976158,
+      "averageQueuedBytes": 583574.070441989,
+      "replayedPackets": 0,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16777327
+    },
+    {
+      "candidate": "medium",
+      "mode": "baseline-paths-shared-local",
+      "firstPayloadToFinishMs": 16037,
+      "averageQueuedBytes": 347914.264033264,
+      "replayedPackets": 0,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16777327
+    },
+    {
+      "candidate": "medium",
+      "mode": "pipeline-paths-shared-local",
+      "firstPayloadToFinishMs": 16036.399999976158,
+      "averageQueuedBytes": 348749.0758835759,
+      "replayedPackets": 0,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16777327
+    },
+    {
+      "candidate": "median-medium",
+      "mode": "baseline-paths-symmetric-local",
+      "firstPayloadToFinishMs": 3308.100000023842,
+      "averageQueuedBytes": 603706.642384106,
+      "replayedPackets": 0,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16777327
+    },
+    {
+      "candidate": "median-medium",
+      "mode": "pipeline-paths-symmetric-local",
+      "firstPayloadToFinishMs": 3229.100000023842,
+      "averageQueuedBytes": 587503.492706645,
+      "replayedPackets": 0,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16777327
+    },
+    {
+      "candidate": "median-medium",
+      "mode": "baseline-paths-asymmetric-local",
+      "firstPayloadToFinishMs": 4027.100000023842,
+      "averageQueuedBytes": 527157.2773613193,
+      "replayedPackets": 2,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16810095
+    },
+    {
+      "candidate": "median-medium",
+      "mode": "pipeline-paths-asymmetric-local",
+      "firstPayloadToFinishMs": 4008.9000000953674,
+      "averageQueuedBytes": 567690.0876369327,
+      "replayedPackets": 3,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16842863
+    },
+    {
+      "candidate": "median-medium",
+      "mode": "baseline-paths-moderate-local",
+      "firstPayloadToFinishMs": 3738.899999976158,
+      "averageQueuedBytes": 608089.7114845938,
+      "replayedPackets": 0,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16777327
+    },
+    {
+      "candidate": "median-medium",
+      "mode": "pipeline-paths-moderate-local",
+      "firstPayloadToFinishMs": 3733.600000023842,
+      "averageQueuedBytes": 569329.8898163605,
+      "replayedPackets": 0,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16777327
+    },
+    {
+      "candidate": "median-medium",
+      "mode": "baseline-paths-shared-local",
+      "firstPayloadToFinishMs": 16042.200000047684,
+      "averageQueuedBytes": 348425.32536382537,
+      "replayedPackets": 0,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16777327
+    },
+    {
+      "candidate": "median-medium",
+      "mode": "pipeline-paths-shared-local",
+      "firstPayloadToFinishMs": 16039.700000047684,
+      "averageQueuedBytes": 359535.9459459459,
+      "replayedPackets": 0,
+      "independentStoredHashMatched": true,
+      "fileBytes": 16777327,
+      "payloadBytesSent": 16777327
+    }
+  ],
+  "applicationPathControlDescription": "16 MiB + 111-byte originals; real Chromium WebRTC with application-send queue models; independent stored hash assertions in passing browser cases; not native radio or physical phone timing."
+}

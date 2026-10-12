@@ -568,3 +568,46 @@ all four compiled assets and the license notice match the tested build byte
 for byte. A fresh mobile-width live browser renders 0.3.26 without page errors
 or horizontal overflow. Physical timing on the same iPhone/Pixel/video/Wi-Fi
 remains necessary before marking the goal achieved.
+
+## Further network-policy comparisons against published 0.3.26
+
+The next controlled experiments target correlated throttling and fragmentation,
+without changing receive credit, checkpoints, reliability or independent
+verification. The control is the exact published 0.3.26 build. Temporary builds
+test: (1) using lower-median queue delay when at least three paths have finite
+observations, otherwise retaining maximum delay; (2) limiting warmed nearby
+payload messages to 32 KiB instead of negotiated 64 KiB; (3) combining both.
+Source is restored after every build; no alternative is retained or published.
+
+Fresh WebKit-to-actual-Chromium-101 IndexedDB native trials use marked
+32 MiB + 111-byte originals, 9 ms each way and approximately 1% seeded encrypted
+application-packet loss. Every connection is proxied and all twelve independent
+stored hashes match. Send-to-Verified results are:
+
+| Policy                      |   Seed 7 |  Seed 13 |  Seed 31 |     Mean |
+| --------------------------- | -------: | -------: | -------: | -------: |
+| Published 0.3.26            | 13.526 s | 10.728 s | 12.887 s | 12.380 s |
+| Lower-median queue feedback | 13.523 s | 12.674 s | 12.201 s | 12.799 s |
+| Warmed 32 KiB payloads      | 12.152 s | 13.770 s | 11.459 s | 12.460 s |
+| Both policies               | 10.655 s | 11.156 s | 13.076 s | 11.629 s |
+
+The combined policy's approximately 6.5% mean throughput difference is driven
+by one better run; it is slower in the other two. It does not establish a
+consistent improvement. Loss seeds describe comparable distributions, not
+identical dropped messages across differing packet/timing sequences.
+
+Three further browser comparisons each independently verify eight 16 MiB +
+111-byte transfers: equal paths, one much slower path, one moderately slower
+path, and a shared bottleneck, with actual baseline/candidate pairs. These are
+application-send queue models, not native packet-loss/phone measurements.
+All 24 hashes match. Equal-path timings stay around 3.2–3.3 s, substantially
+unequal paths around 4.0 s, moderate paths around 3.7–3.8 s, and shared capacity
+around 16.0 s. No candidate materially improves these conditions; some add
+queued bytes. All three alternatives are therefore rejected.
+
+Sanitized numeric results are retained in
+[`benchmarks/2026-10-12-network-policy-comparison.json`](benchmarks/2026-10-12-network-policy-comparison.json).
+Product code and live 0.3.26 are unchanged. A fresh same-video, same-iPhone,
+same-Pixel, same-Wi-Fi Send-to-Verified timing was requested asynchronously;
+the old iPhone reports are not requested again. Physical success remains
+unproven, so the goal is not complete.
