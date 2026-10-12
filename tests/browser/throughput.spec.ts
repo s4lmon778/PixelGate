@@ -731,6 +731,9 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
           );
           expect(JSON.parse(saved!).transfer.connections).toBe(5);
           await sender
+            .getByText('File actions & reports', { exact: true })
+            .click();
+          await sender
             .getByRole('button', { name: 'Clear queue', exact: true })
             .click();
           await expect(

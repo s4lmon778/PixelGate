@@ -1,23 +1,22 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { QrImage } from './QrImage';
 import { CodeInput } from './CodeInput';
 import { KeepAwake } from './KeepAwake';
 import { SaveToApp } from './SaveToApp';
 import { ThemeMenu } from './ThemeMenu';
+import { TransferFiles } from './TransferFiles';
 import { version } from '../package.json';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Check,
   CheckCheck,
-  ChevronDown,
   CircleHelp,
   Copy,
   File,
   Folder,
   History,
-  Laptop,
   Link,
   LoaderCircle,
   LockKeyhole,
@@ -35,6 +34,7 @@ import { CodeConnection } from '@/lib/bridge/code-connection';
 import { pairingLink } from '@/lib/bridge/pairing';
 import { local } from '@/lib/bridge/database';
 import { Receiver, Sender } from '@/lib/bridge/transfer';
+import { TransferClock } from '@/lib/bridge/transfer-clock';
 import { StripedChannel } from '@/lib/bridge/striped-channel';
 import {
   retainedConnectionReport,
@@ -46,10 +46,12 @@ import {
 import { dropped, selected } from '@/lib/bridge/selection';
 import {
   downloadStaged,
-  removeStaged,
+  canClearStaging,
+  clearVerifiedStaging,
   saveToFolder,
   prepareStaging,
   stagingBackend,
+  stagingUsage,
   type StagingBackend,
   verifyExport,
 } from '@/lib/bridge/storage';
@@ -70,28 +72,6 @@ type BrowserFolderWindow = Window & {
 };
 const errorText = (e: unknown) =>
   e instanceof Error ? e.message : 'Something went wrong. Try again.';
-const phaseLabel: Record<string, string> = {
-  pending: 'Queued',
-  hashing: 'Preparing',
-  ready: 'Ready',
-  transferring: 'Transferring',
-  paused: 'Paused',
-  verifying: 'Verifying',
-  verified: 'Verified',
-  failed: 'Needs retry',
-  cancelled: 'Cancelled',
-  duplicate: 'Already present',
-};
-function verificationLabel(r: RecordFile) {
-  if (!isVerified(r)) return phaseLabel[r.phase];
-  if (r.scope === 'destination') return 'Destination verified';
-  if (r.scope === 'exported') return 'Exported copy verified';
-  if (r.shared) return 'App save verification pending';
-  return r.downloaded
-    ? 'Download verification pending'
-    : 'Browser copy verified';
-}
-
 export default function PixelGate() {
   const [view, setView] = useState<'transfer' | 'history' | 'guide'>(
     'transfer',
@@ -122,10 +102,13 @@ export default function PixelGate() {
   const [problem, setProblem] = useState('');
   const [folderName, setFolderName] = useState('Manual download');
   const [capacityLabel, setCapacityLabel] = useState('Checking…');
+  const [cachedBytes, setCachedBytes] = useState<number>();
   const [storageMode, setStorageMode] =
     useState<StagingBackend>(stagingBackend);
   const [dragging, setDragging] = useState(false);
-  const [visible, setVisible] = useState(50);
+  const [selectedSend, setSelectedSend] = useState<string[]>([]);
+  const [saveWorking, setSaveWorking] = useState(false);
+  const [cacheRevision, setCacheRevision] = useState(0);
   const [historySession, setHistorySession] = useState('all');
   const [elapsed, setElapsed] = useState(0);
   const connection = useRef<Connection | CodeConnection | undefined>(undefined);
@@ -145,7 +128,7 @@ export default function PixelGate() {
     undefined,
   );
   const session = useRef('');
-  const startTime = useRef(0);
+  const transferClock = useRef(new TransferClock());
   const baseBytes = useRef(0);
   const releaseLock = useRef<(() => void) | undefined>(undefined);
 
@@ -181,12 +164,25 @@ export default function PixelGate() {
   }, [room, role, storageMode]);
 
   const refresh = useCallback(async () => {
-    const [records, stored] = await Promise.all([
+    const [records, stored, usage] = await Promise.all([
       local.files(),
       local.receivedFiles(),
+      stagingUsage().catch(() => undefined),
     ]);
-    setHistory(records.sort((a, b) => b.updated - a.updated));
+    const cleared = new Set(
+      stored.filter((r) => r.stagingCleared).map((r) => r.id),
+    );
+    setHistory(
+      records
+        .map((record) =>
+          record.localRole !== 'send' && cleared.has(record.id)
+            ? { ...record, stagingCleared: true }
+            : record,
+        )
+        .sort((a, b) => b.updated - a.updated),
+    );
     setStoredReceived(stored);
+    setCachedBytes(usage?.bytes);
     const estimate = await navigator.storage?.estimate?.();
     setCapacityLabel(
       estimate?.quota
@@ -262,7 +258,7 @@ export default function PixelGate() {
   useEffect(() => {
     if (!running && !connected) return;
     const tick = setInterval(
-      () => setElapsed(Math.max(1, (Date.now() - startTime.current) / 1000)),
+      () => setElapsed(transferClock.current.elapsed()),
       1000,
     );
     const visible = () => {
@@ -275,6 +271,7 @@ export default function PixelGate() {
       ) {
         sender.current?.pause();
         receiver.current?.pause();
+        transferClock.current.pause();
         setPaused(true);
         setNotice(
           'Browser was backgrounded. Return to this tab and resume; reconnect if necessary.',
@@ -360,7 +357,8 @@ export default function PixelGate() {
     receiveTimer.current = undefined;
     receivedRecords.current.clear();
     setReceived([]);
-    startTime.current = Date.now();
+    transferClock.current.reset();
+    setElapsed(0);
     const events: ConstructorParameters<typeof CodeConnection>[1] = {
       room: setRoom,
       status: setStatus,
@@ -374,14 +372,28 @@ export default function PixelGate() {
         setConnected(true);
         setPaused(false);
         if (role === 'send')
-          sender.current = new Sender(transfer, () =>
-            setQueue([...currentQueue.current]),
-          );
+          sender.current = new Sender(transfer, (q) => {
+            if (q.phase === 'transferring')
+              transferClock.current.start(baseBytes.current);
+            setQueue([...currentQueue.current]);
+          });
         else
           receiver.current = new Receiver(
             transfer,
             () => folder.current,
             (record) => {
+              if (
+                record.phase === 'transferring' &&
+                !transferClock.current.active
+              ) {
+                transferClock.current.start(
+                  [...receivedRecords.current.values()].reduce(
+                    (total, previous) =>
+                      total + (previous.id === record.id ? 0 : previous.bytes),
+                    record.bytes,
+                  ),
+                );
+              }
               receivedRecords.current.set(record.id, record);
               if (!receiveTimer.current)
                 receiveTimer.current = setTimeout(() => {
@@ -394,6 +406,7 @@ export default function PixelGate() {
               void refresh().catch(() => {});
             },
             () => {
+              transferClock.current.finish();
               void refresh().catch(() => {});
             },
             () => photosFolder.current,
@@ -426,7 +439,7 @@ export default function PixelGate() {
     const picker = (window as BrowserFolderWindow).showDirectoryPicker;
     if (!picker) {
       setNotice(
-        'Folder access is unavailable in this browser. Use Save to app or location if offered, or download verified copies.',
+        'Folder access is unavailable in this browser. Select received files and prepare them for downloads or an available app.',
       );
       return;
     }
@@ -472,6 +485,7 @@ export default function PixelGate() {
     });
     currentQueue.current = [...currentQueue.current, ...added];
     setQueue([...currentQueue.current]);
+    setSelectedSend((previous) => [...previous, ...added.map((q) => q.key)]);
     setNotice(
       `${added.length.toLocaleString()} file${added.length === 1 ? '' : 's'} added. Files are prepared locally before sending.`,
     );
@@ -481,18 +495,21 @@ export default function PixelGate() {
     setRunning(true);
     setPaused(sender.current.paused);
     setProblem('');
-    startTime.current = Date.now();
-    baseBytes.current = currentQueue.current.reduce(
-      (n, q) => n + (q.record?.bytes ?? 0),
-      0,
-    );
-    setElapsed(1);
+    transferClock.current.reset();
+    baseBytes.current = currentQueue.current
+      .filter((q) => sendIds.has(q.key))
+      .reduce((n, q) => n + (q.record?.bytes ?? 0), 0);
+    setElapsed(0);
     try {
-      await sender.current.run(currentQueue.current, session.current);
+      await sender.current.run(
+        currentQueue.current.filter((q) => sendIds.has(q.key)),
+        session.current,
+      );
       await refresh();
     } catch (e) {
       setProblem(errorText(e));
     } finally {
+      transferClock.current.finish();
       setRunning(false);
       setQueue([...currentQueue.current]);
     }
@@ -501,11 +518,13 @@ export default function PixelGate() {
     if (paused) {
       sender.current?.resume();
       receiver.current?.resume();
+      transferClock.current.resume();
       setPaused(false);
       setNotice('');
     } else {
       sender.current?.pause();
       receiver.current?.pause();
+      transferClock.current.pause();
       setPaused(true);
     }
   }
@@ -530,28 +549,60 @@ export default function PixelGate() {
     await refresh();
   }
   async function clearVerified() {
+    const candidates = (await local.receivedFiles()).filter(canClearStaging);
+    if (!candidates.length) {
+      setNotice(
+        'No saved verified copies to clear. Save or download received files first.',
+      );
+      return;
+    }
+    const pending = candidates.some((r) => r.scope === 'browser');
     if (
       !confirm(
-        'Remove staged copies that have a verified destination or exported copy? This frees browser space. Destination files will remain.',
+        `Clear ${candidates.length} cached copies (${formatBytes(candidates.reduce((n, r) => n + r.size, 0))}) from PixelGate? ` +
+          (pending
+            ? 'Confirm their downloads or app saves have finished and you can open the saved files. Their saved bytes have not been independently verified. '
+            : '') +
+          'Saved originals, unfinished transfers, history, and connection reports will remain.',
       )
     )
       return;
-    let count = 0;
+    const cleanup = () =>
+      receiver.current
+        ? receiver.current.withStorageMaintenance(clearVerifiedStaging)
+        : clearVerifiedStaging();
+    const result =
+      navigator.locks && !releaseLock.current
+        ? await navigator.locks.request(
+            'pixelbridge-receiver',
+            { ifAvailable: true },
+            async (lock) => {
+              if (!lock)
+                throw new Error(
+                  'Another tab is receiving files. Close that receiver before clearing this cache.',
+                );
+              return cleanup();
+            },
+          )
+        : await cleanup();
+    // Remount inline saving to release prepared File/Blob references as well as
+    // deleting the durable bytes and revoking associated download URLs.
+    setCacheRevision((revision) => revision + 1);
+    if (result.errors.length) setProblem(result.errors.slice(0, 3).join(' · '));
     for (const record of await local.receivedFiles())
-      if (
-        ['destination', 'exported'].includes(record.scope) &&
-        isVerified(record)
-      ) {
-        await removeStaged(record.id);
-        count++;
-      }
-    setNotice(`${count} staged copies cleared. Reports remain on this device.`);
+      if (receivedRecords.current.has(record.id))
+        receivedRecords.current.set(record.id, record);
+    setReceived([...receivedRecords.current.values()].reverse());
+    setNotice(
+      `${result.cleared.length} staged copies cleared · ${formatBytes(result.bytes)} of file cache removed. Reports remain on this device.`,
+    );
     await refresh();
   }
   async function exportBatch() {
     const pending = (await local.receivedFiles()).filter(
       (r) =>
         isVerified(r) &&
+        !r.stagingCleared &&
         r.scope === 'browser' &&
         (folder.current || !r.downloaded) &&
         (view !== 'history' ||
@@ -584,17 +635,23 @@ export default function PixelGate() {
         receivedRecords.current.set(record.id, record);
     setReceived([...receivedRecords.current.values()].reverse());
   }
+  const sendIds = new Set(selectedSend);
+  const overviewQueue = queue.filter((q) => sendIds.has(q.key));
   const records =
     role === 'receive'
       ? received
       : queue.flatMap((q) => (q.record ? [q.record] : []));
+  const overviewRecords =
+    role === 'receive'
+      ? received
+      : overviewQueue.flatMap((q) => (q.record ? [q.record] : []));
   const total =
     role === 'send'
-      ? queue.reduce((n, q) => n + q.file.size, 0)
+      ? overviewQueue.reduce((n, q) => n + q.file.size, 0)
       : received.reduce((n, r) => n + r.size, 0);
-  const bytes = records.reduce((n, r) => n + r.bytes, 0);
-  const verified = records.filter(isVerified).length;
-  const failed = records.filter((r) => r.phase === 'failed').length;
+  const bytes = overviewRecords.reduce((n, r) => n + r.bytes, 0);
+  const verified = overviewRecords.filter(isVerified).length;
+  const failed = overviewRecords.filter((r) => r.phase === 'failed').length;
   const percent = total ? Math.min(100, Math.round((bytes / total) * 100)) : 0;
   const active =
     role === 'send'
@@ -604,15 +661,58 @@ export default function PixelGate() {
       : received.find((r) => ['transferring', 'verifying'].includes(r.phase))
           ?.relativePath;
   const speed =
-    elapsed && running ? Math.max(0, bytes - baseBytes.current) / elapsed : 0;
+    elapsed && !paused && (running || (role === 'receive' && active))
+      ? transferClock.current.rate(bytes)
+      : 0;
   const eta = speed ? Math.ceil((total - bytes) / speed) : 0;
   const historyRecords =
     historySession === 'all'
       ? history
       : history.filter((r) => r.sessionId === historySession);
   const sessions = [...new Set(history.map((r) => r.sessionId))];
-  const list = view === 'history' ? historyRecords : records;
   const displayQueue = role === 'send' && view === 'transfer';
+  const receivedFiles = useMemo(
+    () => [
+      ...new Map(
+        [...storedReceived, ...received].map((r) => [r.id, r]),
+      ).values(),
+    ],
+    [storedReceived, received],
+  );
+  const sendable = queue.filter(
+    (q) => !['verified', 'duplicate', 'cancelled'].includes(q.phase),
+  );
+  const sendableIds = new Set(sendable.map((q) => q.key));
+  const clearable = storedReceived.filter(canClearStaging);
+  const reportActions = (
+    <details className="file-tools">
+      <summary>File actions &amp; reports</summary>
+      <div className="report-actions">
+        {(['json', 'csv', 'txt'] as const).map((format) => (
+          <button
+            key={format}
+            className="text-button"
+            disabled={!records.length}
+            onClick={() => downloadReport(records, format)}
+          >
+            {format.toUpperCase()}
+          </button>
+        ))}
+        {displayQueue && queue.length > 0 && !running && (
+          <button
+            className="text-button"
+            onClick={() => {
+              currentQueue.current = [];
+              setQueue([]);
+              setSelectedSend([]);
+            }}
+          >
+            Clear queue
+          </button>
+        )}
+      </div>
+    </details>
+  );
 
   return (
     <div className="app-shell">
@@ -858,7 +958,11 @@ export default function PixelGate() {
           ) : (
             <>
               {view === 'transfer' && (
-                <div className="transfer-layout">
+                <div
+                  className={
+                    'transfer-layout' + (connected ? ' is-connected' : '')
+                  }
+                >
                   <div className="primary-column">
                     <section className="panel connection-panel">
                       <div className="section-head">
@@ -882,7 +986,7 @@ export default function PixelGate() {
                         <button
                           className={role === 'send' ? 'active' : ''}
                           aria-pressed={role === 'send'}
-                          disabled={!!room || busy || running}
+                          disabled={!!room || busy || running || saveWorking}
                           onClick={() => setRole('send')}
                         >
                           <ArrowUpFromLine size={18} />
@@ -891,7 +995,7 @@ export default function PixelGate() {
                         <button
                           className={role === 'receive' ? 'active' : ''}
                           aria-pressed={role === 'receive'}
-                          disabled={!!room || busy || running}
+                          disabled={!!room || busy || running || saveWorking}
                           onClick={() => setRole('receive')}
                         >
                           <ArrowDownToLine size={18} />
@@ -1037,16 +1141,10 @@ export default function PixelGate() {
                       ) : (
                         <div className="paired-content">
                           {connected ? (
-                            <div className="device-link">
-                              <Laptop size={28} />
-                              <div className="link-line">
-                                <span />
-                                <LockKeyhole size={15} />
-                                <span />
-                              </div>
-                              <Smartphone size={28} />
-                              <p>Encrypted connection established</p>
-                            </div>
+                            <p className="connected-note">
+                              <LockKeyhole size={15} />
+                              Encrypted connection established
+                            </p>
                           ) : role === 'receive' ? (
                             <>
                               <div className="qr-row">
@@ -1436,8 +1534,8 @@ export default function PixelGate() {
                         </h2>
                         <span className="hint">
                           {role === 'send'
-                            ? `${queue.length.toLocaleString()} files selected`
-                            : `${received.length.toLocaleString()} files received`}
+                            ? `${queue.length.toLocaleString()} file${queue.length === 1 ? '' : 's'} in queue`
+                            : `${receivedFiles.length.toLocaleString()} file${receivedFiles.length === 1 ? '' : 's'}`}
                         </span>
                       </div>
                       {role === 'send' ? (
@@ -1495,9 +1593,63 @@ export default function PixelGate() {
                                 Choose folder
                               </button>
                             </div>
-                            <span className="hint">
-                              Untouched bytes. No compression or conversion.
-                            </span>
+                            <div className="file-selection-bar">
+                              <span className="hint">
+                                {
+                                  selectedSend.filter((id) =>
+                                    sendableIds.has(id),
+                                  ).length
+                                }{' '}
+                                selected to send
+                              </span>
+                              <button
+                                className="text-button"
+                                disabled={running || busy || !sendable.length}
+                                onClick={() =>
+                                  setSelectedSend(sendable.map((q) => q.key))
+                                }
+                              >
+                                Select all
+                              </button>
+                              <button
+                                className="text-button"
+                                disabled={
+                                  running || busy || !selectedSend.length
+                                }
+                                onClick={() => setSelectedSend([])}
+                              >
+                                Clear selection
+                              </button>
+                            </div>
+                            <TransferFiles
+                              queue={queue}
+                              label="Files to send"
+                              empty="Choose files or drop them here. Original bytes are preserved."
+                              selected={sendIds}
+                              selectable={sendableIds}
+                              disabled={running || busy}
+                              toggle={(id, checked) =>
+                                setSelectedSend((ids) =>
+                                  checked
+                                    ? [...ids, id]
+                                    : ids.filter((i) => i !== id),
+                                )
+                              }
+                              remove={
+                                running
+                                  ? undefined
+                                  : (id) => {
+                                      currentQueue.current =
+                                        currentQueue.current.filter(
+                                          (q) => q.key !== id,
+                                        );
+                                      setQueue([...currentQueue.current]);
+                                      setSelectedSend((ids) =>
+                                        ids.filter((i) => i !== id),
+                                      );
+                                    }
+                              }
+                            />
                           </div>
                           <input
                             ref={fileInput}
@@ -1552,6 +1704,7 @@ export default function PixelGate() {
                                 busy ||
                                 !queue.some(
                                   (q) =>
+                                    sendIds.has(q.key) &&
                                     ![
                                       'verified',
                                       'duplicate',
@@ -1569,6 +1722,7 @@ export default function PixelGate() {
                                 : 'Send files'}
                             </button>
                           </div>
+                          {reportActions}
                         </>
                       ) : (
                         <>
@@ -1579,6 +1733,12 @@ export default function PixelGate() {
                             <div className="storage-heading">
                               <span>Estimated staging space</span>
                               <strong>{capacityLabel}</strong>
+                            </div>
+                            <div className="staging-cache-size" role="status">
+                              File cache:{' '}
+                              {cachedBytes === undefined
+                                ? 'Unavailable'
+                                : formatBytes(cachedBytes)}
                             </div>
                             <details>
                               <summary>How storage works</summary>
@@ -1606,6 +1766,14 @@ export default function PixelGate() {
                                 disk space may be lower.
                               </p>
                               <p>
+                                File cache counts the actual transfer bytes
+                                still staged here, including partial files.
+                                Clear verified staging removes saved copies from
+                                this cache; history remains. The browser’s space
+                                estimate may update later or round small
+                                changes.
+                              </p>
+                              <p>
                                 Each file must fit alongside copies still staged
                                 here. For larger collections, work in batches:
                                 save or download the files, verify the saved
@@ -1625,9 +1793,6 @@ export default function PixelGate() {
                               </p>
                             </details>
                           </div>
-                          <h3 className="saving-heading">
-                            Save verified copies
-                          </h3>
                           <div className="destination">
                             <span className="folder-icon">
                               <Folder size={24} />
@@ -1644,6 +1809,34 @@ export default function PixelGate() {
                             </div>
                           </div>
                           <SaveToApp
+                            key={cacheRevision}
+                            empty={
+                              connected
+                                ? 'Ready for files from your sender.'
+                                : 'Connect a sender to begin. Incoming files appear here.'
+                            }
+                            workingChanged={setSaveWorking}
+                            saveOne={(record) =>
+                              void guarded(() => save(record))
+                            }
+                            clearControl={(working) => (
+                              <button
+                                className="text-button"
+                                disabled={
+                                  busy ||
+                                  !!active ||
+                                  working ||
+                                  !clearable.length
+                                }
+                                onClick={() => void guarded(clearVerified)}
+                              >
+                                <Trash2 size={15} />
+                                Clear verified staging
+                                {clearable.length
+                                  ? ` · ${formatBytes(clearable.reduce((n, r) => n + r.size, 0))}`
+                                  : ''}
+                              </button>
+                            )}
                             folderControl={
                               <>
                                 {/Android/i.test(navigator.userAgent) &&
@@ -1651,7 +1844,7 @@ export default function PixelGate() {
                                     .showDirectoryPicker === 'function' && (
                                     <button
                                       className="button primary"
-                                      disabled={busy || !!active}
+                                      disabled={busy || !!active || saveWorking}
                                       onClick={() =>
                                         void guarded(() => selectFolder(true))
                                       }
@@ -1704,7 +1897,7 @@ export default function PixelGate() {
                               typeof (window as BrowserFolderWindow)
                                 .showDirectoryPicker === 'function'
                             }
-                            records={storedReceived}
+                            records={receivedFiles}
                             disabled={busy || !!active}
                             changed={async () => {
                               await refresh();
@@ -1723,7 +1916,7 @@ export default function PixelGate() {
                           {folder.current && (
                             <button
                               className="text-button"
-                              disabled={busy || !!active}
+                              disabled={busy || !!active || saveWorking}
                               onClick={() => {
                                 folder.current = undefined;
                                 photosFolder.current = false;
@@ -1733,59 +1926,16 @@ export default function PixelGate() {
                               Use downloads
                             </button>
                           )}
-                          <div className="receive-wait">
-                            <ArrowDownToLine size={28} />
-                            <strong>
-                              {active
-                                ? 'Receiving original bytes'
-                                : connected
-                                  ? 'Ready for your files'
-                                  : 'Connect a sender to begin'}
-                            </strong>
-                            <p>
-                              {active ||
-                                'Files appear below as the sender starts transferring.'}
-                            </p>
-                          </div>
-                          <div className="batch-actions">
-                            <span className="batch-label">
-                              Manage received copies
-                            </span>
-                            <div className="button-row">
-                              <button
-                                className="button"
-                                disabled={
-                                  busy || !!active || !storedReceived.length
-                                }
-                                onClick={() => void guarded(exportBatch)}
-                              >
-                                <ArrowDownToLine size={16} />
-                                Export verified batch
-                              </button>
-                              <button
-                                className="button"
-                                disabled={busy || !storedReceived.length}
-                                onClick={() => verifyInput.current?.click()}
-                              >
-                                <ShieldCheck size={16} />
-                                Verify saved copies
-                              </button>
-                              <button
-                                className="text-button"
-                                disabled={busy || !!active}
-                                onClick={() => void guarded(clearVerified)}
-                              >
-                                <Trash2 size={15} />
-                                Clear verified staging
-                              </button>
-                            </div>
-                          </div>
+                          {reportActions}
                         </>
                       )}
                     </section>
                   </div>
                   <aside className="details-column">
-                    <section className="panel progress-panel">
+                    <section
+                      className="panel progress-panel"
+                      aria-label="Transfer overview"
+                    >
                       <div className="section-head">
                         <h2>Transfer overview</h2>
                         <ShieldCheck size={18} />
@@ -1891,21 +2041,22 @@ export default function PixelGate() {
                   </aside>
                 </div>
               )}
-              <section className="panel queue-panel">
-                <div className="section-head">
-                  <h2>
-                    {view === 'history'
-                      ? 'Saved transfer records'
-                      : 'File queue'}{' '}
-                    <span className="count-tag">
-                      {displayQueue ? queue.length : list.length}
-                    </span>
-                  </h2>
-                  <div className="report-actions">
-                    {view === 'history' && (
+              {view === 'history' && (
+                <section className="panel queue-panel">
+                  <div className="section-head">
+                    <h2>
+                      Saved transfer records{' '}
+                      <span className="count-tag">{historyRecords.length}</span>
+                    </h2>
+                    <div className="report-actions">
                       <button
                         className="text-button"
-                        disabled={busy || !!active || !historyRecords.length}
+                        disabled={
+                          busy ||
+                          !!active ||
+                          saveWorking ||
+                          !historyRecords.length
+                        }
                         onClick={() =>
                           void guarded(async () => {
                             if (
@@ -1930,37 +2081,26 @@ export default function PixelGate() {
                         <Trash2 size={15} />
                         Clear history
                       </button>
-                    )}
-                    {(['json', 'csv', 'txt'] as const).map((format) => (
-                      <button
-                        key={format}
-                        className="text-button"
-                        disabled={!list.length}
-                        onClick={() => downloadReport(list, format)}
-                      >
-                        {format.toUpperCase()}
-                      </button>
-                    ))}
-                    {displayQueue && queue.length > 0 && !running && (
-                      <button
-                        className="text-button"
-                        onClick={() => {
-                          currentQueue.current = [];
-                          setQueue([]);
-                        }}
-                      >
-                        Clear queue
-                      </button>
-                    )}
+                      {(['json', 'csv', 'txt'] as const).map((format) => (
+                        <button
+                          key={format}
+                          className="text-button"
+                          disabled={!historyRecords.length}
+                          onClick={() => downloadReport(historyRecords, format)}
+                        >
+                          {format.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                {view === 'history' && (
                   <div className="history-toolbar">
                     <label htmlFor="history-session">Session</label>
                     <select
                       id="history-session"
                       value={historySession}
-                      onChange={(e) => setHistorySession(e.target.value)}
+                      onChange={(event) =>
+                        setHistorySession(event.target.value)
+                      }
                     >
                       <option value="all">All sessions</option>
                       {sessions.map((id) => (
@@ -1973,150 +2113,53 @@ export default function PixelGate() {
                       ))}
                     </select>
                     <button
-                      className="button"
-                      disabled={busy}
-                      onClick={() => verifyInput.current?.click()}
-                    >
-                      <ShieldCheck size={15} />
-                      Verify exported files
-                    </button>
-                    <button
-                      className="button"
-                      disabled={busy || running || !!active}
-                      onClick={() => void guarded(exportBatch)}
-                    >
-                      Export verified batch
-                    </button>
-                    <button
                       className="text-button"
-                      disabled={busy || running || !!active}
+                      disabled={
+                        busy ||
+                        running ||
+                        !!active ||
+                        saveWorking ||
+                        !clearable.length
+                      }
                       onClick={() => void guarded(clearVerified)}
                     >
                       Clear verified staging
                     </button>
                   </div>
-                )}
-                {(displayQueue ? queue : list).length === 0 ? (
-                  <div className="empty-state">
-                    <File size={26} />
-                    <strong>
-                      {view === 'history'
-                        ? 'No history records'
-                        : 'Your queue is clear'}
-                    </strong>
-                    <span>
-                      {view === 'history'
-                        ? 'Verified copies and interrupted transfers will be recorded here.'
-                        : role === 'send'
-                          ? 'Choose files to get started.'
-                          : 'Incoming files will appear here.'}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="file-list">
-                    {displayQueue
-                      ? queue.slice(0, visible).map((q) => (
-                          <div className="file-row" key={q.key}>
-                            <span className="file-symbol">
-                              <File size={19} />
-                            </span>
-                            <div className="file-info">
-                              <strong>{q.path}</strong>
-                              <small>
-                                {q.record &&
-                                [
-                                  'transferring',
-                                  'paused',
-                                  'verifying',
-                                ].includes(q.phase)
-                                  ? `${formatBytes(q.record.bytes)} / `
-                                  : ''}
-                                {formatBytes(q.file.size)}
-                                {q.error && ` · ${q.error}`}
-                              </small>
-                            </div>
-                            <span className={'file-status ' + q.phase}>
-                              {q.record && isVerified(q.record) ? (
-                                <Check size={14} />
-                              ) : [
-                                  'hashing',
-                                  'transferring',
-                                  'verifying',
-                                ].includes(q.phase) ? (
-                                <LoaderCircle className="spin" size={14} />
-                              ) : null}
-                              {q.record && isVerified(q.record)
-                                ? verificationLabel(q.record)
-                                : phaseLabel[q.phase]}
-                            </span>
-                            {!running &&
-                              !['verified', 'duplicate'].includes(q.phase) && (
-                                <button
-                                  className="icon-button"
-                                  aria-label={`Remove ${q.path}`}
-                                  onClick={() => {
-                                    currentQueue.current =
-                                      currentQueue.current.filter(
-                                        (x) => x.key !== q.key,
-                                      );
-                                    setQueue([...currentQueue.current]);
-                                  }}
-                                >
-                                  <X size={15} />
-                                </button>
-                              )}
-                          </div>
-                        ))
-                      : list.slice(0, visible).map((r) => (
-                          <div
-                            className="file-row"
-                            key={`${r.localRole}:${r.sessionId}:${r.id}`}
-                          >
-                            <span className="file-symbol">
-                              <File size={19} />
-                            </span>
-                            <div className="file-info">
-                              <strong>{r.relativePath}</strong>
-                              <small>
-                                {r.bytes < r.size
-                                  ? `${formatBytes(r.bytes)} / `
-                                  : ''}
-                                {formatBytes(r.size)} · {r.sha256.slice(0, 12)}…
-                                {r.error && ` · ${r.error}`}
-                              </small>
-                            </div>
-                            <span className={'file-status ' + r.phase}>
-                              {isVerified(r) && <Check size={14} />}
-                              {verificationLabel(r)}
-                            </span>
-                            {isVerified(r) && r.localRole !== 'send' && (
-                              <button
-                                className="icon-button"
-                                title={
-                                  folder.current
-                                    ? 'Save to folder'
-                                    : 'Download verified browser copy'
-                                }
-                                aria-label={`Save ${r.originalName}`}
-                                disabled={busy || !!active}
-                                onClick={() => void guarded(() => save(r))}
-                              >
-                                <ArrowDownToLine size={17} />
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                  </div>
-                )}
-                {(displayQueue ? queue.length : list.length) > visible && (
-                  <button
-                    className="text-button show-more"
-                    onClick={() => setVisible((v) => v + 100)}
-                  >
-                    Show more files <ChevronDown size={15} />
-                  </button>
-                )}
-              </section>
+                  <details className="help-details saved-copy-tools">
+                    <summary>Saved-copy tools</summary>
+                    <p className="hint">
+                      Optional checks for files saved through downloads or apps.
+                      Folder saves are checked automatically.
+                    </p>
+                    <div className="button-row">
+                      <button
+                        className="button"
+                        disabled={busy || saveWorking}
+                        onClick={() => verifyInput.current?.click()}
+                      >
+                        <ShieldCheck size={15} />
+                        Verify exported files
+                      </button>
+                      <button
+                        className="button"
+                        disabled={busy || running || !!active || saveWorking}
+                        onClick={() => void guarded(exportBatch)}
+                      >
+                        Export verified batch
+                      </button>
+                    </div>
+                  </details>
+                  <TransferFiles
+                    records={historyRecords}
+                    label="Transfer history"
+                    empty="No history records"
+                    disabled={busy || !!active || saveWorking}
+                    save={(record) => void guarded(() => save(record))}
+                    showHashes
+                  />
+                </section>
+              )}
               <input
                 ref={verifyInput}
                 type="file"

@@ -33,6 +33,7 @@ export interface RecordFile {
   error?: string;
   downloaded?: boolean;
   shared?: boolean;
+  stagingCleared?: boolean;
   localRole?: 'send' | 'receive';
 }
 export interface Session {
@@ -113,6 +114,7 @@ export function validateRecord(raw: unknown): RecordFile {
     error: undefined,
     downloaded: false,
     shared: false,
+    stagingCleared: false,
     destinationPath: undefined,
   };
 }

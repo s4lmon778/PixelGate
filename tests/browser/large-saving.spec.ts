@@ -243,11 +243,9 @@ for (const backend of ['opfs', 'indexeddb']) {
         expect(errors).toEqual([]);
         return;
       }
-      await receiver
-        .getByRole('button', { name: 'Save to app or location', exact: true })
-        .click();
-      const dialog = receiver.getByRole('dialog', {
-        name: 'Save to an app or location',
+      const dialog = receiver.getByRole('region', {
+        name: 'Save received files',
+        exact: true,
       });
       await dialog
         .getByRole('button', { name: 'Prepare selected files', exact: true })
@@ -267,6 +265,9 @@ for (const backend of ['opfs', 'indexeddb']) {
           exact: true,
         }),
       ).toBeEnabled();
+      await dialog
+        .getByText('Saving options & Photos help', { exact: true })
+        .click();
       await dialog
         .getByText('Save large videos and collections to Google Photos', {
           exact: true,
@@ -302,9 +303,6 @@ for (const backend of ['opfs', 'indexeddb']) {
       await expect(dialog.getByRole('status')).toContainText(
         'Verification pending',
       );
-      await dialog
-        .getByRole('button', { name: 'Close save options', exact: true })
-        .click();
       const savingStart = Date.now();
       await receiver
         .getByRole('button', { name: 'Save to Photos folder', exact: true })
@@ -541,10 +539,10 @@ test('125 selected originals stay queued across native handoffs and fifty-file d
   await page
     .getByRole('button', { name: 'Receive files', exact: true })
     .click();
-  await page
-    .getByRole('button', { name: 'Save to app or location', exact: true })
-    .click();
-  const dialog = page.getByRole('dialog');
+  const dialog = page.getByRole('region', {
+    name: 'Save received files',
+    exact: true,
+  });
   await expect(dialog).toContainText('125 selected');
   await expect(dialog.getByRole('checkbox')).toHaveCount(50);
   await expect(dialog.getByRole('checkbox').last()).toBeEnabled();
@@ -597,9 +595,6 @@ test('125 selected originals stay queued across native handoffs and fifty-file d
     expect(hash.digest('hex')).toBe(originalHash);
   }
   if (browserName === 'chromium') {
-    await dialog
-      .getByRole('button', { name: 'Close save options', exact: true })
-      .click();
     await page
       .getByRole('button', { name: 'Save to Photos folder', exact: true })
       .click();

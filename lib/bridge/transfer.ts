@@ -435,6 +435,16 @@ export class Receiver {
     if (this.channel.readyState === 'open')
       control(this.channel, { type: 'pause' });
   }
+  // Serialize local cache maintenance with manifests and checkpoint writes.
+  // A new start cannot reopen a file while its previous cache is being removed.
+  withStorageMaintenance<T>(action: () => Promise<T>): Promise<T> {
+    const result = this.chain.then(action);
+    this.chain = result.then(
+      () => {},
+      () => {},
+    );
+    return result;
+  }
   resume() {
     if (this.channel.readyState === 'open')
       control(this.channel, { type: 'resume' });

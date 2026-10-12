@@ -23,7 +23,7 @@ PixelGate moves files between computers, phones, and tablets using their browser
 
 The app is a static **TypeScript / React / Vite** build hosted on GitHub Pages. **PeerJS** exchanges connection metadata for six-digit pairing; it carries no file payloads. No native app, account, cloud media storage, or TURN relay is required.
 
-> **Status:** experimental. The current app is **0.3.20**. Automated checks exercise integrity and recovery; browser capabilities, available storage, and network policies still determine usability. Large-file and physical-device boundaries are documented below.
+> **Status:** experimental. The current app is **0.3.21**. Automated checks exercise integrity and recovery; browser capabilities, available storage, and network policies still determine usability. Large-file and physical-device boundaries are documented below.
 
 Android senders have **Choose photos & videos** for the media library and **Choose files** for documents. Direct **Save to Photos folder** appears only when the browser supports choosing a local folder; older Chrome uses verified downloads with Photos device-folder backup. Updating the browser can enable the folder option without changing the Android system.
 
@@ -46,7 +46,7 @@ Android senders have **Choose photos & videos** for the media library and **Choo
 ## Quick start
 
 <div align="center">
-  <img src="docs/assets/quick-start.gif" alt="Six-step PixelGate walkthrough: create a receiver code, connect the sender, approve, send files, download, then verify the saved copy and clear staging" width="960" />
+  <img src="docs/assets/quick-start.gif" alt="Six-step PixelGate walkthrough: create a receiver code, connect the sender, approve, send files, select and save inline, optionally check final bytes in History, and clear cached files" width="960" />
   <p><sub>A real synthetic-file transfer, with step captions and click highlights. Playback is edited for instruction.</sub></p>
 </div>
 
@@ -57,11 +57,11 @@ Android senders have **Choose photos & videos** for the media library and **Choo
 3. On the sender, enter the receiver's **six-digit code** or scan its QR code, then click **Connect**.
 4. On the receiver, **Approve sender** for your intended device.
 5. Select files or folders on the sender and click **Send files**. Keep both browsers open and foregrounded; enable **Keep screen awake** where supported.
-6. Save the verified files through a selected folder, **Save to app or location**, or downloads. Reselect downloaded/app-saved copies with **Verify saved copies** to confirm their final bytes.
+6. Select received files directly in the scrolling list, then **Prepare selected files** and choose an app or download. A selected destination folder saves and verifies files automatically. Optional final-byte checks remain under **History → Saved-copy tools → Verify exported files**.
 
 Codes expire after ten minutes and accept one sender. A code is a temporary lookup, not identity authentication. Same-network-name Wi-Fi can still block local connections; use a permitted network or hotspot if necessary.
 
-For large collections, receive a batch, save it, verify the saved copies, and choose **Clear verified staging** before the next batch. This frees eligible browser storage while keeping downloaded/saved files and transfer records. **Clear history** is a separate action that preserves staging and resume data.
+For large collections, receive a batch, save it, and choose **Clear verified staging** before the next batch. It deletes PixelGate’s cached file bytes from both storage backends and releases prepared download references. For downloads or app saves, confirm the save finished and the files open before clearing; optional independent saved-copy checks remain in History. Saved originals, unfinished transfers, and reports are kept. **Clear history** is a separate action that preserves staging and resume data.
 
 See the [usage guide](docs/USAGE.md) for saving modes and storage behavior, or [troubleshooting](docs/TROUBLESHOOTING.md) for network and browser issues.
 
@@ -83,8 +83,8 @@ Screenshots show the 0.3.13 interface with empty queues, including paired saving
 - **Integrity and recovery:** incremental worker hashing, independent stored-file readback, durable checkpoints, and resume after source reselection and rehashing.
 - **Parallel transfers:** learn path delivery rates and sequence chunks across up to five independent peer connections, recover gaps on another lane, restore order, and overlap up to four checkpoints, with legacy fallback.
 - **Saving:** Android Chrome 132+ Photos device-folder saving for the whole collection, direct folder writes with destination readback, native save/share where supported, whole-collection verified downloads, Google Photos device-folder guidance, duplicate checks, and numbered conflicting filenames.
-- **Batch controls:** pause/resume/cancel, progress, export and saved-copy verification, staging cleanup, local history, and JSON/CSV/text reports.
-- **Accessible interface:** responsive paired action rows, keyboard controls, Light / Dark / System appearance, reduced-motion support, expandable help, and an optional screen-awake switch.
+- **Batch controls:** inline file selection/saving, pause/resume/cancel, pinned mobile progress, optional final-byte verification in History, direct file-cache cleanup, and JSON/CSV/text reports.
+- **Accessible interface:** contained scrolling file lists, compact mobile action rows, keyboard controls, Light / Dark / System appearance, reduced-motion support, expandable help, and an optional screen-awake switch.
 
 ## Architecture
 
@@ -177,11 +177,11 @@ The [engineering guide](docs/ENGINEERING.md) explains these tradeoffs with sourc
 
 ## Validation and boundaries
 
-Recorded through **0.3.20 on October 10, 2026** across full and targeted runs. These are executed checks, not a continuously updated CI badge.
+Recorded through **0.3.21 on October 10, 2026** across full and targeted runs. These are executed checks, not a continuously updated CI badge.
 
 | Evidence                        | What was checked                                                                                                                                                                           |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **176 unit/integration tests**  | Independent hashes, recovery, latency-relative bounded transfer windows, retained reports, ordered parallel transport, lane failure fallback, pairing lifecycle, and deployment provenance |
+| **182 unit/integration tests**  | Independent hashes, recovery, latency-relative bounded transfer windows, retained reports, ordered parallel transport, lane failure fallback, pairing lifecycle, and deployment provenance |
 | Browser integration             | Real WebRTC transfers, approval, QR decoding, independent stored/exported hashes, interruption and refresh recovery, and corruption rejection                                              |
 | Interface and capability checks | Mobile/desktop layouts, enlarged text, appearance, native-share fixtures, download bytes, wake-lock lifecycle, and history preservation                                                    |
 | Legacy engine                   | Actual Chromium 101 compatibility storage, public signaling, downloads, checkpoint recovery, and current layout controls                                                                   |

@@ -210,7 +210,15 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     return 64 * 1024;
   }
   snapshot() {
-    const channels = [this.primary, ...this.openLanes()];
+    const channels = [
+      ...new Set([
+        this.primary,
+        ...[...this.lanes.values()].flatMap((lane) =>
+          lane.channel ? [lane.channel] : [],
+        ),
+        ...this.incomingPaths.keys(),
+      ]),
+    ];
     const receivedPaths = channels.map((channel, index) => {
       const path = this.incomingPaths.get(channel);
       const now = performance.now();

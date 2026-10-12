@@ -208,19 +208,9 @@ try {
     receiver,
     5,
     'Receiver',
-    'Save the verified copies',
-    'Choose a folder where supported, or open Save to app or location.',
-    receiver.locator('.app-save .save-actions'),
-    button(receiver, 'Save to app or location'),
-  );
-  await button(receiver, 'Save to app or location').click();
-  await shot(
-    receiver,
-    5,
-    'Receiver',
-    'Prepare your selected batch',
-    'PixelGate rereads and hashes the browser copies before offering them for saving.',
-    receiver.locator('.save-dialog'),
+    'Select and prepare files in place',
+    'Select files in the scrolling list. Folder, app, and download saving remain available.',
+    receiver.locator('.app-save'),
     button(receiver, 'Prepare selected files'),
   );
   await button(receiver, 'Prepare selected files').click();
@@ -231,7 +221,7 @@ try {
     'Receiver',
     'Download or use your device’s save sheet',
     'Downloads are shown here. Available app and folder choices depend on the device.',
-    receiver.locator('.save-dialog'),
+    receiver.locator('.app-save'),
     button(receiver, 'Download verified files'),
   );
   const downloadEvent = receiver.waitForEvent('download');
@@ -243,22 +233,23 @@ try {
       .update(await readFile(savedPath))
       .digest('hex'),
   ).toBe(sourceHash);
-  await button(receiver, 'Close save options').click();
   await expect(receiver.locator('.file-status').first()).toHaveText(
     'Download verification pending',
   );
 
+  await button(receiver, 'History').click();
+  await receiver.getByText('Saved-copy tools', { exact: true }).click();
   await shot(
     receiver,
     6,
     'Receiver',
-    'Verify the saved copy',
+    'Optional saved-copy check',
     'Reselect the downloaded or app-saved file to check its final bytes.',
-    receiver.locator('.batch-actions'),
-    button(receiver, 'Verify saved copies'),
+    receiver.locator('.saved-copy-tools'),
+    button(receiver, 'Verify exported files'),
   );
   const verifyChooser = receiver.waitForEvent('filechooser');
-  await button(receiver, 'Verify saved copies').click();
+  await button(receiver, 'Verify exported files').click();
   await (await verifyChooser).setFiles(savedPath);
   await expect(receiver.locator('.file-status').first()).toHaveText(
     'Exported copy verified',
@@ -268,21 +259,25 @@ try {
     6,
     'Receiver',
     'The exported copy is verified',
-    'Direct folder mode verifies its destination automatically. Downloads need this check.',
+    'Folder saves are verified automatically. Final-byte checks for downloads and app saves remain available in History.',
     receiver.locator('.file-status').first(),
     undefined,
   );
+  await button(receiver, 'Transfer').click();
+  const clearStaging = receiver.getByRole('button', {
+    name: /^Clear verified staging/,
+  });
   await shot(
     receiver,
     6,
     'Receiver',
     'Clear staging for your next batch',
     'Clear verified staging removes eligible browser copies. Your saved files stay.',
-    receiver.locator('.batch-actions'),
-    button(receiver, 'Clear verified staging'),
+    receiver.locator('.cache-actions'),
+    clearStaging,
   );
   receiver.once('dialog', (dialog) => void dialog.accept());
-  await button(receiver, 'Clear verified staging').click();
+  await clearStaging.click();
   await expect(receiver.locator('.alert[role="status"]')).toContainText(
     '1 staged copies cleared',
   );

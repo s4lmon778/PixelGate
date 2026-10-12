@@ -102,6 +102,28 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe('parallel transport compatibility, ordering, and fallback', () => {
+  it('keeps received-byte totals in diagnostics after a bulk lane closes', () => {
+    const { primary, transport } = receiver();
+    opened.push(transport);
+    primary.receive(JSON.stringify({ type: 'pg-lane', index: 0 }));
+    const peer = Peer.peers[0];
+    peer.channel.readyState = 'open';
+    (
+      peer as unknown as {
+        ondatachannel: (event: { channel: RTCDataChannel }) => void;
+      }
+    ).ondatachannel({ channel: peer.channel.native() });
+    primary.receive(JSON.stringify({ type: 'pg-striped-start' }));
+    peer.channel.receive(frame(0, new Uint8Array(16)));
+    primary.receive(frame(1, new Uint8Array(8)));
+    peer.channel.close();
+    const report = transport.snapshot();
+    expect(report.connections).toBe(1);
+    expect(report.deliveredBytes).toBe(24);
+    expect(
+      report.paths?.reduce((sum, path) => sum + path.receivedBytes, 0),
+    ).toBe(40);
+  });
   it('measures actual received wire bytes and distinguishes a reorder stall from delivered bytes', async () => {
     const { primary, transport } = receiver();
     opened.push(transport);

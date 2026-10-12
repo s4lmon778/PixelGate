@@ -457,7 +457,16 @@ for (const mode of [
         if (mode === 'indexeddb' || safariReceiver) {
           const event = receiver.waitForEvent('download');
           await receiver
-            .getByRole('button', { name: 'Export verified batch', exact: true })
+            .getByRole('button', {
+              name: 'Prepare selected files',
+              exact: true,
+            })
+            .click();
+          await receiver
+            .getByRole('button', {
+              name: 'Download verified files',
+              exact: true,
+            })
             .click();
           const downloaded = await event;
           // macOS/WebKit downloads may normalize a Unicode filename to NFD.
@@ -727,11 +736,17 @@ test('real peer transfer, readback, manual export verification, and reconnect', 
   const bytes = Buffer.alloc(8 * 1024 * 1024 + 111);
   for (let i = 0; i < bytes.length; i++) bytes[i] = i % 251;
   const expected = createHash('sha256').update(bytes).digest('hex');
-  await sender.locator('input[aria-label="Choose files"]').setInputFiles({
-    name: 'été-original.MOV',
-    mimeType: 'video/quicktime',
-    buffer: bytes,
-  });
+  await sender.locator('input[aria-label="Choose files"]').setInputFiles([
+    { name: 'été-original.MOV', mimeType: 'video/quicktime', buffer: bytes },
+    {
+      name: 'leave-queued.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('Keep this file queued'),
+    },
+  ]);
+  await sender
+    .getByRole('checkbox', { name: 'Select leave-queued.txt', exact: true })
+    .uncheck();
   await sender
     .getByRole('button', { name: 'Send files', exact: true })
     .last()
@@ -743,6 +758,28 @@ test('real peer transfer, readback, manual export verification, and reconnect', 
   await expect(sender.locator('.file-status').first()).toHaveText(
     'Browser copy verified',
   );
+  await expect(receiver.locator('.file-row')).toHaveCount(1);
+  await expect(
+    sender.getByRole('progressbar', { name: 'Bytes transferred' }),
+  ).toHaveAttribute('aria-valuenow', '100');
+  await expect(sender.getByText('Queued', { exact: true })).toBeVisible();
+  await receiver.setViewportSize({ width: 390, height: 844 });
+  await receiver
+    .getByRole('region', { name: 'Received files', exact: true })
+    .scrollIntoViewIfNeeded();
+  await receiver
+    .locator('.files-panel')
+    .evaluate((panel) => panel.scrollIntoView({ block: 'start' }));
+  const sticky = await receiver.locator('.progress-panel').boundingBox();
+  expect(sticky!.y).toBeGreaterThanOrEqual(0);
+  expect(sticky!.y).toBeLessThanOrEqual(8);
+  expect(sticky!.y + sticky!.height).toBeLessThan(844);
+  await expect(
+    receiver.getByRole('button', { name: 'Pause', exact: true }),
+  ).toBeInViewport();
+  await receiver.screenshot({
+    path: `test-results/mobile-connected-receive-${testInfo.project.name}.png`,
+  });
   const stored = await receiver.evaluate(async () => {
     const d = await new Promise<IDBDatabase>((resolve, reject) => {
       const r = indexedDB.open('pixelbridge-v1', 3);
@@ -775,7 +812,10 @@ test('real peer transfer, readback, manual export verification, and reconnect', 
   expect(stored.independent).toBe(expected);
   const downloadEvent = receiver.waitForEvent('download');
   await receiver
-    .getByRole('button', { name: 'Export verified batch', exact: true })
+    .getByRole('button', { name: 'Prepare selected files', exact: true })
+    .click();
+  await receiver
+    .getByRole('button', { name: 'Download verified files', exact: true })
     .click();
   const download = await downloadEvent;
   expect(download.suggestedFilename()).toBe('été-original.MOV');

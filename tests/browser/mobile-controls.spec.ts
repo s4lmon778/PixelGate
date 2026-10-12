@@ -72,6 +72,9 @@ test('Pixel sending opens the media picker and retains the generic files picker'
     await expect(
       page.getByRole('button', { name: 'Save to Photos folder', exact: true }),
     ).toHaveCount(0);
+    await page
+      .getByText('Saving options & Photos help', { exact: true })
+      .click();
     await expect(
       page.getByText(/This browser cannot choose a Photos folder/),
     ).toBeVisible();
@@ -80,7 +83,7 @@ test('Pixel sending opens the media picker and retains the generic files picker'
   }
 });
 
-async function seed(page: Page, staging = true) {
+async function seed(page: Page, staging: boolean | 'buffers' = true) {
   await page.goto('./');
   await expect(
     page.getByRole('button', { name: 'Receive files', exact: true }),
@@ -142,7 +145,10 @@ async function seed(page: Page, staging = true) {
           tx.objectStore('chunks').put({
             fileId: record.id,
             offset: 0,
-            bytes: new Blob([content.slice(0, record.bytes)]),
+            bytes:
+              withStaging === 'buffers'
+                ? content.slice(0, record.bytes).buffer
+                : new Blob([content.slice(0, record.bytes)]),
           });
         }
         tx.oncomplete = () => resolve();
@@ -235,7 +241,7 @@ test('history clearing scopes sessions, supports cancellation, and preserves res
     .getByRole('button', { name: 'Receive files', exact: true })
     .click();
   await expect(
-    page.getByRole('button', { name: 'Export verified batch', exact: true }),
+    page.getByRole('button', { name: 'Prepare selected files', exact: true }),
   ).toBeEnabled();
 });
 
@@ -259,7 +265,7 @@ test('unsupported mobile capabilities keep downloads available and show truthful
     .getByRole('button', { name: 'Receive files', exact: true })
     .click();
   await expect(
-    page.getByRole('button', { name: 'Save to app or location', exact: true }),
+    page.getByRole('button', { name: 'Prepare selected files', exact: true }),
   ).toBeDisabled();
   await expect(
     page.getByRole('button', { name: 'Choose folder', exact: true }),
@@ -318,11 +324,9 @@ test('save/share opens from a fresh tap, preserves bytes, handles cancel, and ne
   await page
     .getByRole('button', { name: 'Receive files', exact: true })
     .click();
-  await page
-    .getByRole('button', { name: 'Save to app or location', exact: true })
-    .click();
-  const dialog = page.getByRole('dialog', {
-    name: 'Save to an app or location',
+  const dialog = page.getByRole('region', {
+    name: 'Save received files',
+    exact: true,
   });
   await expect(dialog.getByRole('checkbox')).toHaveCount(2);
   await dialog.getByRole('button', { name: 'Prepare selected files' }).click();
@@ -389,7 +393,6 @@ test('save/share opens from a fresh tap, preserves bytes, handles cancel, and ne
         (r) => r.shared && r.scope === 'browser' && r.phase === 'verified',
       ),
   ).toBe(true);
-  await dialog.getByRole('button', { name: 'Close save options' }).click();
   await page.getByRole('button', { name: 'History', exact: true }).click();
   await expect(
     page.getByText('App save verification pending', { exact: true }),
@@ -419,10 +422,10 @@ test('corrupted stored files and unsupported share payloads prevent app handoff'
   await page
     .getByRole('button', { name: 'Receive files', exact: true })
     .click();
-  await page
-    .getByRole('button', { name: 'Save to app or location', exact: true })
-    .click();
-  const dialog = page.getByRole('dialog');
+  const dialog = page.getByRole('region', {
+    name: 'Save received files',
+    exact: true,
+  });
   await dialog.getByRole('button', { name: 'Prepare selected files' }).click();
   await expect(dialog.getByRole('status')).toContainText(
     'cannot share these files together',
@@ -689,10 +692,10 @@ test('unsupported sharing offers byte-exact verified downloads with pending dest
   await page
     .getByRole('button', { name: 'Receive files', exact: true })
     .click();
-  await page
-    .getByRole('button', { name: 'Save to app or location', exact: true })
-    .click();
-  const dialog = page.getByRole('dialog');
+  const dialog = page.getByRole('region', {
+    name: 'Save received files',
+    exact: true,
+  });
   await dialog.getByRole('button', { name: 'Clear selection' }).click();
   await dialog.getByRole('checkbox').first().check();
   await dialog.getByRole('button', { name: 'Prepare selected files' }).click();
@@ -731,4 +734,252 @@ test('unsupported sharing offers byte-exact verified downloads with pending dest
   await expect(
     dialog.getByRole('button', { name: 'Download verified files' }),
   ).toBeEnabled();
+});
+
+for (const backend of ['opfs', 'indexeddb']) {
+  test(`inline receiving clears ${backend} file cache, keeps partials and receipts, and supports cancellation`, async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      backend === 'opfs' && browserName === 'webkit',
+      'Ephemeral macOS WebKit does not expose durable OPFS.',
+    );
+    if (backend === 'indexeddb')
+      await page.addInitScript(() => {
+        Object.defineProperty(Navigator.prototype, 'storage', {
+          configurable: true,
+          value: {
+            estimate: () => Promise.resolve({ quota: 10000000, usage: 1000 }),
+          },
+        });
+      });
+    await seed(page, browserName === 'webkit' ? 'buffers' : true);
+    await page.evaluate(async (mode) => {
+      const db = await new Promise<IDBDatabase>((resolve) => {
+        const request = indexedDB.open('pixelbridge-v1', 3);
+        request.onsuccess = () => resolve(request.result);
+      });
+      const read = db.transaction('files').objectStore('files').getAll();
+      const records = await new Promise<Record<string, unknown>[]>(
+        (resolve) => {
+          read.onsuccess = () => resolve(read.result);
+        },
+      );
+      records[0].scope = 'destination';
+      records[1].downloaded = true;
+      await new Promise<void>((resolve) => {
+        const tx = db.transaction(['files', 'history'], 'readwrite');
+        for (const record of records) {
+          tx.objectStore('files').put(record);
+          tx.objectStore('history').put({
+            ...record,
+            historyKey: `receive:${record.sessionId}:${record.id}`,
+          });
+        }
+        tx.objectStore('history').put({
+          ...records[0],
+          sessionId: 'previous-cache-session',
+          scope: 'browser',
+          downloaded: true,
+          updated: 1,
+          historyKey: `receive:previous-cache-session:${records[0].id}`,
+        });
+        tx.oncomplete = () => resolve();
+      });
+      db.close();
+      if (mode === 'opfs') {
+        const root = await navigator.storage.getDirectory();
+        const staging = await root.getDirectoryHandle('pixelbridge', {
+          create: true,
+        });
+        for (const record of records) {
+          const writer = await (
+            await staging.getFileHandle(String(record.id), { create: true })
+          ).createWritable();
+          await writer.write(new Uint8Array(Number(record.bytes)));
+          await writer.close();
+        }
+        const saved = await root.getDirectoryHandle('saved-originals', {
+          create: true,
+        });
+        const writer = await (
+          await saved.getFileHandle('original.jpg', { create: true })
+        ).createWritable();
+        await writer.write('Original destination bytes');
+        await writer.close();
+      }
+    }, backend);
+    await page.reload();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page
+      .getByRole('button', { name: 'Receive files', exact: true })
+      .click();
+    const inline = page.getByRole('region', {
+      name: 'Save received files',
+      exact: true,
+    });
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(
+      page.getByRole('button', {
+        name: /^(Export verified batch|Verify saved copies)$/,
+      }),
+    ).toHaveCount(0);
+    await expect(inline.locator('.file-row')).toHaveCount(3);
+    const before = await snapshot(page);
+    const clear = inline.getByRole('button', {
+      name: /^Clear verified staging/,
+    });
+    await expect(clear).toBeEnabled();
+    page.once('dialog', (dialog) => dialog.dismiss());
+    await clear.click();
+    expect(await snapshot(page)).toEqual(before);
+    page.once('dialog', (dialog) => {
+      expect(dialog.message()).toContain(
+        'Confirm their downloads or app saves have finished',
+      );
+      void dialog.accept();
+    });
+    await clear.click();
+    await expect(
+      page.getByRole('status').filter({ hasText: 'staged copies cleared' }),
+    ).toContainText('2 staged copies cleared');
+    await expect(clear).toBeDisabled();
+    await expect(inline.getByText(/Cache cleared/)).toHaveCount(2);
+    await expect(inline.getByRole('checkbox')).toHaveCount(0);
+    const after = await snapshot(page);
+    const records = after.records as {
+      id: string;
+      stagingCleared?: boolean;
+      scope: string;
+      downloaded?: boolean;
+    }[];
+    expect(records[0]).toMatchObject({
+      stagingCleared: true,
+      scope: 'destination',
+    });
+    expect(records[1]).toMatchObject({
+      stagingCleared: true,
+      scope: 'browser',
+      downloaded: true,
+    });
+    expect(records[2]).toEqual(before.records[2]);
+    expect(after.history).toHaveLength(4);
+    const remaining = await page.evaluate(async (mode) => {
+      const db = await new Promise<IDBDatabase>((resolve) => {
+        const request = indexedDB.open('pixelgate-staging-v1', 1);
+        request.onsuccess = () => resolve(request.result);
+      });
+      const request = db.transaction('chunks').objectStore('chunks').getAll();
+      const chunks = await new Promise<
+        { fileId: string; bytes: Blob | ArrayBuffer }[]
+      >((resolve) => {
+        request.onsuccess = () => resolve(request.result);
+      });
+      db.close();
+      const opfs: string[] = [];
+      let original = '';
+      if (mode === 'opfs') {
+        const root = await navigator.storage.getDirectory();
+        const dir = await root.getDirectoryHandle('pixelbridge');
+        for await (const name of (
+          dir as FileSystemDirectoryHandle & {
+            keys(): AsyncIterableIterator<string>;
+          }
+        ).keys())
+          opfs.push(name);
+        original = await (
+          await (
+            await (
+              await root.getDirectoryHandle('saved-originals')
+            ).getFileHandle('original.jpg')
+          ).getFile()
+        ).text();
+      }
+      return {
+        chunks: chunks.map((chunk) => ({
+          id: chunk.fileId,
+          size:
+            chunk.bytes instanceof Blob
+              ? chunk.bytes.size
+              : chunk.bytes.byteLength,
+        })),
+        opfs,
+        original,
+      };
+    }, backend);
+    expect(remaining.chunks).toEqual([{ id: 'c'.repeat(64), size: 5 }]);
+    await expect(page.locator('.staging-cache-size')).toHaveText(
+      `File cache: ${backend === 'opfs' ? 10 : 5} B`,
+    );
+    if (backend === 'opfs') {
+      expect(remaining.opfs).toEqual(['c'.repeat(64)]);
+      expect(remaining.original).toBe('Original destination bytes');
+    }
+    await page.reload();
+    await page
+      .getByRole('button', { name: 'Receive files', exact: true })
+      .click();
+    await expect(page.getByText(/Cache cleared/)).toHaveCount(2);
+    await page.getByRole('button', { name: 'History', exact: true }).click();
+    await expect(page.locator('.file-row')).toHaveCount(4);
+    await expect(page.getByText(/Cache cleared/)).toHaveCount(3);
+    await expect(page.getByRole('button', { name: /^Save photo/ })).toHaveCount(
+      0,
+    );
+    await page.getByText('Saved-copy tools', { exact: true }).click();
+    await expect(
+      page.getByRole('button', { name: 'Verify exported files', exact: true }),
+    ).toBeVisible();
+  });
+}
+
+test('sender file selection stays inside the list and limits the pending send selection', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.goto('./');
+  await page.getByLabel('Choose files', { exact: true }).setInputFiles(
+    Array.from({ length: 125 }, (_, i) => ({
+      name: `original-${i}.txt`,
+      mimeType: 'text/plain',
+      buffer: Buffer.from(`Original ${i}`),
+    })),
+  );
+  const files = page.getByRole('region', {
+    name: 'Files to send',
+    exact: true,
+  });
+  await expect(files.getByRole('checkbox')).toHaveCount(50);
+  expect(
+    await files.evaluate((list) => list.scrollHeight > list.clientHeight),
+  ).toBe(true);
+  const pageHeight = await page.evaluate(
+    () => document.documentElement.scrollHeight,
+  );
+  await files.evaluate((list) => {
+    list.scrollTop = list.scrollHeight;
+  });
+  await expect(files.getByRole('checkbox')).toHaveCount(100);
+  await files.evaluate((list) => {
+    list.scrollTop = list.scrollHeight;
+  });
+  await expect(files.getByRole('checkbox')).toHaveCount(125);
+  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(
+    pageHeight,
+  );
+  await page
+    .getByRole('button', { name: 'Clear selection', exact: true })
+    .click();
+  await files
+    .getByRole('checkbox', { name: 'Select original-124.txt', exact: true })
+    .check();
+  await expect(
+    page.getByText('1 selected to send', { exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
 });

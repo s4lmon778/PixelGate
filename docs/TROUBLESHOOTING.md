@@ -26,7 +26,7 @@ Try **Save to Photos folder** on Android Chrome 132 or newer. Choose or create `
 
 Chrome on Android rejects native file sharing above 50 MiB per file and limits each handoff to ten files. PixelGate routes larger files to verified downloads instead of attempting a known unsupported handoff. Choose **Download all selected** for the collection, allow multiple downloads, and keep the tab open. In Google Photos, open **Collections → On this device → Download**, then enable that folder under **Photos settings → Backup → Back up device folders**. Older versions may say Library or Downloads. Files can also move the media into `DCIM/PixelGate` for device-folder import. [Google’s folder guide](https://support.google.com/photos/answer/6193313?co=GENIE.Platform%3DAndroid&hl=en).
 
-A website cannot force a particular app or album. Download/share requests retain verified browser copies and leave saved-copy verification pending; check playback and backup in Photos, and independently verify saved copies before clearing staging.
+A website cannot force a particular app or album. Download/share requests retain verified browser copies and leave saved-copy verification pending; check playback and backup in Photos, and confirm saves finished before clearing staging. Optional byte checks are under History → Saved-copy tools.
 
 ## Browser storage rejects a checkpoint
 
@@ -36,7 +36,7 @@ PixelGate stops before acknowledging an invalid native write result or missing f
 
 It is the browser-reported quota minus estimated usage for the site's origin, not reserved free disk space. Estimates vary across browsers, profiles, and devices; actual free disk space may be lower. Each file must fit alongside copies still staged in that browser, with headroom for checkpoints and records.
 
-For larger collections of documents, media, archives, or other files, work in batches: save or download the files, verify the saved copies, then choose **Clear verified staging** to make room for the next batch. Direct folder mode retains staging until cleared, so allow disk space for both staged and destination copies. The estimate does not measure destination-folder free space or limit how much the sender can select. Clearing site data or browser eviction can remove staged files and history.
+For larger collections of documents, media, archives, or other files, work in batches: save or download the files, confirm the saved copies open, then choose **Clear verified staging** to make room for the next batch. Direct folder mode retains staging until cleared, so allow disk space for both staged and destination copies. The estimate does not measure destination-folder free space or limit how much the sender can select. Clearing site data or browser eviction can remove staged files and history.
 
 ## Safari says the operation failed for an unknown transient reason
 

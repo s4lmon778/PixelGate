@@ -169,6 +169,38 @@ beforeEach(() => {
   state.batchSizes = [];
 });
 describe('receiver-owned verification and checkpoints', () => {
+  it('holds new manifests until local cache maintenance finishes', async () => {
+    const p = peers(),
+      q = queue(123);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const maintenance = p.receiver.withStorageMaintenance(() => gate);
+    const sending = p.sender.run(q, 'after-cache-maintenance');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(state.opens).toEqual([]);
+    expect(state.files.size).toBe(0);
+    release();
+    await maintenance;
+    await sending;
+    expect(q[0].phase).toBe('verified');
+    expect(p.errors).toEqual([]);
+    await p.receiver.close();
+  });
+  it('continues receiving after local cache maintenance fails', async () => {
+    const p = peers(),
+      q = queue(123);
+    await expect(
+      p.receiver.withStorageMaintenance(async () => {
+        throw new Error('Cache entry is busy');
+      }),
+    ).rejects.toThrow('Cache entry is busy');
+    await p.sender.run(q, 'after-failed-cache-maintenance');
+    expect(q[0].phase).toBe('verified');
+    expect(p.errors).toEqual([]);
+    await p.receiver.close();
+  });
   it('receives offset views without headers and survives detached checkpoint buffers', async () => {
     const p = peers(),
       q = queue();

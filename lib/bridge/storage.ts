@@ -8,7 +8,11 @@ import {
   type RecordFile,
 } from './model';
 import { local } from './database';
-import { indexedFile, removeIndexed } from './indexed-staging';
+import {
+  indexedFile,
+  indexedStagingUsage,
+  removeIndexed,
+} from './indexed-staging';
 import { downloadType } from './save-options';
 
 export type StagingBackend = 'opfs' | 'indexeddb';
@@ -134,6 +138,24 @@ export async function stagingDirectory() {
 export async function stagedFile(id: string) {
   return (await locateStaged(id)).file;
 }
+// Read actual staging metadata, without loading file payloads or counting saved
+// originals and reports. Browser quota estimates can be rounded or delayed.
+export async function stagingUsage() {
+  const usage = await indexedStagingUsage();
+  if (hasOpfs()) {
+    const dir = await stagingDirectory();
+    for await (const [, entry] of (
+      dir as FileSystemDirectoryHandle & {
+        entries(): AsyncIterableIterator<[string, FileSystemHandle]>;
+      }
+    ).entries()) {
+      if (entry.kind !== 'file') continue;
+      usage.bytes += (await (entry as FileSystemFileHandle).getFile()).size;
+      usage.files++;
+    }
+  }
+  return usage;
+}
 async function opfsFile(id: string) {
   return (await (await stagingDirectory()).getFileHandle(id)).getFile();
 }
@@ -176,6 +198,41 @@ async function removeOpfs(id: string, allowUnavailable = false) {
 export async function removeStaged(id: string) {
   const removedIndexed = await removeIndexed(id);
   if (hasOpfs()) await removeOpfs(id, removedIndexed);
+}
+export function canClearStaging(record: RecordFile) {
+  return (
+    record.localRole !== 'send' &&
+    !record.stagingCleared &&
+    isVerified(record) &&
+    (record.scope === 'destination' ||
+      record.scope === 'exported' ||
+      record.downloaded === true ||
+      record.shared === true)
+  );
+}
+// Call after the user confirms downloads/app saves have finished. Their
+// receipts are not destination verification; keep the original scope intact.
+export async function clearVerifiedStaging() {
+  const cleared: string[] = [];
+  const errors: string[] = [];
+  let bytes = 0;
+  for (const record of await local.receivedFiles()) {
+    if (!canClearStaging(record)) continue;
+    try {
+      await removeStaged(record.id);
+      await local.put({
+        ...record,
+        stagingCleared: true,
+        updated: Date.now(),
+      });
+      releaseDownloadUrls(record.id);
+      cleared.push(record.id);
+      bytes += record.size;
+    } catch (error) {
+      errors.push(`${record.originalName}: ${(error as Error).message}`);
+    }
+  }
+  return { cleared, bytes, errors };
 }
 export async function prepareStaging(): Promise<StagingBackend> {
   const probe = `probe-${crypto.randomUUID()}`;
@@ -246,6 +303,7 @@ export async function prepareStaging(): Promise<StagingBackend> {
   return backend;
 }
 export async function storedCopyValid(file: RecordFile) {
+  if (file.stagingCleared) return false;
   try {
     const blob = await stagedFile(file.id);
     return blob.size === file.size && (await hashFile(blob)) === file.sha256;
@@ -388,16 +446,33 @@ export async function downloadStaged(record: RecordFile) {
       type: downloadType(record.originalName, record.mimeType),
       lastModified: record.modified,
     }),
+    record.id,
   );
   await local.put({ ...record, downloaded: true, updated: Date.now() });
 }
-export function offerPreparedDownload(file: File) {
+const downloadUrls = new Map<
+  string,
+  { id?: string; timer: ReturnType<typeof setTimeout> }
+>();
+export function releaseDownloadUrls(id: string) {
+  for (const [url, download] of downloadUrls) {
+    if (download.id !== id) continue;
+    clearTimeout(download.timer);
+    URL.revokeObjectURL(url);
+    downloadUrls.delete(url);
+  }
+}
+export function offerPreparedDownload(file: File, id?: string) {
   const url = URL.createObjectURL(file);
   const link = document.createElement('a');
   link.href = url;
   link.download = file.name;
   link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  const timer = setTimeout(() => {
+    URL.revokeObjectURL(url);
+    downloadUrls.delete(url);
+  }, 60000);
+  downloadUrls.set(url, { id, timer });
 }
 // Prepare separately from the tap that opens the native share sheet. Hashing
 // can outlive transient activation, especially on older phones and large files.
@@ -409,7 +484,7 @@ export async function prepareSharedFiles(
   const files: File[] = [];
   const names = new Set<string>();
   for (const record of records) {
-    if (!isVerified(record))
+    if (!isVerified(record) || record.stagingCleared)
       throw new Error('Only verified browser copies can be shared.');
     const name = safePath(record.relativePath).split('/').at(-1)!;
     let source: File;

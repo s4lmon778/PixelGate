@@ -332,3 +332,39 @@ export async function removeIndexed(id: string) {
     };
   });
 }
+
+export async function indexedStagingUsage() {
+  const database = await db();
+  return new Promise<{ bytes: number; files: number }>((resolve, reject) => {
+    const tx = startTransaction(database, 'readonly');
+    let value = { bytes: 0, files: 0 };
+    let failure: unknown;
+    tx.oncomplete = () => resolve(value);
+    tx.onabort = () =>
+      reject(
+        failure ?? tx.error ?? new Error('Unable to read file cache size.'),
+      );
+    const request = tx.objectStore('files').getAll();
+    request.onsuccess = callback(
+      tx,
+      () => {
+        const files = request.result as { size: number }[];
+        if (
+          files.some(
+            (file) => !Number.isSafeInteger(file.size) || file.size < 0,
+          )
+        )
+          throw new Error('Invalid stored file size.');
+        value = {
+          bytes: files.reduce((total, file) => total + file.size, 0),
+          files: files.length,
+        };
+        if (!Number.isSafeInteger(value.bytes))
+          throw new Error('Invalid file cache size.');
+      },
+      (error) => {
+        failure = error;
+      },
+    );
+  });
+}

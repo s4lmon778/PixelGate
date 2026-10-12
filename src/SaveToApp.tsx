@@ -1,5 +1,5 @@
-import { useRef, useState, type ReactNode } from 'react';
-import { Download, Share2, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Download, Share2 } from 'lucide-react';
 import { formatBytes, isVerified, type RecordFile } from '@/lib/bridge/model';
 import { local } from '@/lib/bridge/database';
 import {
@@ -12,6 +12,7 @@ import {
   nativeShareBatch,
 } from '@/lib/bridge/save-options';
 import { version } from '../package.json';
+import { TransferFiles } from './TransferFiles';
 
 export function SaveToApp({
   records,
@@ -20,6 +21,10 @@ export function SaveToApp({
   folderHint,
   disabled,
   changed,
+  empty,
+  clearControl,
+  workingChanged,
+  saveOne,
 }: {
   records: RecordFile[];
   folderAccessAvailable: boolean;
@@ -27,6 +32,10 @@ export function SaveToApp({
   folderHint: ReactNode;
   disabled: boolean;
   changed: () => Promise<void>;
+  empty: string;
+  clearControl: (working: boolean) => ReactNode;
+  workingChanged: (working: boolean) => void;
+  saveOne: (record: RecordFile) => void;
 }) {
   const supported = typeof navigator.share === 'function';
   const chromeLink = androidChromeLink(
@@ -34,25 +43,56 @@ export function SaveToApp({
     navigator.userAgent,
     version,
   );
-  const dialog = useRef<HTMLDialogElement>(null);
+  const seen = useRef(new Set<string>());
   const [choices, setChoices] = useState<RecordFile[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const selectedIds = new Set(selected);
-  const [limit, setLimit] = useState(50);
   const [prepared, setPrepared] = useState<File[]>();
   const [preparedIds, setPreparedIds] = useState<string[]>([]);
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState('');
-  const available = [
-    ...new Map(
-      records
-        .filter(
-          (r) =>
-            isVerified(r) && r.localRole !== 'send' && r.scope === 'browser',
-        )
-        .map((r) => [r.id, r]),
-    ).values(),
-  ];
+  const available = useMemo(
+    () => [
+      ...new Map(
+        records
+          .filter(
+            (r) =>
+              isVerified(r) &&
+              r.localRole !== 'send' &&
+              r.scope === 'browser' &&
+              !r.stagingCleared,
+          )
+          .map((r) => [r.id, r]),
+      ).values(),
+    ],
+    [records],
+  );
+  useEffect(() => {
+    const current = new Map(available.map((r) => [r.id, r]));
+    const added = available.filter((r) => !seen.current.has(r.id));
+    for (const record of added) seen.current.add(record.id);
+    setChoices((previous) => {
+      const known = new Set(previous.map((r) => r.id));
+      return [
+        ...previous.flatMap((r) =>
+          current.has(r.id) ? [current.get(r.id)!] : [],
+        ),
+        ...available.filter((r) => !known.has(r.id)),
+      ];
+    });
+    setSelected((previous) => [
+      ...previous.filter((id) => current.has(id)),
+      ...added.filter((r) => !r.shared && !r.downloaded).map((r) => r.id),
+    ]);
+  }, [available]);
+  const availableIds = useMemo(
+    () => new Set(available.map((r) => r.id)),
+    [available],
+  );
+  useEffect(() => {
+    workingChanged(working);
+    return () => workingChanged(false);
+  }, [working, workingChanged]);
   const offered = (r: RecordFile) => !!(r.shared || r.downloaded);
   const android = /Android/i.test(navigator.userAgent);
   const shareFiles =
@@ -80,6 +120,8 @@ export function SaveToApp({
   }
 
   async function prepare() {
+    if (disabled || !selected.length) return;
+    setPrepared(undefined);
     setWorking(true);
     setMessage('Rereading and checking the selected browser copies…');
     try {
@@ -102,9 +144,9 @@ export function SaveToApp({
         : [];
       setMessage(
         share.length
-          ? `${files.length} files checked. The next app handoff contains ${share.length} files. Tap Choose app or save location, then choose Google Photos or another available app. ${selected.length - share.length} selected files will remain queued.`
+          ? `${files.length} files checked. Tap Choose app or save location for the next ${share.length}. Remaining files stay selected.`
           : android && files.some((file) => file.size > 50 * 1024 * 1024)
-            ? 'Files over 50 MiB use verified downloads on Android. Download the original video below, then open Google Photos → Collections → On this device → Download. Your full-size browser copy is retained.'
+            ? 'Files over 50 MiB use verified downloads on Android. In Photos, open Collections → On this device → Download afterward. Browser copies are retained.'
             : supported
               ? 'This browser cannot share these files together. Download the verified files below, or choose fewer files to try sharing again.'
               : 'Files checked and ready to download. Open your browser’s Downloads list afterward to use the phone’s file manager or app options.',
@@ -142,7 +184,7 @@ export function SaveToApp({
         previous.map((r) => (ids.includes(r.id) ? { ...r, shared: true } : r)),
       );
       setMessage(
-        `${ids.length} files handed to your device’s save/share sheet. Confirm the save in the selected app. ${selected.length - ids.length} selected files remain queued. Verification pending: reselect saved files using Verify saved copies. Browser copies are retained.`,
+        `${ids.length} files handed to the save/share sheet · ${selected.length - ids.length} selected remain. Verification pending. Confirm they saved and open in the app before Clear verified staging. Browser copies are retained.`,
       );
     } catch (e) {
       setMessage(
@@ -172,7 +214,7 @@ export function SaveToApp({
         for (let i = 0; i < files.length; i++) {
           if (requested.length || i)
             await new Promise((resolve) => setTimeout(resolve, 200));
-          offerPreparedDownload(files[i]);
+          offerPreparedDownload(files[i], ids[i]);
           attempted++;
           setMessage(
             `${requested.length + i + 1} of ${target} downloads requested. Allow multiple downloads if your browser asks. Keep this tab open until the collection is requested.`,
@@ -212,7 +254,7 @@ export function SaveToApp({
         ids = batch.map((r) => r.id);
       }
       setMessage(
-        `${requested.length} downloads requested; ${selected.length - requested.length} selected files remain queued. Allow multiple downloads if your browser asks, then check its Downloads list. ${android ? 'Open Google Photos → Collections → On this device → Download. In Photos settings → Backup → Back up device folders, enable Download if you want these files backed up. ' : 'Use the downloaded files’ Share or Move options to choose an available app or folder. '}Verification pending: use Verify saved copies to check the final files. Browser copies are retained.`,
+        `${requested.length} downloads requested · ${selected.length - requested.length} selected remain. Check Downloads and allow multiple downloads if asked. ${android ? 'Photos: Collections → On this device → Download. ' : ''}Verification pending; confirm files open before Clear verified staging. Browser copies are retained.`,
       );
     } catch (error) {
       setMessage(
@@ -224,98 +266,20 @@ export function SaveToApp({
   }
 
   return (
-    <div className="app-save">
-      <div className="save-actions">
-        {folderControl}
-        <button
-          className="button"
-          disabled={disabled || !available.length}
-          onClick={() => {
-            const pending = available.filter((r) => !offered(r));
-            setChoices([...pending, ...available.filter(offered)]);
-            setSelected(
-              (pending.length ? pending : available).map((r) => r.id),
-            );
-            setPrepared(undefined);
-            setMessage('');
-            setLimit(50);
-            dialog.current?.showModal();
-          }}
-        >
-          <Share2 size={16} />
-          <span>Save to app or location</span>
-        </button>
-      </div>
-      {folderHint}
-      {android && !folderAccessAvailable && (
-        <p className="hint destination-hint">
-          This browser cannot choose a Photos folder. For photos and videos,
-          download verified originals, then open Google Photos → Collections →
-          On this device → Download and enable that device folder’s backup.
-          Update Chrome through the Play Store to version 132 or newer and
-          reopen PixelGate to enable direct folder saving where supported.
-        </p>
-      )}
-      <details className="help-details">
-        <summary>Saving options</summary>
-        {!folderAccessAvailable && (
-          <p className="hint">
-            Direct folder access is unavailable in this browser. Use your
-            device’s save/share options or downloads.
-            {android &&
-              ' Chrome 132 or newer on Android supports folder access. Update Chrome through the Play Store, reopen PixelGate, and look for Save to Photos folder.'}
-          </p>
-        )}
-        <p className="hint">
-          {supported
-            ? 'After receiving, choose files and open your device’s save/share sheet. Available apps, photo-library actions, and folders depend on your device. Websites cannot choose a specific album automatically.'
-            : 'File sharing is unavailable here. After receiving, this button prepares verified downloads. Your browser or file manager provides the available save and share options.'}
-        </p>
-        {!supported && chromeLink && (
-          <div className="chrome-help">
-            <a className="button" href={chromeLink}>
-              Open in Chrome
-            </a>
-            <p className="hint">
-              An embedded browser may lack file sharing. Try the full Chrome app
-              before receiving. If it opens a different browser, its storage is
-              separate; receive the files there again. Downloading here remains
-              available.
-            </p>
-          </div>
-        )}
-      </details>
-      <dialog
-        className="save-dialog"
-        aria-label="Save to an app or location"
-        ref={dialog}
-        onCancel={(e) => {
-          if (working) e.preventDefault();
-        }}
-        onClose={() => {
-          setPrepared(undefined);
-        }}
-      >
-        <div className="section-head">
-          <h2>Save to an app or location</h2>
-          <button
-            className="icon-button"
-            aria-label="Close save options"
-            disabled={working}
-            onClick={() => dialog.current?.close()}
-          >
-            <X size={20} />
-          </button>
-        </div>
-        <p>
-          Select your whole collection. App handoffs use batches of up to 10
-          compatible files; verified downloads use batches of up to 50. Use
-          Download all selected to continue through the whole collection
-          automatically. Exports use filenames without source folders.
-        </p>
+    <div className="app-save" role="region" aria-label="Save received files">
+      <div className="save-actions">{folderControl}</div>
+      <div className="file-selection-bar">
+        <span className="hint">
+          {selected.length} selected ·{' '}
+          {formatBytes(
+            choices
+              .filter((r) => selectedIds.has(r.id))
+              .reduce((n, r) => n + r.size, 0),
+          )}
+        </span>
         <button
           className="text-button"
-          disabled={working || disabled}
+          disabled={working || disabled || !choices.length}
           onClick={() => {
             setSelected(choices.map((r) => r.id));
             setPrepared(undefined);
@@ -324,123 +288,140 @@ export function SaveToApp({
         >
           Select all {choices.length} files
         </button>
-        <div className="share-files" aria-label="Files to save">
-          {choices.slice(0, limit).map((r) => (
-            <label key={r.id}>
-              <input
-                type="checkbox"
-                checked={selectedIds.has(r.id)}
-                disabled={working || disabled}
-                onChange={(e) => {
-                  setSelected((ids) =>
-                    e.target.checked
-                      ? [...ids, r.id]
-                      : ids.filter((id) => id !== r.id),
-                  );
-                  setPrepared(undefined);
-                  setMessage('');
-                }}
-              />
-              <span>
-                {r.relativePath}
-                <small>
-                  {formatBytes(r.size)}
-                  {r.shared ? ' · Previously handed to save/share sheet' : ''}
-                  {r.downloaded ? ' · Download previously requested' : ''}
-                </small>
-              </span>
-            </label>
-          ))}
-        </div>
-        {choices.length > limit && (
-          <button
-            className="text-button"
-            disabled={working}
-            onClick={() => setLimit((n) => n + 50)}
-          >
-            Show more files
-          </button>
-        )}
-        <p>
-          {selected.length} selected ·{' '}
-          {formatBytes(
-            choices
-              .filter((r) => selectedIds.has(r.id))
-              .reduce((n, r) => n + r.size, 0),
-          )}
-          . {prepared?.length || 0} files checked for the next actions.
-        </p>
-        <div className="button-row">
-          {prepared ? (
-            <>
-              {shareAllowed && (
-                <button
-                  className="button primary"
-                  disabled={working || disabled}
-                  onClick={() => void share()}
-                >
-                  <Share2 size={16} />
-                  Choose app or save location
-                </button>
-              )}
+        <button
+          className="text-button"
+          disabled={working || !selected.length}
+          onClick={() => {
+            setSelected([]);
+            setPrepared(undefined);
+            setMessage('');
+          }}
+        >
+          Clear selection
+        </button>
+      </div>
+      <TransferFiles
+        records={[
+          ...records.filter((r) => !availableIds.has(r.id) && !isVerified(r)),
+          ...choices,
+          ...records.filter(
+            (r) =>
+              !availableIds.has(r.id) && isVerified(r) && !r.stagingCleared,
+          ),
+          ...records.filter((r) => r.stagingCleared),
+        ]}
+        label="Received files"
+        empty={empty}
+        selected={selectedIds}
+        selectable={availableIds}
+        disabled={working || disabled}
+        save={saveOne}
+        toggle={(id, checked) => {
+          setSelected((ids) =>
+            checked ? [...ids, id] : ids.filter((i) => i !== id),
+          );
+          setPrepared(undefined);
+          setMessage('');
+        }}
+      />
+      <div className="save-actions inline-save-actions">
+        {prepared ? (
+          <>
+            {shareAllowed && (
               <button
-                className={`button${shareAllowed ? '' : ' primary'}`}
+                className="button primary"
                 disabled={working || disabled}
-                onClick={() => void download()}
+                onClick={() => void share()}
+              >
+                <Share2 size={16} />
+                Choose app or save location
+              </button>
+            )}
+            <button
+              className={`button${shareAllowed ? '' : ' primary'}`}
+              disabled={working || disabled}
+              onClick={() => void download()}
+            >
+              <Download size={16} />
+              Download verified files
+            </button>
+            {selected.length > prepared.length && (
+              <button
+                className="button primary"
+                disabled={working || disabled}
+                onClick={() => void download(true)}
               >
                 <Download size={16} />
-                Download verified files
+                Download all {selected.length} selected
               </button>
-              {selected.length > prepared.length && (
-                <button
-                  className="button primary"
-                  disabled={working || disabled}
-                  onClick={() => void download(true)}
-                >
-                  <Download size={16} />
-                  Download all {selected.length} selected
-                </button>
-              )}
-            </>
-          ) : (
-            <button
-              className="button primary"
-              disabled={working || disabled || !selected.length}
-              onClick={() => void prepare()}
-            >
-              {working ? 'Checking files…' : 'Prepare selected files'}
-            </button>
-          )}
+            )}
+          </>
+        ) : (
           <button
-            className="button"
-            disabled={working || disabled || !choices.some((r) => !offered(r))}
-            onClick={() => {
-              const pending = choices.filter((r) => !offered(r));
-              setChoices([...pending, ...choices.filter(offered)]);
-              setSelected(pending.map((r) => r.id));
-              setLimit(50);
-              setPrepared(undefined);
-              setMessage('');
-            }}
+            className="button primary"
+            disabled={working || disabled || !selected.length}
+            onClick={() => void prepare()}
           >
-            Select next batch
+            {working ? 'Checking files…' : 'Prepare selected files'}
           </button>
-          <button
-            className="button"
-            disabled={working}
-            onClick={() => {
-              setSelected([]);
-              setPrepared(undefined);
-              setMessage('');
-            }}
-          >
-            Clear selection
-          </button>
-        </div>
-        {message && (
-          <p className="share-status" role="status">
-            {message}
+        )}
+        <button
+          className="button"
+          disabled={working || disabled || !choices.some((r) => !offered(r))}
+          onClick={() => {
+            const pending = choices.filter((r) => !offered(r));
+            setChoices([...pending, ...choices.filter(offered)]);
+            setSelected(pending.map((r) => r.id));
+            setPrepared(undefined);
+            setMessage('');
+          }}
+        >
+          Select next batch
+        </button>
+      </div>
+      <div className="cache-actions">{clearControl(working)}</div>
+      {message && (
+        <p className="share-status" role="status">
+          {message}
+        </p>
+      )}
+      <details className="help-details">
+        <summary>Saving options &amp; Photos help</summary>
+        {folderHint}
+        {android && !folderAccessAvailable && (
+          <p className="hint destination-hint">
+            This browser cannot choose a Photos folder. Download originals, then
+            open Google Photos → Collections → On this device → Download and
+            enable that device folder’s backup. Update Chrome through the Play
+            Store to version 132 or newer for direct folder saving where
+            supported.
           </p>
+        )}
+        {!folderAccessAvailable && (
+          <p className="hint">
+            Direct folder access is unavailable in this browser. Use your
+            device’s save/share options or downloads.
+          </p>
+        )}
+        <p className="hint">
+          Select files above and prepare them to check their bytes. App handoffs
+          use up to 10 compatible files per tap; downloads use batches of up to
+          50. Download all selected continues through the collection. Exports
+          preserve original bytes and use filenames without source folders.
+          {supported
+            ? ' Available apps and folders depend on your device. Websites cannot choose a specific album automatically.'
+            : ' File sharing is unavailable here; verified downloads remain available.'}
+        </p>
+        {!supported && chromeLink && (
+          <div className="chrome-help">
+            <a className="button" href={chromeLink}>
+              Open in Chrome
+            </a>
+            <p className="hint">
+              An embedded browser may lack sharing. If you open a different
+              browser, its storage is separate; receive the files there again.
+            </p>
+          </div>
         )}
         {android && (
           <details className="help-details">
@@ -449,7 +430,7 @@ export function SaveToApp({
             </summary>
             <p className="hint">
               {folderAccessAvailable
-                ? 'To skip downloading and moving files, close this dialog and use Save to Photos folder. Choose or create DCIM/PixelGate in internal storage and allow editing. All received originals are saved and verified in that folder; future transfers save there automatically in this tab. Enable PixelGate in Photos device-folder backup once. '
+                ? 'To skip downloading and moving files, use Save to Photos folder above. Choose or create DCIM/PixelGate in internal storage and allow editing. All received originals are saved and verified in that folder; future transfers save there automatically in this tab. Enable PixelGate in Photos device-folder backup once. '
                 : 'Chrome 132 or newer supports saving directly to a local Photos device folder. Update Chrome through the Play Store and use Save to Photos folder. If folder access is unavailable, use downloads: '}
               Download verified files, then open Google Photos → Collections →
               On this device → Download. To back up that folder, open Photos
@@ -508,11 +489,12 @@ export function SaveToApp({
           <summary>About saved-copy verification</summary>
           <p className="hint">
             A handoff does not confirm a saved file or cloud backup. Apps may
-            convert media. Reselect saved copies to check their final bytes
-            before clearing staging.
+            convert media. You can check final bytes from History → Saved-copy
+            tools. Before clearing staging, confirm that downloads or app saves
+            have finished.
           </p>
         </details>
-      </dialog>
+      </details>
     </div>
   );
 }

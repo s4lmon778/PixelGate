@@ -1,5 +1,39 @@
 # Validation record
 
+## Cached bytes and transfer timing · 0.3.22 · October 11, 2026
+
+- The user confirmed the Pixel was on public 0.3.20, while the downloaded-copy
+  cache fix was still in the local 0.3.21 preview. The current receiver removes
+  saved verified staging from both backends and revokes prepared download URLs.
+  A compact **File cache** count reads actual OPFS sizes and IndexedDB staging
+  metadata, including partials, independently of the browser quota estimate.
+  Cached originals and reports outside the staging stores are excluded.
+- Clearing a file also disables historical save controls for earlier receiving
+  receipts of that same file. Historical verification scopes and timestamps
+  remain intact. The browser tests seed multiple receipts, perform real deletion,
+  check remaining cached bytes, preserve saved originals and interrupted files,
+  and verify cleared state after reload.
+- The rate clock starts with transfer activity instead of pairing or source
+  preparation, excludes intentional pauses and resumed prefixes, and restarts
+  for the next batch. This corrects displayed averages and ETA; it is not a
+  throughput improvement. Unit tests cover idle time, resumed bytes, pauses,
+  completion and subsequent batches.
+- TypeScript, ESLint, **185 unit/integration cases**, production build, and the
+  complete **70 browser cases** across Chromium, Firefox and WebKit pass, with
+  **17 capability skips** and no failures or retries. Actual Chromium 101 passes
+  cache deletion, the Pixel media picker and 125-file inline selection. Additional speed experiments are tracked separately in
+  [the performance worklog](PERFORMANCE_WORKLOG.md); no physical speed gain has
+  been established yet.
+
+## Inline file controls and cache cleanup · 0.3.21 · October 10, 2026
+
+- Sender and receiver use one contained scrolling file list with direct selection. The large receiving placeholder, duplicate transfer queue, receiving export/verification buttons, and save-selection dialog are removed. Native app saving, original-byte preparation, 50-file download batches, ten-file app handoffs, Photos folder saving, per-file saves, reports, retry/resume, history, and manual pairing remain. Optional final-byte checks are under **History → Saved-copy tools**. Mobile overview and pause controls stay pinned while connected; sender progress reflects the selected files.
+- **Clear verified staging** removes saved files' cache bytes from both OPFS and IndexedDB, releases matching download URLs and prepared File references, and refreshes staging-space estimates. Download/app-save receipts require confirmation that the saves finished; cleanup does not upgrade their verification scopes. Unsaved files and interrupted checkpoints remain. The optional `stagingCleared` receipt prevents unavailable saves and repeated cleanup without changing the database version or discarding reports. Incoming manifests reset the flag. Maintenance is serialized with receiver manifests/writes and uses the receiver tab lock where available. Failed deletions remain retryable.
+- **182 unit/integration cases**, TypeScript, ESLint, production build, and formatting checks pass. Cache regressions cover both backend deletions, URL release, retained scopes, protected partials, cancellation, retry, and serialization with new transfers. The transport diagnostic regression now keeps received-byte contributions from closed bulk lanes; payload transport and verification remain unchanged.
+- The final complete modern browser suite passes **70 cases**, with **17 capability skips** and no failures or retries. Real 400 MiB transfers through OPFS and IndexedDB, actual downloaded-byte hashes, Photos folder writes, a 125-file selection across handoffs and automatically continued downloads, pairing/approval, QR decoding, reconnects, appearance, wake locks, history preservation, enlarged text, inline selection, and both cache backends are exercised. The cache fixture uses bounded ArrayBuffers in ephemeral macOS WebKit, matching its tested compatibility fallback; its unavailable OPFS fixture remains skipped. Final selected-file transfers and pinned mobile controls pass with Chromium, Firefox, and WebKit senders; the pinned top position is also checked explicitly in Chromium.
+- The refreshed 0.3.21 walkthrough performs a real synthetic transfer, independently matches downloaded bytes, verifies the optional History check, and clears staging before encoding the GIF and MP4. It uses fresh profiles and an isolated broker.
+- Actual **Chromium 101.0.4951.15** passes four targeted cases: Android media/generic picking, byte-exact downloads without sharing, inline IndexedDB cleanup with cancellation and preserved partials, and scrolling/selection through 125 sender files. These are engine fixtures, not a physical Pixel or Android share-sheet certification. A website clears its own transfer storage; it cannot erase Android's system-wide Chrome or Google Photos cache.
+
 ## Receiver batching, stall recovery and Pixel selection · 0.3.20 · October 10, 2026
 
 - The user’s photographs show **0.3.19, original Pixel XL, Android 9, Chrome 101, IndexedDB**, five open connections and **479 ms primary ICE RTT**. The reported video stopped around 135 MB. These identify the tested environment, not a proven stall cause: old receiver path rates were sender-only defaults, and primary route byte stats cover one connection. New reports distinguish actual incoming path bytes, unique delivered bytes, reorder/queued bytes, durable progress and the active storage stage. They can be downloaded as JSON without email.
