@@ -611,3 +611,49 @@ Product code and live 0.3.26 are unchanged. A fresh same-video, same-iPhone,
 same-Pixel, same-Wi-Fi Send-to-Verified timing was requested asynchronously;
 the old iPhone reports are not requested again. Physical success remains
 unproven, so the goal is not complete.
+
+## 0.3.27 retained Send-to-Verified timing
+
+A new read-only USB inventory finds no iPhone, Pixel or Android device; adb and
+libimobiledevice remain unavailable. Live Pages still serves verified 0.3.26.
+The physical requirement cannot be proved from local benchmarks or connection
+lifetime, and no fresh phone timing has arrived.
+
+The source report previously exposed wait-stage duration and connection lifetime
+but no explicit Send-to-Verified duration. 0.3.27 adds bounded, filename-free
+batch timing to `transfer.source.batch` on the receiving report. The measurement
+begins at Sender.run (the Send invocation) and stops after its verified outcome,
+including preparation and pauses. It records newly sent logical payload,
+requested bytes/files, resumed prefixes, skipped existing copies and verified
+file counts. A completed duplicate or resume therefore cannot be misrepresented
+as a fresh full-file speed gain. Failed/cancelled/partial batches remain labeled
+incomplete. The ordinary progress clock and all byte-transfer settings remain.
+
+The completion snapshot is shared immediately over the existing approved direct
+channel, within the existing native-queue guard. The receiving report retains
+it on receipt, and the sender retains its own final snapshot, so an immediate
+refresh no longer loses the completed timing while awaiting the periodic poll.
+Older source-status peers ignore the optional timing field; peers without that
+capability receive no new status message. No server upload, new button, pairing
+permission, file-store migration or network-policy change is introduced.
+
+Timing unit checks cover preparation/pauses, stop/reset, skipped and resumed
+bytes, and incomplete outcomes. Real peer browser tests retain the completed
+timing through receiver reload and independently hash the stored original.
+Source status validates every numeric field and count relationship, dropping
+arbitrary identifiers. Further release validation is recorded below.
+
+TypeScript, ESLint and 220 unit/integration cases pass. Three modern-browser
+timing/readback/reload cases pass across Chromium, Firefox and WebKit; actual
+Chromium 101 passes timing retention and two cache-cleanup cases. Six transfer
+browser cases pass with six deliberate skips, covering both 400 MiB durable
+backends and byte-exact downloads, recovery, raw/older transport and reconnect.
+Final current-build report tests pass completion retention plus explicit
+disconnect/reload/download of the retained report. A targeted unit rerun
+overlapped the large browser suite and hit the five-second deadline in two
+existing transfer cases; the unchanged isolated rerun passes all 52 targeted
+cases, with those two transfers completing around 2.3 seconds. No deadline or
+product guard was weakened. Final timing freeze/idempotence checks also pass.
+
+This release improves measurement and report retention. It does not claim
+another throughput increase; the physical 50% target is still unverified.

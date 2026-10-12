@@ -110,6 +110,22 @@ test('Pixel report distinguishes a held source read and sender pause, then verif
         timeout: 15000,
       })
       .toBe(false);
+    await expect
+      .poll(async () => (await readReport()).transfer?.source?.batch?.phase, {
+        timeout: 15000,
+      })
+      .toBe('verified');
+    const timing = (await readReport()).transfer.source.batch;
+    expect(timing).toMatchObject({
+      requestedFiles: 1,
+      requestedBytes: payload.length,
+      payloadBytesSent: payload.length,
+      resumedBytes: 0,
+      skippedBytes: 0,
+      verifiedFiles: 1,
+      skippedFiles: 0,
+    });
+    expect(timing.wallElapsedMs).toBeGreaterThan(1000);
     const stored = await receiver.evaluate(async (backend: string) => {
       const open = indexedDB.open('pixelbridge-v1', 3);
       const db = await new Promise<IDBDatabase>((resolve) => {
@@ -155,6 +171,8 @@ test('Pixel report distinguishes a held source read and sender pause, then verif
     }, held.storageMode);
     expect(stored).toBe(hash);
     expect(errors).toEqual([]);
+    await receiver.reload();
+    expect((await readReport()).transfer.source.batch).toEqual(timing);
   } finally {
     await sending.close();
     await receiving.close();

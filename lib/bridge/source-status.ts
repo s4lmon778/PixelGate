@@ -1,3 +1,5 @@
+import type { BatchTimingSnapshot } from './batch-timing';
+
 const stages = new Set([
   'idle',
   'waiting-for-handshake',
@@ -27,6 +29,7 @@ export type SourceState = {
   paused: boolean;
   visibility: 'visible' | 'hidden';
   sourceReads?: SourceReads;
+  batch?: BatchTimingSnapshot;
 };
 export type SourceStatus = SourceState & {
   connections: number;
@@ -94,11 +97,48 @@ export function sourceStatus(value: unknown): SourceStatus | undefined {
       reads[key] = input[key] as number;
     }
   }
+  let batch: BatchTimingSnapshot | undefined;
+  if (data.batch !== undefined) {
+    if (!data.batch || typeof data.batch !== 'object') return;
+    const input = data.batch as Record<string, unknown>;
+    if (!['running', 'verified', 'incomplete'].includes(input.phase as string))
+      return;
+    const counts = {} as Omit<BatchTimingSnapshot, 'phase'>;
+    for (const key of [
+      'wallElapsedMs',
+      'requestedFiles',
+      'requestedBytes',
+      'payloadBytesSent',
+      'resumedBytes',
+      'skippedBytes',
+      'verifiedFiles',
+      'skippedFiles',
+    ] as const) {
+      if (!Number.isSafeInteger(input[key]) || (input[key] as number) < 0)
+        return;
+      counts[key] = input[key] as number;
+    }
+    if (
+      counts.verifiedFiles + counts.skippedFiles > counts.requestedFiles ||
+      counts.payloadBytesSent + counts.resumedBytes + counts.skippedBytes >
+        counts.requestedBytes
+    )
+      return;
+    if (
+      input.phase === 'verified' &&
+      (counts.verifiedFiles + counts.skippedFiles !== counts.requestedFiles ||
+        counts.payloadBytesSent + counts.resumedBytes + counts.skippedBytes !==
+          counts.requestedBytes)
+    )
+      return;
+    batch = { phase: input.phase as BatchTimingSnapshot['phase'], ...counts };
+  }
   return {
     stage: data.stage,
     paused: data.paused,
     visibility: data.visibility as SourceState['visibility'],
     ...counts,
     ...(reads ? { sourceReads: reads } : {}),
+    ...(batch ? { batch } : {}),
   };
 }

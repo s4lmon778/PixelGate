@@ -2,6 +2,7 @@ import { local } from './database';
 import { hashFile, identity } from './hash';
 import type { TransferChannel } from './striped-channel';
 import { SendPacer } from './send-pacer';
+import { BatchTiming } from './batch-timing';
 import {
   CHECKPOINT_BYTES,
   FRAME_BYTES,
@@ -515,6 +516,7 @@ export class Sender {
   private sourceReadMaximumMs = 0;
   private sourceWaitMs = 0;
   private sourceWaitMaximumMs = 0;
+  private batchTiming = new BatchTiming();
   private cancelFile = false;
   private current?: RecordFile;
   private inbox: Control[] = [];
@@ -564,6 +566,7 @@ export class Sender {
       stage: this.stage,
       stageElapsedMs: Math.round(performance.now() - this.stageStarted),
       paused: this.paused,
+      batch: this.batchTiming.snapshot(),
       sourceReads: {
         calls: this.sourceReads,
         bytes: this.sourceReadBytes,
@@ -692,6 +695,23 @@ export class Sender {
     }
   }
   async run(queue: QueuedFile[], sessionId: string) {
+    const pending = queue.filter(
+      (q) => !['verified', 'duplicate', 'cancelled'].includes(q.phase),
+    );
+    this.batchTiming.begin(
+      pending.length,
+      pending.reduce((total, q) => total + q.file.size, 0),
+    );
+    try {
+      await this.runBatch(queue, sessionId);
+    } finally {
+      this.batchTiming.finish(
+        pending.filter((q) => q.phase === 'verified').length,
+        pending.filter((q) => q.phase === 'duplicate').length,
+      );
+    }
+  }
+  private async runBatch(queue: QueuedFile[], sessionId: string) {
     this.processing('waiting-for-handshake');
     this.cancelAll = false;
     await local.session({ id: sessionId, role: 'send', created: Date.now() });
@@ -757,6 +777,7 @@ export class Sender {
             updated: Date.now(),
           };
           q.phase = 'duplicate';
+          this.batchTiming.skipped(record.size);
         } else {
           const windowBytes =
             ready.receiveWindowBytes === undefined
@@ -770,6 +791,7 @@ export class Sender {
           )
             throw new Error('Receiver sent an invalid transfer window.');
           let offset = ready.offset;
+          this.batchTiming.resumed(offset);
           const checkpoints: number[] = [];
           q.record = { ...record, bytes: offset, phase: 'transferring' };
           this.changed(q);
@@ -905,6 +927,7 @@ export class Sender {
                   continue;
                 }
                 pos += sent;
+                this.batchTiming.sent(sent);
                 if (pos < block.length) {
                   this.processing('yielding-to-browser');
                   await pacer.yield(this.channel.pacingDelayMs ?? 4);
@@ -915,6 +938,7 @@ export class Sender {
               await this.writable();
               const messageLimit = this.channel.sendFrameBytes ?? FRAME_BYTES;
               this.channel.send(block.subarray(pos, pos + messageLimit));
+              this.batchTiming.sent(Math.min(messageLimit, block.length - pos));
               // bufferedAmount excludes some native SCTP/OS queues. Yield after
               // a small burst so both browsers can service packets and controls
               // instead of flooding those hidden buffers during slow start.

@@ -53,6 +53,31 @@ describe('paired sender status', () => {
       sourceStatus({ ...sample, sourceReads: { ...reads, maximumWaitMs: -1 } }),
     ).toBeUndefined();
   });
+  it('validates completion counts and preserves timing without forwarding file identities', () => {
+    const batch = {
+      phase: 'verified',
+      wallElapsedMs: 2000,
+      requestedFiles: 1,
+      requestedBytes: 100,
+      payloadBytesSent: 100,
+      resumedBytes: 0,
+      skippedBytes: 0,
+      verifiedFiles: 1,
+      skippedFiles: 0,
+    };
+    expect(
+      sourceStatus({ ...sample, batch: { ...batch, filename: 'private.mp4' } }),
+    ).toEqual({ ...sample, batch });
+    expect(
+      sourceStatus({ ...sample, batch: { ...batch, payloadBytesSent: 0 } }),
+    ).toBeUndefined();
+    expect(
+      sourceStatus({ ...sample, batch: { ...batch, skippedFiles: 2 } }),
+    ).toBeUndefined();
+    expect(
+      sourceStatus({ ...sample, batch: { ...batch, wallElapsedMs: -1 } }),
+    ).toBeUndefined();
+  });
   it.each([
     null,
     {},

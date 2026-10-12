@@ -304,14 +304,14 @@ export class StripedChannel extends EventTarget implements TransferChannel {
         : {}),
     };
   }
-  publishSourceStatus(state: SourceState) {
+  publishSourceStatus(state: SourceState, final = false) {
     const now = performance.now();
     if (
       this.role !== 'send' ||
       !this.sourceStatusEnabled ||
       this.stopped ||
       this.readyState !== 'open' ||
-      now - this.lastSourceStatusSent < 2000 ||
+      (!final && now - this.lastSourceStatusSent < 2000) ||
       this.primary.bufferedAmount > 64 * 1024
     )
       return;
@@ -677,6 +677,8 @@ export class StripedChannel extends EventTarget implements TransferChannel {
             if (status) {
               this.peerSourceStatus = status;
               this.lastSourceStatusReceived = now;
+              if (status.batch && status.batch.phase !== 'running')
+                this.dispatchEvent(new Event('source-status'));
             }
           }
         } else if (value.type === 'pg-lane') {

@@ -685,6 +685,13 @@ describe('receiver-owned verification and checkpoints', () => {
     expect(q[0].record?.scope).toBe('destination');
     expect(state.opens).toEqual([]);
     expect(state.bytes.size).toBe(0);
+    expect(p.sender.snapshot().batch).toMatchObject({
+      phase: 'verified',
+      requestedBytes: 100,
+      payloadBytesSent: 0,
+      skippedBytes: 100,
+      skippedFiles: 1,
+    });
     await p.receiver.close();
   });
   it('transfers raw bytes and independently verifies the complete stored copy', async () => {
@@ -697,6 +704,13 @@ describe('receiver-owned verification and checkpoints', () => {
       new Uint8Array(await q[0].file.arrayBuffer()),
     );
     expect(p.errors).toHaveLength(0);
+    expect(p.sender.snapshot().batch).toMatchObject({
+      phase: 'verified',
+      requestedBytes: q[0].file.size,
+      payloadBytesSent: q[0].file.size,
+      resumedBytes: 0,
+      skippedBytes: 0,
+    });
     await p.receiver.close();
   });
   it('rejects a source that changes after preparation', async () => {
@@ -763,6 +777,12 @@ describe('receiver-owned verification and checkpoints', () => {
     await resumed.sender.run(q, 'resumed');
     expect(state.opens).toEqual([0, 1024 * 1024]);
     expect(q[0].phase).toBe('verified');
+    expect(resumed.sender.snapshot().batch).toMatchObject({
+      phase: 'verified',
+      resumedBytes: CHECKPOINT_BYTES,
+      payloadBytesSent: q[0].file.size - CHECKPOINT_BYTES,
+      skippedBytes: 0,
+    });
     expect(state.bytes.get(id)).toEqual(
       new Uint8Array(await q[0].file.arrayBuffer()),
     );

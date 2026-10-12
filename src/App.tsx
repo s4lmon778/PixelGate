@@ -137,6 +137,7 @@ export default function PixelGate() {
   const knownCleared = useRef(new Set<string>());
   const baseBytes = useRef(0);
   const releaseLock = useRef<(() => void) | undefined>(undefined);
+  const latestReport = useRef<ConnectionReport | undefined>(undefined);
 
   const currentReport: ConnectionReport | undefined = room?.diagnostics
     ? {
@@ -153,8 +154,26 @@ export default function PixelGate() {
       }
     : undefined;
   const connectionReport = currentReport ?? savedReport;
+  function retainLiveReport() {
+    const previous = latestReport.current;
+    if (!previous || !transport.current) return;
+    const report: ConnectionReport = {
+      ...previous,
+      recordedAt: new Date().toISOString(),
+      transfer: transport.current?.snapshot(),
+      receiving: receiver.current?.snapshot(),
+      sending: sender.current?.snapshot(),
+    };
+    retainConnectionReport(report);
+    setSavedReport(report);
+  }
   useEffect(() => {
-    if (!room?.diagnostics || transport.current?.readyState !== 'open') return;
+    if (
+      !connected ||
+      !room?.diagnostics ||
+      transport.current?.readyState !== 'open'
+    )
+      return;
     const source = sender.current?.snapshot();
     if (source)
       transport.current.publishSourceStatus({
@@ -174,9 +193,10 @@ export default function PixelGate() {
       sending: sender.current?.snapshot(),
       routeStatsScope: 'primary-connection',
     };
+    latestReport.current = report;
     retainConnectionReport(report);
     setSavedReport(report);
-  }, [room, role, storageMode]);
+  }, [room, role, storageMode, connected]);
 
   const refresh = useCallback(async () => {
     const [records, stored, usage] = await Promise.all([
@@ -401,6 +421,7 @@ export default function PixelGate() {
   }
   async function connect() {
     await disconnect();
+    latestReport.current = undefined;
     if (role === 'receive') await preflight();
     clearTimeout(receiveTimer.current);
     receiveTimer.current = undefined;
@@ -421,6 +442,9 @@ export default function PixelGate() {
         transfer.addEventListener('peer-device', (event) => {
           if (transport.current === transfer)
             setRemoteDevice(peerDevice((event as CustomEvent).detail));
+        });
+        transfer.addEventListener('source-status', () => {
+          if (transport.current === transfer) retainLiveReport();
         });
         setConnected(true);
         setPaused(false);
@@ -578,6 +602,17 @@ export default function PixelGate() {
     } catch (e) {
       setProblem(errorText(e));
     } finally {
+      const source = sender.current?.snapshot();
+      if (source)
+        transport.current?.publishSourceStatus(
+          {
+            ...source,
+            visibility:
+              document.visibilityState === 'hidden' ? 'hidden' : 'visible',
+          },
+          true,
+        );
+      retainLiveReport();
       transferClock.current.finish();
       setRunning(false);
       setQueue([...currentQueue.current]);
