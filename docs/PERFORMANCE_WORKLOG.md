@@ -657,3 +657,9 @@ product guard was weakened. Final timing freeze/idempotence checks also pass.
 
 This release improves measurement and report retention. It does not claim
 another throughput increase; the physical 50% target is still unverified.
+
+0.3.27 is published from `2f39a4212266d416243fb7f7d2873bfe6817babb`; Pages commit
+`40f700648a2e1dbf7d02f3a138f1d593afeecba8` reports built with no error. Live HTML,
+all four compiled assets and the distributed license match the tested build
+byte for byte. A fresh 360-pixel live browser renders 0.3.27 without errors or
+horizontal overflow. The same-phone/video/Wi-Fi timing remains pending.
