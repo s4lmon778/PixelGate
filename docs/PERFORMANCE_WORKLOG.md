@@ -561,3 +561,10 @@ Final no-added-read-delay 400 MiB native controls take 10.241 / 10.626 s on the
 adaptive version versus 10.256 / 12.221 s on actual 0.3.25. All originals match,
 all five paths are proxied, and ordinary reads stay at one MiB (401 completed
 reads including the final 111-byte tail). No network-mode replacement is made.
+
+Published 0.3.26 source `b465196a59685b4d2dac5955bc5280b0cd20ce68`; Pages commit
+`1ea3d9331fa2cfe20e51626e3197a170921a2178` reports built with no error. Live HTML,
+all four compiled assets and the license notice match the tested build byte
+for byte. A fresh mobile-width live browser renders 0.3.26 without page errors
+or horizontal overflow. Physical timing on the same iPhone/Pixel/video/Wi-Fi
+remains necessary before marking the goal achieved.
