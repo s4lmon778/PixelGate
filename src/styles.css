@@ -8,6 +8,8 @@
   --accent: #066bdf;
   --soft: #edf5ff;
   --green: #167957;
+  --green-soft: #eef8f2;
+  --green-border: #cbe6d8;
   --side: #101c2c;
   --side-text: #9caec5;
   --primary: #066bdf;
@@ -1240,23 +1242,31 @@ h1 {
 }
 .connection-flow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 58px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 60px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   margin-top: 10px;
+  color: var(--green);
 }
 .connection-device {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   min-width: 0;
-  color: var(--accent);
+  color: var(--green);
 }
 .connection-device:last-child {
   justify-content: flex-end;
 }
-.connection-device > svg {
+.connection-device-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
+  border: 1px solid var(--green-border);
+  border-radius: 50%;
+  background: var(--green-soft);
 }
 .connection-device strong,
 .connection-device small {
@@ -1272,49 +1282,35 @@ h1 {
   text-align: center;
 }
 .connection-track {
-  position: relative;
-  height: 2px;
-  margin: 9px 0;
-  background: var(--accent);
-}
-.connection-track > svg {
-  position: absolute;
-  right: -2px;
-  top: -6px;
-  color: var(--accent);
-}
-.connection-dot {
-  display: none;
-  position: absolute;
-  top: -3px;
-  left: 0;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 8px var(--accent);
-}
-.moving .connection-dot {
   display: block;
-  animation: connection-travel 1.4s linear infinite;
+  width: 100%;
+  height: 18px;
+  overflow: hidden;
+  margin: 2px 0 3px;
+  color: var(--green);
 }
-@keyframes connection-travel {
+.connection-rail {
+  opacity: 0.22;
+}
+.connection-beam {
+  display: none;
+}
+.moving .connection-beam {
+  display: block;
+  animation: connection-beam-travel 2.8s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+@keyframes connection-beam-travel {
   from {
     transform: translateX(0);
-    opacity: 0.25;
-  }
-  20% {
-    opacity: 1;
   }
   to {
-    transform: translateX(48px);
-    opacity: 0;
+    transform: translateX(132px);
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .moving .connection-dot {
+  .moving .connection-beam {
     animation: none;
-    left: 40%;
+    transform: translateX(64px);
   }
 }
 .queue-controls {
@@ -1426,6 +1422,8 @@ h1 {
     --accent: #409bff;
     --soft: #1c3048;
     --green: #67c9a3;
+    --green-soft: #203b32;
+    --green-border: #355b4b;
     --side: #0c1522;
     --primary: #187be5;
     --drop-border: #3b506b;
@@ -1445,6 +1443,8 @@ h1 {
   --accent: #409bff;
   --soft: #1c3048;
   --green: #67c9a3;
+  --green-soft: #203b32;
+  --green-border: #355b4b;
   --side: #0c1522;
   --primary: #187be5;
   --drop-border: #3b506b;

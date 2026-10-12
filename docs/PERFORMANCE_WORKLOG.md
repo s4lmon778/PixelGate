@@ -406,3 +406,22 @@ The physical photos' five path-byte counters sum to 37,700,640, versus
 do not explain this difference; replayed/duplicate framed data is a plausible
 contributor. This does not show the sender's pending receipts or identify why
 replays occurred. Its live report remains needed. No transfer tuning is restored.
+
+## 0.3.25 green connection visual
+
+Device icons and labels now use the existing green connection theme, with soft
+circular icon badges. The moving dot is replaced by a tapered SVG beam adapted
+from Magic UI's MIT-licensed Animated Beam. Its pinned source and full license
+are distributed in `public/third-party-notices.txt`. A fixed SVG and CSS animation
+avoid adding Motion or per-frame JavaScript. Sender-to-receiver direction,
+device types, pause state, reduced motion and the compact mobile layout remain.
+Transfer settings and protocol behavior are unchanged.
+
+TypeScript, ESLint, 197 unit/integration cases and the production build pass.
+Fifteen targeted browser cases pass across Chromium, Firefox and WebKit,
+covering real peer transfer/readback, direction, pause, responsive layouts,
+enlarged text and appearance. Isolated 32 MiB + 111-byte peer transfers also
+exercise the moving beam, reduced motion and reciprocal pause/resume in modern
+Chromium and actual Chromium 101. Light/dark screenshots at phone widths were
+inspected; no horizontal page overflow was found. These browser checks do not
+establish a physical-phone speed gain.
