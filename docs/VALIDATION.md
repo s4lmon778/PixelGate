@@ -25,8 +25,10 @@
   storage (89 ms average, 122 ms maximum commit) and over 20 seconds without a
   frame. This identifies a wait upstream of storage at that moment, but does
   not distinguish sender pause, source wait, transport fault or Wi-Fi trouble.
-  A matched local 1% native-loss experiment gives roughly 12 seconds on both
-  actual 0.3.22 and 0.3.23 for 32 MiB with independently matching bytes. The
+  Matched local 1% native-loss experiments using exact published bundles give
+  five-run means of 11.450 s on 0.3.22 and 13.122 s on 0.3.23 for 32 MiB, with
+  independently matching bytes. The difference depends strongly on loss pattern;
+  single-variable local trials do not establish one reliable fix. The
   reported 170 KB/s phone result remains unexplained; no rollback or claimed
   physical speed improvement follows from that model.
 

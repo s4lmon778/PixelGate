@@ -314,7 +314,7 @@ The physical transfer-speed target is still unmeasured.
 
 The user reported roughly 170 KB/s on the same iPhone-to-Pixel Wi-Fi setup, then
 explicitly instructed that transfer settings must not be restored until the app
-versus Wi-Fi cause is identified. No rollback has been published; the pending
+versus Wi-Fi cause is identified. No rollback has been published; published
 0.3.24 retains the 0.3.23 frame-selection policy and eight-MiB negotiated window.
 
 Six current Pixel photos show Android 9, IndexedDB, all five parallel connections
@@ -364,6 +364,45 @@ assumption was corrected to use the selected storage mode. The same correction
 is made to the shared manual-transfer fixture. No product verification guard
 was weakened. Independently hashed 32 MiB + 111-byte runs then take 12.152 s
 end-to-end (11.770 s payload) on actual 0.3.22 and 11.967 s (11.571 s payload) on
-0.3.23. All five connections are proxied, with 550/566 dropped packets. This
+an earlier local 0.3.23 candidate (not the exact published bundle). All five connections are proxied, with 550/566 dropped packets. This
 model does not reproduce the physical 170 KB/s report and does not establish
 whether the real Wi-Fi or update caused it. The iPhone’s live report is pending.
+
+## Verified publication and extended loss controls
+
+0.3.24 is published from **5765af4b9438bbedd908033a44fad82df42312cb**; Pages
+commit **e38b6d673d9126fcaceb2b4e82b7c800b69da867** reports built with no error.
+Live HTML and all four assets match the tested build byte for byte. An isolated
+360-pixel live browser renders File cache: 0 B, no receiving rows, no overflow
+and no page errors. The exact prior 0.3.23 build is preserved at
+`https://s4lmon778.github.io/PixelGate/releases/0.3.23/`. Final reviewed-build
+checks pass another four cases, including the sending wait-stage report.
+
+The first loss comparison above used the earlier local candidate. It must not
+be represented as the published 0.3.23. The exact public 0.3.23 HTML and assets
+(index-CgFY7-O8.js) were fetched with source metadata 3dfe10d and served unchanged
+for subsequent controls. Its two seed-7 runs take 15.475 / 14.454 s, versus
+12.152 / 11.388 s on actual 0.3.22. Three more matched loss seeds give:
+
+| Loss seed | Actual 0.3.22 | Exact published 0.3.23 |
+| --------- | ------------: | ---------------------: |
+| 13        |      10.411 s |               12.553 s |
+| 31        |      11.877 s |               11.915 s |
+| 47        |      11.421 s |               11.212 s |
+
+All originals match independent hashes; all five paths are proxied. Across these
+five runs, means are 11.450 s and 13.122 s, about 14.6% more elapsed time on
+0.3.23. Outcomes depend substantially on loss pattern. This supports further
+investigation of loss interaction, not a claim that the update caused the
+entire reported physical slowdown or that Wi-Fi is at fault.
+
+Two one-variable local variants, built from 3dfe10d, take 12.828 s with only the
+window reduced to four MiB and 12.928 s with only the old frame-selection rule
+restored, under seed 7. Each is one run with independent hashes; the evidence
+does not isolate one reliable fix. These variants are not published.
+
+The physical photos' five path-byte counters sum to 37,700,640, versus
+32,915,456 delivered payload bytes: 4,785,184 excess bytes. Frame headers alone
+do not explain this difference; replayed/duplicate framed data is a plausible
+contributor. This does not show the sender's pending receipts or identify why
+replays occurred. Its live report remains needed. No transfer tuning is restored.
