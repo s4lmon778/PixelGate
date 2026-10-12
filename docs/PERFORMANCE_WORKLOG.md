@@ -255,3 +255,38 @@ publication of every tested update. The new release includes a preserved actual
 0.3.22 reference for controlled same-device timing; save and clear cached copies
 between real trials to prevent duplicate skipping. Use one receiver tab at a time.
 The five-hour continuation remains active until the physical target is measured.
+
+## Extended 0.3.23 checks after publication
+
+The two-file native-RTT fixture deliberately closes all four bulk channels after
+the first 32 MiB + 111-byte file, then sends a different original on the same
+primary connection. Both independently read stored copies match their respective source hashes. The first
+file takes 10,538 ms payload / 11,261 ms Send to Verified with five connections.
+The following file takes 10,773 / 11,480 ms with one connection at 200 ms native
+RTT. Failed lanes remain unavailable, but this warmed-primary experiment shows
+no meaningful speed loss. Do not promote automatic lane replacement as a speed
+fix or infer that the old idle screenshot proves an in-transfer lane failure.
+The isolated fixture and results are under `/tmp/pixelgate-speed-20261011`.
+
+The published engine passes a real WebKit-to-Chromium **5 GiB + 23-byte** original
+through disk-backed OPFS. Source hashing + transfer + closed staging readback take
+107,223 ms; streamed folder copy + destination readback take 39,068 ms. Both the
+actual download and the separately exported destination file match independent
+streaming Node SHA-256. Distinct frame markers cross the 4 GiB offset boundary,
+all five connections remain active, and a subsequent 128 KiB + 7-byte original
+uses the same selected folder and matches its hash. These are preservation
+checks, not new physical speed claims.
+
+A genuine WebKit-to-WebKit receiver passes **768 MiB + 23 bytes** with naturally
+selected IndexedDB. Source hashing + transfer + staged readback take 18,288 ms;
+the actual downloaded bytes independently match. The first attempt selected a
+nonexistent test name and ran zero cases; the corrected automatic-storage case
+passes. No quota, storage or readback check was bypassed.
+
+Direct phone verification is currently unavailable in this workspace: no adb or
+libimobiledevice CLI is installed, xcrun has no devicectl, and read-only USB
+inventory finds no iPhone or Pixel. No SDK was installed and no phone/security
+setting was changed. The requested physical 0.3.22/0.3.23 timings, in-transfer
+report and saved-cache confirmation remain pending. Further unmeasured transport
+changes would not establish the 50% device target. Keep the goal unachieved and
+the five-hour follow-up active; avoid re-requesting the same pending report.
