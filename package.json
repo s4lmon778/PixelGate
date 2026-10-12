@@ -1,6 +1,6 @@
 {
   "name": "pixelgate",
-  "version": "0.3.22",
+  "version": "0.3.23",
   "private": true,
   "type": "module",
   "description": "Direct browser-to-browser file transfers with independent SHA-256 verification.",
@@ -16,6 +16,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:browser": "playwright test",
+    "bench:native": "node scripts/benchmark-native-transfer.mjs",
     "check": "npm run typecheck && npm run lint && npm test",
     "deploy:pages": "node scripts/deploy-pages.mjs",
     "format": "prettier --write .",

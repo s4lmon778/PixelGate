@@ -3,7 +3,7 @@ import {
   writeIndexed,
   writeIndexedBatch,
 } from './indexed-staging';
-import { CHECKPOINT_BYTES } from './model';
+import { CHECKPOINT_BYTES, TRANSFER_WINDOW_BYTES } from './model';
 
 interface Access {
   write(data: Uint8Array, opts: { at: number }): number;
@@ -60,7 +60,7 @@ self.onmessage = ({ data }) => {
         if (
           !Array.isArray(blocks) ||
           blocks.length < 1 ||
-          blocks.length > 4 ||
+          blocks.length > TRANSFER_WINDOW_BYTES / CHECKPOINT_BYTES ||
           blocks.some(
             (block, index) =>
               !(block instanceof ArrayBuffer) ||

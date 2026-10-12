@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
+import { CHECKPOINT_BYTES, TRANSFER_WINDOW_BYTES } from '../lib/bridge/model';
 
 vi.mock('../lib/bridge/indexed-staging', () => ({
   openIndexed: vi.fn(),
@@ -112,10 +113,25 @@ it('flushes a contiguous batch once, validates its final size, and rejects unbou
   ]);
   const bad = await call('write-batch', {
     offset: size,
-    blocks: Array(5).fill(blocks[0]),
+    blocks: Array(TRANSFER_WINDOW_BYTES / CHECKPOINT_BYTES + 1).fill(blocks[0]),
   });
   expect(bad.error).toContain('Invalid staging batch');
   expect(size).toBe(1024 * 1024 + 23);
+});
+
+it('commits the maximum negotiated batch with one flush before confirming it', async () => {
+  const count = TRANSFER_WINDOW_BYTES / CHECKPOINT_BYTES;
+  const blocks = Array.from(
+    { length: count },
+    () => new Uint8Array(CHECKPOINT_BYTES).buffer,
+  );
+  access.flush.mockClear();
+  expect((await call('write-batch', { offset: 0, blocks })).ok).toBe(true);
+  expect(size).toBe(TRANSFER_WINDOW_BYTES);
+  expect(access.flush).toHaveBeenCalledOnce();
+  expect(access.write.mock.calls.map(([, options]) => options.at)).toEqual(
+    Array.from({ length: count }, (_, i) => i * CHECKPOINT_BYTES),
+  );
 });
 
 it('rejects a successful count when the file did not grow to the checkpoint end', async () => {

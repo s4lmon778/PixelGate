@@ -49,7 +49,10 @@ test('strict multi-checkpoint commits roll back atomically and resume across ref
     const rejected = await call('write-batch', {
       offset: checkpoint,
       blocks: [
-        new Uint8Array(checkpoint).fill(22).buffer,
+        ...Array.from(
+          { length: 7 },
+          (_, i) => new Uint8Array(checkpoint).fill((i + 2) * 11).buffer,
+        ),
         new Uint8Array(7).buffer,
       ],
     });
@@ -72,9 +75,11 @@ test('strict multi-checkpoint commits roll back atomically and resume across ref
     const committed = await call('write-batch', {
       offset: checkpoint,
       blocks: [
-        new Uint8Array(checkpoint).fill(22).buffer,
-        new Uint8Array(checkpoint).fill(33).buffer,
-        new Uint8Array(23).fill(44).buffer,
+        ...Array.from(
+          { length: 7 },
+          (_, i) => new Uint8Array(checkpoint).fill((i + 2) * 11).buffer,
+        ),
+        new Uint8Array(23).fill(99).buffer,
       ],
     });
     await call('close');
@@ -99,7 +104,7 @@ test('strict multi-checkpoint commits roll back atomically and resume across ref
         action: 'open',
         backend: 'indexeddb',
         fileId: 'b'.repeat(64),
-        offset: 3 * 1024 * 1024,
+        offset: 8 * 1024 * 1024,
       });
     });
     worker.terminate();
@@ -136,7 +141,7 @@ test('strict multi-checkpoint commits roll back atomically and resume across ref
     );
   }, workerURL);
   expect(resumed).toEqual(
-    [11, 22, 33].map((marker) => ({
+    [11, 22, 33, 44, 55, 66, 77, 88].map((marker) => ({
       length: 1024 * 1024,
       marker,
       intact: true,

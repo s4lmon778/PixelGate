@@ -3,7 +3,22 @@ export const FRAME_BYTES = 16 * 1024;
 // Leave room for the striped header within the interoperable 64 KiB SCTP message.
 export const STRIPED_FRAME_BYTES = 64 * 1024 - 8;
 export const CHECKPOINT_BYTES = 1024 * 1024;
-export const TRANSFER_WINDOW_BYTES = 4 * CHECKPOINT_BYTES;
+export const LEGACY_TRANSFER_WINDOW_BYTES = 4 * CHECKPOINT_BYTES;
+export const TRANSFER_WINDOW_BYTES = 8 * CHECKPOINT_BYTES;
+
+// The optional hello capability keeps older senders within their four-MiB cap.
+// Larger future capabilities can interoperate within this release's own bound.
+export function peerTransferWindow(value: unknown) {
+  if (value === undefined) return LEGACY_TRANSFER_WINDOW_BYTES;
+  if (
+    typeof value !== 'number' ||
+    !Number.isSafeInteger(value) ||
+    value < CHECKPOINT_BYTES ||
+    value % CHECKPOINT_BYTES !== 0
+  )
+    throw new Error('Peer advertised an invalid transfer window.');
+  return Math.min(TRANSFER_WINDOW_BYTES, value);
+}
 export type Phase =
   | 'pending'
   | 'hashing'
@@ -50,7 +65,7 @@ export interface QueuedFile {
   error?: string;
 }
 export type Control =
-  | { type: 'hello'; version: number }
+  | { type: 'hello'; version: number; maxTransferWindowBytes?: number }
   | { type: 'start'; file: RecordFile }
   | {
       type: 'ready';

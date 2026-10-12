@@ -92,6 +92,18 @@ export class PathScheduler<T> {
     return { queueDelay, timelyBytes };
   }
 
+  minimumReceiptDelay(paths: T[]) {
+    const delays = paths
+      .map((path) => this.observations.get(path)?.minimumDelay)
+      .filter((delay): delay is number => Number.isFinite(delay))
+      .sort((a, b) => a - b);
+    // Use the lower median so one slow or unobserved path cannot dictate the
+    // message size for its healthy siblings. Excluded paths stay excluded.
+    return delays.length
+      ? delays[Math.floor((delays.length - 1) / 2)]
+      : undefined;
+  }
+
   choose(
     paths: T[],
     queued: (path: T) => number,

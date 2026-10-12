@@ -47,7 +47,7 @@ beforeEach(() => {
   );
   writeFileSync(
     join(root, 'scripts/build.mjs'),
-    "import {mkdirSync,writeFileSync,readFileSync} from 'node:fs';mkdirSync('dist',{recursive:true});writeFileSync('dist/index.html',readFileSync('source.txt'));\n",
+    "import {mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';rmSync('dist',{recursive:true,force:true});mkdirSync('dist/assets',{recursive:true});writeFileSync('dist/index.html',readFileSync('source.txt'));const version=JSON.parse(readFileSync('package.json')).version;writeFileSync('dist/assets/'+version+'.js',readFileSync('source.txt'));\n",
   );
   writeFileSync(join(root, '.gitignore'), 'dist/\n');
   writeFileSync(join(root, 'source.txt'), 'first build');
@@ -100,5 +100,58 @@ describe('GitHub Pages publisher with isolated local remotes', () => {
       ]),
     ).toBe('');
     expect(readFileSync(join(root, 'source.txt'), 'utf8')).toBe('uncommitted');
+  });
+  it('preserves actual previous-version assets and provenance across subsequent releases', () => {
+    const firstSource = run(['git', 'rev-parse', 'HEAD']);
+    expect(deploy().status).toBe(0);
+    const release = (version: string, text: string) => {
+      const path = join(root, 'package.json');
+      const pkg = JSON.parse(readFileSync(path, 'utf8'));
+      writeFileSync(path, JSON.stringify({ ...pkg, version }));
+      writeFileSync(join(root, 'source.txt'), text);
+      run(['git', 'add', '.']);
+      run(['git', 'commit', '-m', version]);
+      expect(deploy().status).toBe(0);
+    };
+    release('0.2.1', 'second build');
+    release('0.2.2', 'third build');
+    expect(
+      run(['git', '--git-dir', remote, 'show', 'gh-pages:index.html']),
+    ).toBe('third build');
+    expect(
+      run([
+        'git',
+        '--git-dir',
+        remote,
+        'show',
+        'gh-pages:releases/0.2.0/index.html',
+      ]),
+    ).toBe('first build');
+    expect(
+      run([
+        'git',
+        '--git-dir',
+        remote,
+        'show',
+        'gh-pages:releases/0.2.1/index.html',
+      ]),
+    ).toBe('second build');
+    expect(
+      run(['git', '--git-dir', remote, 'show', 'gh-pages:assets/0.2.0.js']),
+    ).toBe('first build');
+    expect(
+      run(['git', '--git-dir', remote, 'show', 'gh-pages:assets/0.2.2.js']),
+    ).toBe('third build');
+    expect(
+      JSON.parse(
+        run([
+          'git',
+          '--git-dir',
+          remote,
+          'show',
+          'gh-pages:releases/0.2.0/build.json',
+        ]),
+      ).source_commit,
+    ).toBe(firstSource);
   });
 });

@@ -1,11 +1,41 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { createSHA256 } from 'hash-wasm';
-import { collisionName, safePath, validateRecord } from '../lib/bridge/model';
+import {
+  CHECKPOINT_BYTES,
+  LEGACY_TRANSFER_WINDOW_BYTES,
+  TRANSFER_WINDOW_BYTES,
+  collisionName,
+  peerTransferWindow,
+  safePath,
+  validateRecord,
+} from '../lib/bridge/model';
 import { report } from '../lib/bridge/report';
 import { ApiError, onlyKeys, validateSignal } from '../lib/pairing-validation';
 
 describe('integrity and manifests', () => {
+  it('bounds optional window capabilities while preserving legacy peers', () => {
+    expect(peerTransferWindow(undefined)).toBe(LEGACY_TRANSFER_WINDOW_BYTES);
+    expect(peerTransferWindow(CHECKPOINT_BYTES)).toBe(CHECKPOINT_BYTES);
+    expect(peerTransferWindow(TRANSFER_WINDOW_BYTES)).toBe(
+      TRANSFER_WINDOW_BYTES,
+    );
+    expect(peerTransferWindow(16 * CHECKPOINT_BYTES)).toBe(
+      TRANSFER_WINDOW_BYTES,
+    );
+    for (const invalid of [
+      0,
+      -1,
+      CHECKPOINT_BYTES + 1,
+      Infinity,
+      NaN,
+      null,
+      '8388608',
+    ])
+      expect(() => peerTransferWindow(invalid)).toThrow(
+        'invalid transfer window',
+      );
+  });
   it('matches an independent SHA-256 across chunk boundaries', async () => {
     const bytes = Buffer.alloc(2 * 1024 * 1024 + 123);
     for (let i = 0; i < bytes.length; i++) bytes[i] = i % 251;

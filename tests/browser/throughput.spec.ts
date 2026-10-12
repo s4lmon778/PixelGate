@@ -127,6 +127,7 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
             const metrics = {
               started: 0,
               bytes: 0,
+              windowBytes: 0,
               acks: [] as { offset: number; ms: number; received: number }[],
             };
             Object.assign(window, { receiveMetrics: metrics });
@@ -157,6 +158,9 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
                   delete message.receiveWindowBytes;
                   data = JSON.stringify(message);
                 }
+                if (message.type === 'ready')
+                  metrics.windowBytes =
+                    message.receiveWindowBytes ?? 1024 * 1024;
                 if (message.type === 'ack') {
                   metrics.acks.push({
                     offset: message.offset,
@@ -638,8 +642,18 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
           );
         const receiverMetrics = await receiver.evaluate(
           () =>
-            (window as unknown as { receiveMetrics: object }).receiveMetrics,
+            (window as unknown as { receiveMetrics: { windowBytes: number } })
+              .receiveMetrics,
         );
+        if (mixedPeers)
+          expect(receiverMetrics.windowBytes).toBe(
+            mode === 'new-peers-local'
+              ? 8 * 1024 * 1024
+              : Number(
+                  process.env.PIXELGATE_TEST_BASELINE_WINDOW_BYTES ||
+                    4 * 1024 * 1024,
+                ),
+          );
         measurements.push({
           mode,
           ...metrics,

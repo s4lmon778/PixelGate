@@ -5,9 +5,11 @@ import { SendPacer } from './send-pacer';
 import {
   CHECKPOINT_BYTES,
   FRAME_BYTES,
+  LEGACY_TRANSFER_WINDOW_BYTES,
   TRANSFER_WINDOW_BYTES,
   VERSION,
   isVerified,
+  peerTransferWindow,
   safePath,
   validateRecord,
   type Control,
@@ -54,9 +56,13 @@ export class Receiver {
   private lastFrameAt = 0;
   private commits = 0;
   private lastCommitMs = 0;
+  private totalCommitMs = 0;
+  private maximumCommitMs = 0;
   private lastBatchBytes = 0;
   private closed = false;
   private compatible = false;
+  private peerWindow = LEGACY_TRANSFER_WINDOW_BYTES;
+  private receiveWindow = LEGACY_TRANSFER_WINDOW_BYTES;
   private failed = false;
   constructor(
     private channel: TransferChannel,
@@ -73,8 +79,8 @@ export class Receiver {
           ? event.data.byteLength
           : 0;
       if (
-        this.queued + 1 > TRANSFER_WINDOW_BYTES / FRAME_BYTES + 32 ||
-        this.queuedBytes + bytes > TRANSFER_WINDOW_BYTES
+        this.queued + 1 > this.receiveWindow / FRAME_BYTES + 32 ||
+        this.queuedBytes + bytes > this.receiveWindow
       ) {
         this.error(new Error('Sender exceeded the receiving buffer.'));
         channel.close();
@@ -107,7 +113,11 @@ export class Receiver {
     channel.addEventListener('close', () => {
       void this.close();
     });
-    control(channel, { type: 'hello', version: VERSION });
+    control(channel, {
+      type: 'hello',
+      version: VERSION,
+      maxTransferWindowBytes: TRANSFER_WINDOW_BYTES,
+    });
   }
   snapshot() {
     return {
@@ -120,8 +130,13 @@ export class Receiver {
         : 0,
       queuedBytes: this.queuedBytes,
       bufferedBytes: this.buffered,
+      receiveWindowBytes: this.receiveWindow,
       storageCommits: this.commits,
       lastCommitMs: Math.round(this.lastCommitMs),
+      averageCommitMs: this.commits
+        ? Math.round(this.totalCommitMs / this.commits)
+        : 0,
+      maximumCommitMs: Math.round(this.maximumCommitMs),
       lastBatchBytes: this.lastBatchBytes,
     };
   }
@@ -138,11 +153,17 @@ export class Receiver {
     if (message.type === 'hello') {
       if (message.version !== VERSION)
         throw new Error('Protocol version mismatch. Reload both devices.');
+      this.peerWindow = peerTransferWindow(message.maxTransferWindowBytes);
+      this.receiveWindow = this.peerWindow;
       this.compatible = true;
       return;
     }
     if (!this.compatible) throw new Error('Transfer handshake required.');
     if (message.type === 'start') {
+      this.receiveWindow = Math.min(
+        this.peerWindow,
+        this.channel.receiveWindowBytes ?? TRANSFER_WINDOW_BYTES,
+      );
       this.processing('opening-storage');
       if (
         this.active &&
@@ -217,13 +238,15 @@ export class Receiver {
       await this.update({ ...manifest, bytes: offset, phase: 'transferring' });
       this.acceptedBytes = offset;
       this.commits = 0;
+      this.lastCommitMs = 0;
+      this.totalCommitMs = 0;
+      this.maximumCommitMs = 0;
       this.processing('waiting-for-bytes');
       control(this.channel, {
         type: 'ready',
         id: manifest.id,
         offset,
-        receiveWindowBytes:
-          this.channel.receiveWindowBytes ?? TRANSFER_WINDOW_BYTES,
+        receiveWindowBytes: this.receiveWindow,
       });
     } else if (message.type === 'finish') {
       this.processing('verifying');
@@ -319,7 +342,7 @@ export class Receiver {
     // Coalesce only checkpoints that have already arrived. No batching timer,
     // extra receive credit, or wait for bytes from a legacy one-checkpoint peer.
     while (
-      blocks.length < TRANSFER_WINDOW_BYTES / CHECKPOINT_BYTES &&
+      blocks.length < this.receiveWindow / CHECKPOINT_BYTES &&
       record.bytes + length < record.size
     ) {
       const needed = Math.min(
@@ -362,6 +385,8 @@ export class Receiver {
       updated: Date.now(),
     });
     this.lastCommitMs = performance.now() - started;
+    this.totalCommitMs += this.lastCommitMs;
+    this.maximumCommitMs = Math.max(this.maximumCommitMs, this.lastCommitMs);
     this.commits++;
     // Each original checkpoint ACK follows the same completed storage batch and
     // manifest commit. Older senders still receive their expected offsets.
@@ -411,6 +436,8 @@ export class Receiver {
     this.failed = true;
     this.processing('paused-after-error');
     this.error(error);
+    // A rejected handshake cannot be repaired by file-level retry messages.
+    if (!this.active) this.channel.close();
     try {
       await this.writer.close();
     } catch {}
@@ -503,7 +530,11 @@ export class Sender {
       }
       this.wake();
     };
-    control(channel, { type: 'hello', version: VERSION });
+    control(channel, {
+      type: 'hello',
+      version: VERSION,
+      maxTransferWindowBytes: TRANSFER_WINDOW_BYTES,
+    });
   }
   private wake = () => {
     for (const resolve of this.waiting) resolve();

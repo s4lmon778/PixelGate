@@ -35,6 +35,17 @@ For a controlled parallel-transfer comparison, run `npm run test:browser -- test
 
 For actual-release latency comparisons, preserve an unmodified production `dist` at a second local URL. Set `PIXELGATE_TEST_BASELINE_URL=http://127.0.0.1:8788 PIXELGATE_TEST_MIB=64 PIXELGATE_TEST_COMPARE_MODES=baseline-rtt-250,pipeline-rtt-250,baseline-rtt-500,pipeline-rtt-500` before the throughput command. Those modes delay application transport receipts and cumulative replies by 250/500 ms, with 150 ms durable-checkpoint reply delay; they do not emulate a complete radio network. `PIXELGATE_TEST_ADAPTIVE_PATHS=1` checks equal, unequal, recovering, and shared bottlenecks. Keep both bundles fixed throughout a run. For both directions of old/new pairing, use `PIXELGATE_TEST_MIXED_PEERS=1`; older 0.3.16 peers use the default 16 KiB expectation, while 0.3.17 peers need `PIXELGATE_TEST_BASELINE_FRAME_BYTES=65528`. `PIXELGATE_TEST_FAULT_MIB=16 PIXELGATE_TEST_MIB=32 PIXELGATE_TEST_COMPARE_MODES=closed-lane,lost-packet,slow-lane` moves injected failures beyond warmup to exercise an already enlarged window. The `pipeline-local` case also checks report retention after disconnect/reload, excludes fixture filenames, hashes and addresses, and verifies explicit cache clearing.
 
+For native SCTP latency experiments, `npm run bench:native` routes every native UDP connection through local proxy sockets in isolated WebKit contexts and a fresh persistent Chromium receiver profile. Serve an immutable baseline and the candidate separately, then run them sequentially with identical settings:
+
+```sh
+PIXELGATE_NATIVE_URL=http://127.0.0.1:8790/ \
+PIXELGATE_NATIVE_LABEL=baseline PIXELGATE_NATIVE_MIB=400 \
+PIXELGATE_NATIVE_ONE_WAY_MS=8 PIXELGATE_NATIVE_STORAGE_DELAY_MS=160 \
+npm run bench:native
+```
+
+Repeat with the candidate URL and label. `PIXELGATE_NATIVE_ONE_WAY_MS=100` gives approximately 200 ms native round-trip delay; use a smaller file such as 64 MiB for that case. The storage option delays notification after actual strict IndexedDB transaction completion; it does not weaken commits or represent Pixel CPU speed. `PIXELGATE_NATIVE_RECEIVER_EXECUTABLE=/path/to/Chromium` checks an actual older engine. The script requires localhost, bounds files to 1–512 MiB, independently hashes received bytes, requires every open connection to be proxied, and writes a JSON record to a temporary directory (or `PIXELGATE_NATIVE_RESULT`). It reports both first-payload-to-finish-request timing and Send-to-Verified timing. Synthetic source bytes, the temporary receiver profile and isolated browser contexts are removed afterward. Proxy candidate mapping is test-only and never changes product ICE behavior. Run these comparisons without concurrent browser suites or builds; even native latency models do not certify physical Wi-Fi speed.
+
 React components and appearance logic live in `src/`; the transfer engine, persistence, hashing workers, and protocol types live in `lib/bridge/`. Unit/integration fixtures live in `tests/`, and real browser fixtures live in `tests/browser/`. Production output, browser reports, dependencies, and environment files are ignored.
 
 Use synthetic files for debugging. Changes to integrity, persistence, pairing, or recovery should include independent readback or fault-injection evidence. Record actual device versions and measurements separately from browser-engine tests.

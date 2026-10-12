@@ -17,7 +17,7 @@ PixelGate is a static React/Vite app. It needs HTTPS and worker support; it has 
 4. In repository **Settings → Pages**, choose **Deploy from a branch**, **gh-pages**, and **/(root)**.
 5. Wait for GitHub’s Pages deployment to finish, then use the URL shown in that setting.
 
-`deploy:pages` builds the static app locally. It requires committed source, reads the existing `origin`, and creates a temporary checkout for `gh-pages`. Existing deployment history is preserved and the script never force-pushes. It includes `.nojekyll` and `build.json`, which records the source commit and app version. Temporary publishing files are removed after the push.
+`deploy:pages` builds the static app locally. It requires committed source, reads the existing `origin`, and creates a temporary checkout for `gh-pages`. Existing deployment history is preserved and the script never force-pushes. It includes `.nojekyll` and `build.json`, which records the source commit and app version. Before replacing a version, its actual compiled assets and provenance are preserved under `releases/<version>/` for reproducible comparisons. Already published hashed assets remain available at their original URLs so open tabs can still start lazy workers. Reference releases do not redirect to the latest app. Temporary publishing files are removed after the push.
 
 For subsequent edits, commit and push `main`, run checks, then run `npm run deploy:pages` again. Source pushes alone do not update the hosted app.
 

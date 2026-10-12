@@ -5,6 +5,7 @@ import { validateSignal } from '../pairing-validation';
 import {
   CHECKPOINT_BYTES,
   FRAME_BYTES,
+  LEGACY_TRANSFER_WINDOW_BYTES,
   STRIPED_FRAME_BYTES,
   TRANSFER_WINDOW_BYTES,
   VERSION,
@@ -144,10 +145,14 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     return this.selective ? this.negotiatedFrameBytes : FRAME_BYTES;
   }
   get sendFrameBytes() {
-    // Large messages reduce receiver work on healthy links. Keep small frames
-    // during warmup/slow delivery so one message cannot dominate a weak path.
+    // Large messages reduce receiver work on nearby links. At longer native
+    // delivery delays, smaller messages avoid expensive SCTP fragmentation.
     const { timelyBytes, queueDelay } = this.deliveryFeedback();
-    return timelyBytes >= CHECKPOINT_BYTES / 2 && queueDelay <= 100
+    const delay = this.scheduler.minimumReceiptDelay(this.healthyLanes());
+    return timelyBytes >= CHECKPOINT_BYTES / 2 &&
+      queueDelay <= 100 &&
+      delay !== undefined &&
+      delay <= 40
       ? this.frameBytes
       : FRAME_BYTES;
   }
@@ -163,7 +168,8 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       timelyBytes >= 8 * CHECKPOINT_BYTES
     )
       return Math.min(
-        TRANSFER_WINDOW_BYTES - 64 * 1024,
+        // Storage can overlap eight checkpoints without enlarging native queues.
+        LEGACY_TRANSFER_WINDOW_BYTES - 64 * 1024,
         this.healthyLanes().length * CHECKPOINT_BYTES,
       );
     if (timelyBytes >= 4 * CHECKPOINT_BYTES) return 2 * CHECKPOINT_BYTES;

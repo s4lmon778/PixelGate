@@ -2,7 +2,9 @@ import { spawnSync } from 'node:child_process';
 import {
   cpSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
+  readFileSync,
   readdirSync,
   rmSync,
   writeFileSync,
@@ -31,6 +33,9 @@ const author = {
   email: run(['git', 'config', 'user.email']),
 };
 const source = run(['git', 'rev-parse', 'HEAD']);
+const version = JSON.parse(
+  readFileSync(join(root, 'package.json'), 'utf8'),
+).version;
 if (run(['git', 'status', '--porcelain', '--untracked-files=normal']))
   throw new Error('Commit source changes before publishing.');
 const temp = mkdtempSync(join(tmpdir(), 'pixelgate-pages-'));
@@ -46,9 +51,29 @@ try {
   if (previous) {
     run(['git', 'fetch', '--depth=1', 'origin', 'gh-pages'], temp);
     run(['git', 'checkout', '-B', 'gh-pages', 'FETCH_HEAD'], temp);
+    const metadata = join(temp, 'build.json');
+    if (existsSync(metadata)) {
+      const prior = JSON.parse(readFileSync(metadata, 'utf8'));
+      if (
+        typeof prior.version === 'string' &&
+        /^\d+\.\d+\.\d+$/.test(prior.version) &&
+        prior.version !== version
+      ) {
+        const reference = join(temp, 'releases', prior.version);
+        if (!existsSync(reference)) {
+          mkdirSync(reference, { recursive: true });
+          for (const entry of readdirSync(temp)) {
+            if (entry !== '.git' && entry !== 'releases')
+              cpSync(join(temp, entry), join(reference, entry), {
+                recursive: true,
+              });
+          }
+        }
+      }
+    }
   }
   for (const entry of readdirSync(temp))
-    if (entry !== '.git')
+    if (entry !== '.git' && entry !== 'releases' && entry !== 'assets')
       rmSync(join(temp, entry), { recursive: true, force: true });
   for (const entry of readdirSync(join(root, 'dist')))
     cpSync(join(root, 'dist', entry), join(temp, entry), { recursive: true });
@@ -57,9 +82,7 @@ try {
     join(temp, 'build.json'),
     JSON.stringify({
       source_commit: source,
-      version: JSON.parse(
-        run(['node', '-p', 'JSON.stringify(require("./package.json"))']),
-      ).version,
+      version,
     }) + '\n',
   );
   if (!existsSync(join(temp, 'index.html')))

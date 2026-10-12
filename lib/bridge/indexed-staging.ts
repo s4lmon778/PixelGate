@@ -1,4 +1,4 @@
-import { CHECKPOINT_BYTES } from './model';
+import { CHECKPOINT_BYTES, TRANSFER_WINDOW_BYTES } from './model';
 
 // Bounded checkpoints stay in IndexedDB. Prefer Blob storage; browser contexts
 // that reject Blob cloning can commit ArrayBuffers instead. Existing records
@@ -198,7 +198,7 @@ export async function writeIndexedBatch(
   checked(id, offset);
   if (
     blocks.length < 1 ||
-    blocks.length > 4 ||
+    blocks.length > TRANSFER_WINDOW_BYTES / CHECKPOINT_BYTES ||
     blocks.some(
       (bytes, index) =>
         !(bytes instanceof ArrayBuffer) ||

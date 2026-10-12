@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StripedChannel } from '../lib/bridge/striped-channel';
 import {
   FRAME_BYTES,
+  LEGACY_TRANSFER_WINDOW_BYTES,
   CHECKPOINT_BYTES,
   STRIPED_FRAME_BYTES,
   TRANSFER_WINDOW_BYTES,
@@ -620,9 +621,13 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
           }),
         );
       }
-      expect(transport.sendBufferBytes).toBe(TRANSFER_WINDOW_BYTES - 64 * 1024);
+      expect(transport.sendBufferBytes).toBe(
+        LEGACY_TRANSFER_WINDOW_BYTES - 64 * 1024,
+      );
       expect(transport.pacingDelayMs).toBe(0);
-      expect(transport.sendFrameBytes).toBe(STRIPED_FRAME_BYTES);
+      expect(transport.sendFrameBytes).toBe(
+        latency <= 40 ? STRIPED_FRAME_BYTES : FRAME_BYTES,
+      );
       for (const channel of all) channel.bufferedAmount = 0;
       for (let i = 0; i < 4; i++)
         transport.send(new Uint8Array(FRAME_BYTES).buffer);
@@ -636,9 +641,13 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
       await vi.advanceTimersByTimeAsync(Math.max(300, latency * 3));
       expect(transport.snapshot().deprioritizedConnections).toBe(1);
       expect(transport.snapshot().replayedPackets).toBe(1);
-      expect(transport.sendBufferBytes).toBe(TRANSFER_WINDOW_BYTES - 64 * 1024);
+      expect(transport.sendBufferBytes).toBe(
+        LEGACY_TRANSFER_WINDOW_BYTES - 64 * 1024,
+      );
       expect(transport.pacingDelayMs).toBe(0);
-      expect(transport.sendFrameBytes).toBe(STRIPED_FRAME_BYTES);
+      expect(transport.sendFrameBytes).toBe(
+        latency <= 40 ? STRIPED_FRAME_BYTES : FRAME_BYTES,
+      );
       primary.receive(
         JSON.stringify({ type: 'pg-striped-receipt', received: [641] }),
       );
@@ -680,7 +689,9 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
         }),
       );
     }
-    expect(transport.sendBufferBytes).toBe(TRANSFER_WINDOW_BYTES - 64 * 1024);
+    expect(transport.sendBufferBytes).toBe(
+      LEGACY_TRANSFER_WINDOW_BYTES - 64 * 1024,
+    );
     expect(transport.burstBytes).toBe(512 * 1024);
     expect(transport.pacingDelayMs).toBe(0);
     // Even the largest allowed frame leaves space for transport control.

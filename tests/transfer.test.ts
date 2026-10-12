@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import {
   CHECKPOINT_BYTES,
   FRAME_BYTES,
+  LEGACY_TRANSFER_WINDOW_BYTES,
   TRANSFER_WINDOW_BYTES,
   type Control,
   type RecordFile,
@@ -104,6 +105,7 @@ class Channel {
   listeners = new Map<string, (() => void)[]>();
   transform?: (message: Control) => Control;
   binarySent = 0;
+  receiveWindowBytes?: number;
   send(value: string | Uint8Array) {
     if (typeof value === 'string' && this.transform)
       value = JSON.stringify(this.transform(JSON.parse(value)));
@@ -130,11 +132,13 @@ class Channel {
 function peers(
   update: (r: RecordFile) => void = () => {},
   folder?: FileSystemDirectoryHandle,
+  senderTransform?: (message: Control) => Control,
 ) {
   const a = new Channel(),
     b = new Channel();
   a.peer = b;
   b.peer = a;
+  a.transform = senderTransform;
   const errors: Error[] = [];
   const receiver = new Receiver(
     b as unknown as RTCDataChannel,
@@ -169,6 +173,41 @@ beforeEach(() => {
   state.batchSizes = [];
 });
 describe('receiver-owned verification and checkpoints', () => {
+  it('closes an invalid window handshake before any payload or storage opens', async () => {
+    const p = peers(undefined, undefined, (message) =>
+      message.type === 'hello'
+        ? { ...message, maxTransferWindowBytes: 0 }
+        : message,
+    );
+    await vi.waitFor(() => expect(p.a.readyState).toBe('closed'));
+    expect(p.errors[0].message).toContain('invalid transfer window');
+    expect(p.a.binarySent).toBe(0);
+    expect(state.opens).toEqual([]);
+    await p.receiver.close();
+  });
+  it('rechecks available channel credit for each file after a single-lane fallback', async () => {
+    const p = peers();
+    p.b.receiveWindowBytes = CHECKPOINT_BYTES;
+    const first = queue(CHECKPOINT_BYTES + 123);
+    await p.sender.run(first, 'one-path');
+    expect(first[0].phase).toBe('verified');
+    expect(p.receiver.snapshot().receiveWindowBytes).toBe(CHECKPOINT_BYTES);
+    p.b.receiveWindowBytes = TRANSFER_WINDOW_BYTES;
+    const second = queue(3 * CHECKPOINT_BYTES + 23);
+    second[0].path = 'following.bin';
+    await p.sender.run(second, 'all-paths');
+    expect(second[0].phase).toBe('verified');
+    expect(p.receiver.snapshot().receiveWindowBytes).toBe(
+      TRANSFER_WINDOW_BYTES,
+    );
+    expect(
+      createHash('sha256')
+        .update(state.bytes.get(second[0].record!.id)!)
+        .digest('hex'),
+    ).toBe(second[0].record!.sha256);
+    expect(p.errors).toEqual([]);
+    await p.receiver.close();
+  });
   it('holds new manifests until local cache maintenance finishes', async () => {
     const p = peers(),
       q = queue(123);
@@ -359,6 +398,38 @@ describe('receiver-owned verification and checkpoints', () => {
     }
     await run;
     expect(q[0].phase).toBe('verified');
+    await p.receiver.close();
+  });
+  it('advertises only four checkpoints to a sender without the new window capability', async () => {
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    state.beforeWrite = () => blocked;
+    const p = peers(undefined, undefined, (message) => {
+      if (message.type === 'hello') delete message.maxTransferWindowBytes;
+      return message;
+    });
+    const q = queue(TRANSFER_WINDOW_BYTES + 123);
+    const run = p.sender.run(q, 'older-sender');
+    try {
+      await vi.waitFor(() =>
+        expect(p.a.binarySent).toBe(LEGACY_TRANSFER_WINDOW_BYTES),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(p.a.binarySent).toBe(LEGACY_TRANSFER_WINDOW_BYTES);
+      expect(q[0].record?.bytes).toBe(0);
+    } finally {
+      release();
+    }
+    await run;
+    expect(q[0].phase).toBe('verified');
+    expect(p.errors).toEqual([]);
+    expect(
+      createHash('sha256')
+        .update(state.bytes.get(q[0].record!.id)!)
+        .digest('hex'),
+    ).toBe(q[0].record!.sha256);
     await p.receiver.close();
   });
   it.each([

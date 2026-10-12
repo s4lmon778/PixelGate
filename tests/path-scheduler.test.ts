@@ -15,6 +15,22 @@ function learn(
 }
 
 describe('delivery-aware scheduling', () => {
+  it('uses observed median latency without including unknown or excluded paths', () => {
+    const scheduler = new PathScheduler<string>();
+    expect(scheduler.minimumReceiptDelay(['unknown'])).toBeUndefined();
+    learn(scheduler, 'a', 20);
+    learn(scheduler, 'b', 30);
+    learn(scheduler, 'distant', 800);
+    expect(
+      scheduler.minimumReceiptDelay(['a', 'b', 'distant', 'unknown']),
+    ).toBe(30);
+    expect(scheduler.minimumReceiptDelay(['a', 'b'])).toBe(20);
+    expect(scheduler.minimumReceiptDelay(['distant'])).toBe(800);
+    scheduler.clear();
+    expect(
+      scheduler.minimumReceiptDelay(['a', 'b', 'distant']),
+    ).toBeUndefined();
+  });
   it('balances equal paths and retains the original fallback with insufficient observations', () => {
     const scheduler = new PathScheduler<string>();
     const paths = ['a', 'b'];
