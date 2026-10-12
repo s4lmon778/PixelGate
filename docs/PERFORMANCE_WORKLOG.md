@@ -432,3 +432,132 @@ all four assets and the distributed license match the tested build byte for
 byte. A fresh 360-pixel live browser shows 0.3.25 without page errors or
 horizontal overflow. Its first smoke check used an obsolete storage heading;
 the fixture was corrected to the current File cache label and passed.
+
+## 2026-10-12 loss experiments and paired-source diagnostics
+
+The clean 0.3.25 compiled build is the control for three new isolated candidates.
+Fresh WebKit senders transfer marked 32 MiB + 111-byte originals to disk-backed
+actual Chromium 101 IndexedDB receivers, with 9 ms native proxy latency in each
+direction and approximately 1% seeded encrypted application-packet loss. All
+five connections are proxied and all twelve stored originals independently
+match their source hashes. Seeds select comparable loss distributions, not
+identical dropped messages across different packet sequences.
+
+| Candidate                                                 |   Seed 7 |  Seed 13 |  Seed 31 | Mean Send-to-Verified |
+| --------------------------------------------------------- | -------: | -------: | -------: | --------------------: |
+| Published 0.3.25 settings                                 | 13.004 s | 12.824 s | 13.161 s |              12.996 s |
+| 8 KiB messages when queue delay exceeds 150 ms            | 18.230 s | 13.158 s | 16.573 s |              15.987 s |
+| 4 KiB messages under the same condition                   | 17.074 s | 20.054 s | 16.942 s |              18.023 s |
+| Keep primary for control, use open bulk lanes for payload | 13.139 s | 17.909 s | 16.620 s |              15.889 s |
+
+All three candidates are rejected: none provides a consistent improvement.
+The sanitized per-run measurements are retained in
+[`benchmarks/2026-10-12-loss-comparison.json`](benchmarks/2026-10-12-loss-comparison.json).
+They were built under `/tmp/pixelgate-speed-20261012/`; source changes were
+restored before further work. No tested speed setting is rolled back or
+published. Smaller messages were investigated because the data-channel
+specification describes SCTP fragmentation and possible association blocking
+([RFC 8831, section 6.6](https://www.rfc-editor.org/rfc/rfc8831.html#section-6.6));
+the results above do not support this particular adaptive rule.
+
+0.3.26 adds optional paired-source status to the receiving connection report.
+The missing iPhone report has prevented distinguishing a source read, pause,
+network backpressure and a missing durable acknowledgment in the physical
+20-second delivery stalls. Both peers advertise an optional capability; an
+older peer receives no new status messages. The sender shares only whitelisted
+states, visibility and numeric transport counts over its existing approved
+direct connection, at most once per two seconds, skipping a queued primary.
+No names, paths, addresses, hashes, file bytes or source user agent are shared.
+Status bypasses the ordered file sequence, never changes durable acknowledgment
+or flow credit, and diagnostic send failures do not stop transfers. The receiver
+keeps one validated sample, rate limits updates and reports its local sample age
+so a frozen sender/control path is not mistaken for a current measurement.
+
+The transfer window, frame selection, scheduling, checkpoint durability,
+verification and recovery settings remain unchanged. Subsequent work below adds
+source-read optimization; no physical-device speed gain is claimed.
+
+## App-managed retry and source-read experiments
+
+Partially reliable bulk lanes (`maxRetransmits: 0`) were investigated using the
+existing selective application receipts/retries. Control stayed reliable.
+Reliable delivery and limited browser retransmissions are specified in
+[WebRTC](https://www.w3.org/TR/webrtc/#rtcdatachannel). No such lane policy is
+retained in the product. Ordinary 16 KiB variants took 33.570 / 35.058 s for
+32 MiB, versus the approximately 13-second control. An 8 KiB variant took
+27.493 s in one run and closed during another, retaining a 27 MiB prefix; it
+is rejected. That fixture initially waited for Verified/Needs retry and did
+not recognize Paused as terminal. Its terminal-state guard was corrected.
+One PR trial overlapped an experimental build and is excluded from precise
+comparison; the first completed trials already showed a substantial regression.
+
+Retry-specific cooldown removal and a lower tail retry floor took
+15.718 / 16.123 / 16.175 s, all independently matching, and were also rejected.
+An ordinary reliable-lane experiment which clears cooldown only on a fresh,
+unreplayed receipt near that path's established baseline took
+12.955 / 11.772 / 12.410 s. Its small difference is not enough evidence to
+promote another network setting. None of these changes is published.
+
+Larger source reads were then tested without changing on-wire checkpoints.
+An unconditional four-MiB cache had inconsistent timings; yielding a browser
+task at cached-checkpoint boundaries made the read-delay model more consistent.
+With marked 400 MiB + 111-byte originals, actual Chromium 101 IndexedDB,
+18 ms native RTT, no configured packet loss and 50 ms extra notification time
+per **main-thread source read**, 0.3.25 took 23.452 / 23.509 s Send-to-Verified.
+The always-batched variant took 11.119 / 13.307 s with independent hashes;
+source reads dropped from 400 to 100. Hashing-worker reads were not delayed.
+Normal-read 400 MiB controls took 10.256 / 12.221 s versus 10.444 / 11.068 s.
+However, 1% loss trials of the always-batched version took
+16.036 / 13.872 / 14.444 s. It is therefore not retained unconditionally.
+
+The selected 0.3.26 reader starts with one-MiB reads. For files at least eight
+MiB, two consecutive **pipeline waits** of at least 40 ms enable bounded
+four-MiB source batches for that file. Measuring demand waits rather than the
+native read's duration avoids batching when prefetch already hides file I/O
+behind network/storage work. Current and prefetched source buffers remain at
+most eight MiB. Checkpoints, on-wire frame limits and receiver credit do not
+increase. Cached checkpoints yield a browser task; ordinary reads keep the
+existing pacing. Read failures remain caught even after cancellation, and
+short reads cancel the attempt while retaining committed prefixes.
+
+The adaptive reader takes 12.759 / 11.374 s in the 400 MiB read-delay model,
+versus the 23.452 / 23.509 s actual-release controls: means 12.067 / 23.481 s,
+about 94.6% higher throughput **in this model**, not a measured phone gain.
+All originals independently match. Six matched 1% loss controls, using the
+same new diagnostics and the batching gate either disabled or enabled, take
+13.863 / 13.991 s (seed 31), 13.543 / 14.523 s (13), and 11.643 / 10.769 s (7).
+Means are 13.016 / 13.094 s; variability is larger than the 0.6% mean difference.
+No larger reads occur in these network-bound cases. The receiving report now
+also retains validated session source-read counts, durations and actual
+pipeline wait totals, excluding source hashing, without file identifiers.
+
+An attempted older-source control could not typecheck against the new snapshot
+tests, so it was not used. The comparison control instead disables only the
+adaptive gate while keeping the exact new diagnostic/reader implementation.
+
+Final source-reader checks pass TypeScript, ESLint and 216 unit/integration
+cases, including deliberate blocking reads, ordinary reads and truncation of a
+larger read with a protected two-MiB durable prefix. The production build passes.
+Nine final browser cases pass with six intentional engine/capability skips,
+including 400 MiB original transfers/downloads through both durable backends,
+independent hashes, raw/old transport, lane failure, recovery, held source reads,
+pause/resume and reconnect. Actual Chromium 101 passes four cache/storage/source
+cases and both directions of pairing with actual 0.3.25 plus a new/new 16 MiB
+control, all independently hashed. The earlier metadata-only full run had
+75 passes, 17 skips and one WebKit timeout after verification; the unchanged
+isolated case and actual 0.3.25 version-pinned control both pass in 9.8 seconds.
+The first old-release control used the current-version assertion and failed;
+the fixture now permits an explicit expected release version without weakening
+normal current-version checks. The throughput fixture also uses the reported
+storage backend for readback instead of assuming OPFS from API presence.
+
+Per-run source-read and matched-loss measurements are retained in
+[`benchmarks/2026-10-12-source-read-comparison.json`](benchmarks/2026-10-12-source-read-comparison.json).
+The user cannot recover the old iPhone reports. Do not request them again;
+new paired-source snapshots can accompany a future physical timing instead.
+The requested physical 50% gain remains unverified.
+
+Final no-added-read-delay 400 MiB native controls take 10.241 / 10.626 s on the
+adaptive version versus 10.256 / 12.221 s on actual 0.3.25. All originals match,
+all five paths are proxied, and ordinary reads stay at one MiB (401 completed
+reads including the final 111-byte tail). No network-mode replacement is made.

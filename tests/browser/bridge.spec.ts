@@ -258,7 +258,9 @@ for (const mode of [
           .getByLabel('Connection report', { exact: true })
           .innerText();
         const route = JSON.parse(routeReport);
-        expect(route.version).toBe(packageInfo.version);
+        expect(route.version).toBe(
+          process.env.PIXELGATE_TEST_APP_VERSION ?? packageInfo.version,
+        );
         expect(route.localCandidates).toHaveProperty('host');
         expect(routeReport).not.toMatch(
           /a=candidate:|\.local|(?:\d{1,3}\.){3}\d{1,3}/,

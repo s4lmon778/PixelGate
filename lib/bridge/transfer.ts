@@ -508,6 +508,13 @@ export class Sender {
   private stage = 'idle';
   private stageStarted = performance.now();
   private cancelAll = false;
+  private sourceReads = 0;
+  private sourceReadBytes = 0;
+  private sourceReadTotalMs = 0;
+  private sourceReadLastMs = 0;
+  private sourceReadMaximumMs = 0;
+  private sourceWaitMs = 0;
+  private sourceWaitMaximumMs = 0;
   private cancelFile = false;
   private current?: RecordFile;
   private inbox: Control[] = [];
@@ -557,6 +564,17 @@ export class Sender {
       stage: this.stage,
       stageElapsedMs: Math.round(performance.now() - this.stageStarted),
       paused: this.paused,
+      sourceReads: {
+        calls: this.sourceReads,
+        bytes: this.sourceReadBytes,
+        lastMs: Math.round(this.sourceReadLastMs),
+        averageMs: this.sourceReads
+          ? Math.round(this.sourceReadTotalMs / this.sourceReads)
+          : 0,
+        maximumMs: Math.round(this.sourceReadMaximumMs),
+        waitedMs: Math.round(this.sourceWaitMs),
+        maximumWaitMs: Math.round(this.sourceWaitMaximumMs),
+      },
     };
   }
   private processing(stage: string) {
@@ -768,16 +786,73 @@ export class Sender {
             q.record = { ...record, bytes: ack.offset, phase: 'transferring' };
             this.changed(q);
           };
-          // Keep just one checkpoint read ahead while the current block travels.
-          // Resolve failures into data so cancellation cannot orphan a rejection.
+          // Enlarge reads only when source waits repeatedly limit the pipeline.
+          // Network-bound transfers retain the existing one-MiB reads. Larger
+          // reads still send one-MiB checkpoints and retain at most eight MiB
+          // in current/prefetched source batches, without adding wire credit.
+          let largeSourceReads = false;
+          let slowSourceWaits = 0;
+          let sourceBatch:
+            | {
+                start: number;
+                end: number;
+                result: Promise<
+                  { block: Uint8Array<ArrayBuffer> } | { error: unknown }
+                >;
+              }
+            | undefined;
+          const readBatch = async (start: number, end: number) => {
+            const began = performance.now();
+            try {
+              const data = await q.file.slice(start, end).arrayBuffer();
+              this.sourceReadBytes += data.byteLength;
+              return { block: new Uint8Array(data) };
+            } catch (error: unknown) {
+              // Resolve failures into data so cancellation cannot orphan a rejection.
+              return { error };
+            } finally {
+              const elapsed = performance.now() - began;
+              this.sourceReads++;
+              this.sourceReadLastMs = elapsed;
+              this.sourceReadTotalMs += elapsed;
+              this.sourceReadMaximumMs = Math.max(
+                this.sourceReadMaximumMs,
+                elapsed,
+              );
+            }
+          };
           const read = (start: number) => {
             const end = Math.min(start + CHECKPOINT_BYTES, record.size);
-            return Promise.resolve()
-              .then(() => q.file.slice(start, end).arrayBuffer())
-              .then(
-                (data) => ({ block: new Uint8Array(data), end }),
-                (error: unknown) => ({ error }),
+            if (!sourceBatch || start >= sourceBatch.end) {
+              const batchEnd = Math.min(
+                start + CHECKPOINT_BYTES * (largeSourceReads ? 4 : 1),
+                record.size,
               );
+              sourceBatch = {
+                start,
+                end: batchEnd,
+                result: Promise.resolve().then(() =>
+                  readBatch(start, batchEnd),
+                ),
+              };
+            }
+            const batch = sourceBatch;
+            return batch.result.then((value) => {
+              if ('error' in value) return value;
+              if (value.block.length !== batch.end - batch.start)
+                return {
+                  error: new Error(
+                    'Source file changed. Reselect it and retry.',
+                  ),
+                };
+              return {
+                block: value.block.subarray(
+                  start - batch.start,
+                  end - batch.start,
+                ),
+                end,
+              };
+            });
           };
           let nextBlock = offset < record.size ? read(offset) : undefined;
           while (offset < record.size) {
@@ -797,7 +872,18 @@ export class Sender {
               continue;
             }
             this.processing('reading-source');
+            const waitBegan = performance.now();
             const reading = await nextBlock!;
+            const waited = performance.now() - waitBegan;
+            this.sourceWaitMs += waited;
+            this.sourceWaitMaximumMs = Math.max(
+              this.sourceWaitMaximumMs,
+              waited,
+            );
+            if (!largeSourceReads && record.size >= 8 * CHECKPOINT_BYTES) {
+              slowSourceWaits = waited >= 40 ? slowSourceWaits + 1 : 0;
+              largeSourceReads = slowSourceWaits >= 2;
+            }
             this.processing('sending');
             if ('error' in reading) {
               control(this.channel, { type: 'cancel', id: record.id });
@@ -843,6 +929,13 @@ export class Sender {
             }
             offset = end;
             checkpoints.push(end);
+            if (largeSourceReads && offset < record.size) {
+              // Cached source views may already be ready. Service native packet
+              // and UI tasks across checkpoint boundaries as well as within one.
+              this.processing('yielding-to-browser');
+              await pacer.yield(this.channel.pacingDelayMs ?? 4);
+              this.processing('sending');
+            }
           }
           while (checkpoints.length) await acknowledge();
           q.phase = 'verifying';

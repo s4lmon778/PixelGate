@@ -2,6 +2,11 @@ import { CandidateInbox } from './candidate-inbox';
 import { PathScheduler } from './path-scheduler';
 import { LanRoute, lanAddress } from './lan-route';
 import { deviceKind, peerDevice } from './device';
+import {
+  sourceStatus,
+  type SourceState,
+  type SourceStatus,
+} from './source-status';
 import { validateSignal } from '../pairing-validation';
 import {
   CHECKPOINT_BYTES,
@@ -90,6 +95,10 @@ export class StripedChannel extends EventTarget implements TransferChannel {
   >();
   private deliveredBytes = 0;
   private lastDeliveryAt = 0;
+  private sourceStatusEnabled = false;
+  private lastSourceStatusSent = -Infinity;
+  private lastSourceStatusReceived = -Infinity;
+  private peerSourceStatus?: SourceStatus;
   constructor(
     private primary: RTCDataChannel,
     private role: 'send' | 'receive',
@@ -115,6 +124,8 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       this.receipts = [];
       this.cooldown.clear();
       this.scheduler.clear();
+      this.peerSourceStatus = undefined;
+      this.sourceStatusEnabled = false;
       this.senderAddress = '';
       this.dispatchEvent(new Event('close'));
     });
@@ -281,7 +292,40 @@ export class StripedChannel extends EventTarget implements TransferChannel {
         ? { paths: receivedPaths, measurement: 'receiver-wire-bytes' as const }
         : {}),
       frameBytes: this.frameBytes,
+      ...(this.role === 'receive' && this.peerSourceStatus
+        ? {
+            source: {
+              ...this.peerSourceStatus,
+              sampleAgeMs: Math.round(
+                performance.now() - this.lastSourceStatusReceived,
+              ),
+            },
+          }
+        : {}),
     };
+  }
+  publishSourceStatus(state: SourceState) {
+    const now = performance.now();
+    if (
+      this.role !== 'send' ||
+      !this.sourceStatusEnabled ||
+      this.stopped ||
+      this.readyState !== 'open' ||
+      now - this.lastSourceStatusSent < 2000 ||
+      this.primary.bufferedAmount > 64 * 1024
+    )
+      return;
+    const transfer = this.snapshot();
+    const status = sourceStatus({ ...transfer, ...state });
+    if (!status) return;
+    try {
+      // Optional metadata travels only over the approved direct connection.
+      // It bypasses ordered file sequences and never consumes transfer credit.
+      this.primary.send(JSON.stringify({ type: 'pg-source-status', status }));
+      this.lastSourceStatusSent = now;
+    } catch {
+      // Optional diagnostics cannot abort or pause a file transfer.
+    }
   }
   async prepare() {
     if (!this.negotiated || this.openLanes().length === this.laneCount) return;
@@ -383,6 +427,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
           stripedReceipts: 1,
           stripedLanes: MAX_LANES,
           stripedFrameBytes: STRIPED_FRAME_BYTES,
+          sourceStatus: 1,
         });
     }
     if (
@@ -591,6 +636,8 @@ export class StripedChannel extends EventTarget implements TransferChannel {
         const value = JSON.parse(data);
         if (value.type === 'hello') {
           if (value.version === VERSION)
+            this.sourceStatusEnabled = value.sourceStatus === 1;
+          if (value.version === VERSION)
             this.dispatchEvent(
               new CustomEvent('peer-device', {
                 detail: peerDevice(value.deviceKind),
@@ -618,6 +665,20 @@ export class StripedChannel extends EventTarget implements TransferChannel {
                 void this.offer(index);
           }
           this.deliver(data);
+        } else if (value.type === 'pg-source-status') {
+          const now = performance.now();
+          if (
+            !bulk &&
+            this.role === 'receive' &&
+            this.sourceStatusEnabled &&
+            now - this.lastSourceStatusReceived >= 1000
+          ) {
+            const status = sourceStatus(value.status);
+            if (status) {
+              this.peerSourceStatus = status;
+              this.lastSourceStatusReceived = now;
+            }
+          }
         } else if (value.type === 'pg-lane') {
           if (
             !this.negotiated ||

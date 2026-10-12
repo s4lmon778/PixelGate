@@ -659,7 +659,7 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
           ...metrics,
           ...{ receiverMetrics, transport, receivingReport },
         });
-        const storedHash = await receiver.evaluate(async () => {
+        const storedHash = await receiver.evaluate(async (backend: string) => {
           const database = await new Promise<IDBDatabase>((resolve) => {
             const request = indexedDB.open('pixelbridge-v1', 3);
             request.onsuccess = () => resolve(request.result);
@@ -673,7 +673,7 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
           });
           database.close();
           let file: Blob;
-          if (navigator.storage.getDirectory) {
+          if (backend === 'opfs') {
             const root = await (
               await navigator.storage.getDirectory()
             ).getDirectoryHandle('pixelbridge');
@@ -707,7 +707,7 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
           return Array.from(new Uint8Array(hash), (byte) =>
             byte.toString(16).padStart(2, '0'),
           ).join('');
-        });
+        }, receivingReport.storageMode);
         expect(storedHash).toBe(expected);
         if (mode === 'pipeline-local') {
           await sender

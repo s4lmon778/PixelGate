@@ -155,6 +155,13 @@ export default function PixelGate() {
   const connectionReport = currentReport ?? savedReport;
   useEffect(() => {
     if (!room?.diagnostics || transport.current?.readyState !== 'open') return;
+    const source = sender.current?.snapshot();
+    if (source)
+      transport.current.publishSourceStatus({
+        ...source,
+        visibility:
+          document.visibilityState === 'hidden' ? 'hidden' : 'visible',
+      });
     const report: ConnectionReport = {
       version,
       role,
@@ -1547,8 +1554,9 @@ export default function PixelGate() {
                           <p className="hint">
                             Local connection states, route types, latency, and
                             transfer buffers. No IP addresses, pairing codes,
-                            filenames, or file data. This report is never
-                            uploaded automatically.
+                            filenames, or file data. Sender status is shared
+                            with the paired receiver. Reports are never sent to
+                            a diagnostics service.
                           </p>
                           {!currentReport && (
                             <p className="hint">

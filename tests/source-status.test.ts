@@ -1,0 +1,72 @@
+import { describe, expect, it } from 'vitest';
+import { sourceStatus } from '../lib/bridge/source-status';
+
+const sample = {
+  stage: 'network-backpressure',
+  stageElapsedMs: 21000,
+  paused: false,
+  visibility: 'visible',
+  connections: 5,
+  unreceivedBytes: 262144,
+  oldestUnreceivedMs: 21000,
+  receiptDelayMs: 20,
+  queuedDelayMs: 100,
+  replayedPackets: 3,
+  sendBufferBytes: 262144,
+  sendFrameBytes: 16384,
+  deprioritizedConnections: 1,
+};
+
+describe('paired sender status', () => {
+  it('retains only states and counts, never arbitrary source metadata', () => {
+    expect(
+      sourceStatus({
+        ...sample,
+        filename: 'private.mp4',
+        address: 'private-address',
+        token: 'pairing-token',
+        bytes: [1, 2, 3],
+      }),
+    ).toEqual(sample);
+  });
+  it('retains bounded read timing counters without forwarding nested source metadata', () => {
+    const reads = {
+      calls: 100,
+      bytes: 400 * 1024 * 1024,
+      lastMs: 50,
+      averageMs: 50,
+      maximumMs: 60,
+      waitedMs: 200,
+      maximumWaitMs: 50,
+    };
+    expect(
+      sourceStatus({
+        ...sample,
+        sourceReads: {
+          ...reads,
+          filename: 'private.mov',
+          address: 'private-address',
+        },
+      }),
+    ).toEqual({ ...sample, sourceReads: reads });
+    expect(
+      sourceStatus({ ...sample, sourceReads: { ...reads, maximumWaitMs: -1 } }),
+    ).toBeUndefined();
+  });
+  it.each([
+    null,
+    {},
+    { ...sample, stage: 'private-filename' },
+    { ...sample, visibility: 'private-address' },
+    { ...sample, paused: 'false' },
+    { ...sample, connections: 6 },
+    { ...sample, unreceivedBytes: -1 },
+    { ...sample, oldestUnreceivedMs: Infinity },
+    { ...sample, receiptDelayMs: NaN },
+    { ...sample, queuedDelayMs: 0.5 },
+    { ...sample, sendBufferBytes: Number.MAX_SAFE_INTEGER + 1 },
+    { ...sample, replayedPackets: undefined },
+  ])('ignores invalid optional telemetry without trusting it: %j', (value) => {
+    expect(sourceStatus(value)).toBeUndefined();
+  });
+});

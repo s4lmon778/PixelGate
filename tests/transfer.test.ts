@@ -181,6 +181,87 @@ beforeEach(() => {
   state.batchSizes = [];
 });
 describe('receiver-owned verification and checkpoints', () => {
+  it('batches repeated blocking source reads while retaining exact bytes and one-MiB durable checkpoints', async () => {
+    const p = peers();
+    Object.assign(p.a, { burstBytes: CHECKPOINT_BYTES, pacingDelayMs: 0 });
+    const q = queue(12 * CHECKPOINT_BYTES + 111);
+    const slice = q[0].file.slice.bind(q[0].file);
+    const ranges: number[] = [];
+    vi.spyOn(q[0].file, 'slice').mockImplementation((start, end, type) => {
+      const part = slice(start, end, type);
+      ranges.push(part.size);
+      const read = part.arrayBuffer.bind(part);
+      vi.spyOn(part, 'arrayBuffer').mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return read();
+      });
+      return part;
+    });
+    await p.sender.run(q, 'slow-source-batches');
+    expect(q[0].phase).toBe('verified');
+    expect(ranges.slice(0, 2)).toEqual([CHECKPOINT_BYTES, CHECKPOINT_BYTES]);
+    expect(ranges).toContain(4 * CHECKPOINT_BYTES);
+    expect(Math.max(...ranges)).toBeLessThanOrEqual(4 * CHECKPOINT_BYTES);
+    expect(ranges.length).toBeLessThan(13);
+    expect(p.sender.snapshot().sourceReads.bytes).toBe(q[0].file.size);
+    expect(
+      p.sender.snapshot().sourceReads.maximumWaitMs,
+    ).toBeGreaterThanOrEqual(40);
+    expect(state.writtenBuffers.every((block) => block.byteLength === 0)).toBe(
+      true,
+    );
+    expect(state.files.get(q[0].record!.id)?.bytes).toBe(q[0].file.size);
+    expect(
+      createHash('sha256')
+        .update(state.bytes.get(q[0].record!.id)!)
+        .digest('hex'),
+    ).toBe(q[0].record!.sha256);
+    expect(p.errors).toEqual([]);
+    await p.receiver.close();
+  });
+  it('keeps normal source reads small instead of enlarging them just because the file is large', async () => {
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(10);
+    const p = peers();
+    Object.assign(p.a, { burstBytes: CHECKPOINT_BYTES, pacingDelayMs: 0 });
+    const q = queue(8 * CHECKPOINT_BYTES + 111);
+    const slice = vi.spyOn(q[0].file, 'slice');
+    await p.sender.run(q, 'ordinary-source-reads');
+    expect(q[0].phase).toBe('verified');
+    expect(
+      slice.mock.calls.every(
+        ([start = 0, end = 0]) => end! - start! <= CHECKPOINT_BYTES,
+      ),
+    ).toBe(true);
+    expect(p.sender.snapshot().sourceReads.calls).toBe(9);
+    expect(p.errors).toEqual([]);
+    await p.receiver.close();
+    clock.mockRestore();
+  });
+  it('rejects a truncated larger source read and retains its already committed prefix', async () => {
+    const p = peers();
+    Object.assign(p.a, { burstBytes: CHECKPOINT_BYTES, pacingDelayMs: 0 });
+    const q = queue(12 * CHECKPOINT_BYTES + 111);
+    const slice = q[0].file.slice.bind(q[0].file);
+    vi.spyOn(q[0].file, 'slice').mockImplementation((start, end, type) => {
+      const part = slice(start, end, type);
+      const read = part.arrayBuffer.bind(part);
+      vi.spyOn(part, 'arrayBuffer').mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const bytes = await read();
+        return part.size > CHECKPOINT_BYTES
+          ? bytes.slice(0, CHECKPOINT_BYTES)
+          : bytes;
+      });
+      return part;
+    });
+    await p.sender.run(q, 'truncated-source-batch');
+    expect(q[0].phase).toBe('failed');
+    expect(q[0].error).toContain('Source file changed');
+    expect(state.files.get(q[0].record!.id)?.bytes).toBe(2 * CHECKPOINT_BYTES);
+    expect(state.bytes.get(q[0].record!.id)?.length).toBe(2 * CHECKPOINT_BYTES);
+    expect(state.files.get(q[0].record!.id)?.scope).toBe('none');
+    await p.receiver.close();
+  });
   it('distinguishes a pending source read from storage or transport waits', async () => {
     const p = peers();
     const q = queue();

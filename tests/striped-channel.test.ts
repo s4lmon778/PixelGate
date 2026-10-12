@@ -103,6 +103,97 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe('parallel transport compatibility, ordering, and fallback', () => {
+  it('shares sender status only with a capable peer, at bounded intervals and without file credit', () => {
+    let clock = 100;
+    vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    const primary = new Channel();
+    const transport = new StripedChannel(primary.native(), 'send');
+    opened.push(transport);
+    const state = {
+      stage: 'reading-source',
+      stageElapsedMs: 100,
+      paused: false,
+      visibility: 'visible' as const,
+    };
+    primary.receive(JSON.stringify({ type: 'hello', version: 1 }));
+    transport.publishSourceStatus(state);
+    expect(primary.sent).toEqual([]);
+    primary.receive(
+      JSON.stringify({ type: 'hello', version: 1, sourceStatus: 1 }),
+    );
+    transport.publishSourceStatus(state);
+    expect(primary.sent).toHaveLength(1);
+    expect(JSON.parse(primary.sent[0] as string)).toMatchObject({
+      type: 'pg-source-status',
+      status: { ...state, connections: 1, unreceivedBytes: 0 },
+    });
+    expect((primary.sent[0] as string).length).toBeLessThan(1024);
+    transport.publishSourceStatus(state);
+    expect(primary.sent).toHaveLength(1);
+    clock += 2000;
+    primary.bufferedAmount = 65537;
+    transport.publishSourceStatus(state);
+    expect(primary.sent).toHaveLength(1);
+    primary.bufferedAmount = 0;
+    transport.publishSourceStatus({
+      ...state,
+      paused: true,
+      visibility: 'hidden',
+    });
+    expect(primary.sent).toHaveLength(2);
+    expect(transport.snapshot().unreceivedBytes).toBe(0);
+    clock += 2000;
+    const send = vi.spyOn(primary, 'send').mockImplementationOnce(() => {
+      throw new Error('diagnostic send failure');
+    });
+    expect(() => transport.publishSourceStatus(state)).not.toThrow();
+    expect(primary.readyState).toBe('open');
+    send.mockRestore();
+    vi.restoreAllMocks();
+  });
+  it('retains bounded sender samples separately from ordered bytes and labels stale reports', () => {
+    let clock = 100;
+    vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    const { primary, transport, received } = receiver();
+    opened.push(transport);
+    const status = {
+      stage: 'waiting-for-ack',
+      stageElapsedMs: 23000,
+      paused: false,
+      visibility: 'visible',
+      connections: 5,
+      unreceivedBytes: 0,
+      oldestUnreceivedMs: 0,
+      receiptDelayMs: 20,
+      queuedDelayMs: 0,
+      replayedPackets: 3,
+      sendBufferBytes: 262144,
+      sendFrameBytes: 16384,
+      deprioritizedConnections: 0,
+    };
+    const wire = JSON.stringify({ type: 'pg-source-status', status });
+    primary.receive(wire);
+    expect(transport.snapshot().source).toBeUndefined();
+    primary.receive(
+      JSON.stringify({ type: 'hello', version: 1, sourceStatus: 1 }),
+    );
+    const before = received.length;
+    primary.receive(wire);
+    expect(received).toHaveLength(before);
+    expect(transport.snapshot().source).toEqual({ ...status, sampleAgeMs: 0 });
+    clock += 25000;
+    primary.receive(
+      JSON.stringify({
+        type: 'pg-source-status',
+        status: { ...status, connections: -1 },
+      }),
+    );
+    expect(transport.snapshot().source?.sampleAgeMs).toBe(25000);
+    expect(primary.readyState).toBe('open');
+    primary.close();
+    expect(transport.snapshot().source).toBeUndefined();
+    vi.restoreAllMocks();
+  });
   it('exchanges broad device kinds in existing hellos without changing legacy transfer behavior', () => {
     const primary = new Channel();
     const transport = new StripedChannel(primary.native(), 'receive');
