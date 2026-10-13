@@ -19,6 +19,18 @@ const sourceCPU = Number(process.env.PIXELGATE_NATIVE_SOURCE_CPU || 1);
 if (!Number.isInteger(sourceCPU) || sourceCPU < 1 || sourceCPU > 20)
   throw new Error('Source CPU model must be an integer from 1 to 20.');
 const latency = Number(process.env.PIXELGATE_NATIVE_ONE_WAY_MS || 0);
+const linkBytesPerSecond = Number(
+  process.env.PIXELGATE_NATIVE_LINK_BYTES_PER_SECOND || 0,
+);
+if (
+  !Number.isSafeInteger(linkBytesPerSecond) ||
+  linkBytesPerSecond < 0 ||
+  (linkBytesPerSecond > 0 &&
+    (linkBytesPerSecond < 1024 * 1024 ||
+      linkBytesPerSecond > 1024 * 1024 * 1024))
+)
+  throw new Error('Shared link must be zero or 1 MiB/s–1 GiB/s.');
+let transmissionAt = 0;
 const variant = process.env.PIXELGATE_NATIVE_LABEL || 'candidate';
 const storageDelay = Number(process.env.PIXELGATE_NATIVE_STORAGE_DELAY_MS || 0);
 const sourceDelay = Number(
@@ -28,9 +40,9 @@ if (!Number.isInteger(sourceDelay) || sourceDelay < 0 || sourceDelay > 1000)
   throw new Error('Invalid source delay');
 const trial = process.env.PIXELGATE_NATIVE_TRIAL || '1';
 const direct = process.env.PIXELGATE_NATIVE_DIRECT === '1';
-if (direct && (latency || lossPermille))
+if (direct && (latency || lossPermille || linkBytesPerSecond))
   throw new Error(
-    'Direct mode bypasses proxy latency and loss; set both to zero.',
+    'Direct mode bypasses proxy latency, loss and link capacity; set all to zero.',
   );
 const bytes =
   Number(process.env.PIXELGATE_NATIVE_MIB || 32) * 1024 * 1024 + 111;
@@ -100,11 +112,21 @@ for (let index = 0; index < 10; index++) {
       }
       stats.queuedBytes += packet.length;
       stats.maxQueuedBytes = Math.max(stats.maxQueuedBytes, stats.queuedBytes);
-      const timer = setTimeout(() => {
-        timers.delete(timer);
-        stats.queuedBytes -= packet.length;
-        sockets[1 - side].send(packet, target.port, target.address);
-      }, latency);
+      // All five connections share this synthetic medium, including return
+      // traffic. This is a capacity model, not an additional physical route.
+      const now = performance.now();
+      if (linkBytesPerSecond)
+        transmissionAt =
+          Math.max(now, transmissionAt) +
+          (packet.length * 1000) / linkBytesPerSecond;
+      const timer = setTimeout(
+        () => {
+          timers.delete(timer);
+          stats.queuedBytes -= packet.length;
+          sockets[1 - side].send(packet, target.port, target.address);
+        },
+        latency + (linkBytesPerSecond ? transmissionAt - now : 0),
+      );
       timers.add(timer);
     }),
   );
@@ -429,6 +451,7 @@ try {
   const result = {
     variant,
     latency,
+    linkBytesPerSecond,
     lossSeed,
     storageDelay,
     sourceDelay,

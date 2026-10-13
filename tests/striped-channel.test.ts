@@ -891,6 +891,80 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
     expect(transport.snapshot().replayedPackets).toBe(8);
     vi.restoreAllMocks();
   });
+  it.each([
+    [200, 220],
+    [2000, 500],
+  ])(
+    'allows a path with a %i ms late receipt bounded grace before replay at %i ms',
+    async (lateReceipt, grace) => {
+      let clock = 0;
+      vi.spyOn(performance, 'now').mockImplementation(() => clock);
+      const primary = new Channel();
+      const transport = new StripedChannel(primary.native(), 'send');
+      opened.push(transport);
+      primary.receive(
+        JSON.stringify({
+          type: 'hello',
+          version: 1,
+          stripedTransport: 1,
+          stripedReceipts: 1,
+          stripedLanes: 4,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      for (const peer of Peer.peers) {
+        peer.channel.readyState = 'open';
+        peer.channel.dispatchEvent(new Event('open'));
+      }
+      const all = [primary, ...Peer.peers.map((peer) => peer.channel)];
+      const send = () => {
+        for (let i = 0; i < 5; i++) transport.send(new Uint8Array(FRAME_BYTES));
+        for (const channel of all) channel.bufferedAmount = 0;
+      };
+      const receipt = (received: number[]) =>
+        primary.receive(
+          JSON.stringify({ type: 'pg-striped-receipt', received }),
+        );
+      send();
+      clock = 20;
+      receipt([0, 1, 2, 3, 4]);
+      send();
+      clock = 40;
+      receipt([6, 7, 8, 9]);
+      clock = 20 + lateReceipt;
+      receipt([5]);
+      send();
+      clock += 20;
+      receipt([11, 12, 13, 14]);
+      const sentAt = 20 + lateReceipt;
+      clock = sentAt + 100;
+      await vi.advanceTimersByTimeAsync(20);
+      // Faster peers proved a gap, but the original path has not exceeded its
+      // own learned delay yet. No extra copy or retained credit is created.
+      expect(transport.snapshot().replayedPackets).toBe(0);
+      expect(transport.snapshot().unreceivedBytes).toBe(FRAME_BYTES + 8);
+      clock = sentAt + grace;
+      await vi.advanceTimersByTimeAsync(20);
+      expect(transport.snapshot().replayedPackets).toBe(1);
+      expect(
+        all
+          .slice(1)
+          .some((channel) =>
+            channel.sent.some(
+              (data) =>
+                data instanceof ArrayBuffer &&
+                new DataView(data).getUint32(4) === 10,
+            ),
+          ),
+      ).toBe(true);
+      receipt([10]);
+      expect(transport.snapshot().unreceivedBytes).toBe(0);
+      clock += 5000;
+      await vi.advanceTimersByTimeAsync(20);
+      expect(transport.snapshot().replayedPackets).toBe(1);
+      vi.restoreAllMocks();
+    },
+  );
   it('selectively receipts displaced packets without delivering them before the missing prefix', async () => {
     const primary = new Channel(),
       transport = new StripedChannel(primary.native(), 'receive');

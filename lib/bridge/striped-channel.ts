@@ -584,7 +584,15 @@ export class StripedChannel extends EventTarget implements TransferChannel {
           10000,
           Math.max(
             sequence < this.highestReceived ? (nearby ? 50 : 250) : 2000,
-            nearby ? Math.min(250, this.delay * 2) : this.delay * 3,
+            // Receipt batches from fast siblings must not make a slower path's
+            // healthy packet look lost. Retain quick recovery and bound this
+            // extra grace to 500 ms; tail recovery and backoff stay unchanged.
+            nearby
+              ? Math.max(
+                  Math.min(250, this.delay * 2),
+                  Math.min(500, this.scheduler.receiptDelay(packet.lane) * 2),
+                )
+              : this.delay * 3,
           ) *
             2 ** Math.min(packet.retries, 3),
         )

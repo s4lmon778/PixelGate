@@ -74,7 +74,8 @@ export function DeviceConnection({
               public/third-party-notices.txt. CSS animates a fixed SVG, without JS ticks. */}
           <svg
             className="connection-track"
-            viewBox="0 0 100 24"
+            viewBox="0 0 100 32"
+            preserveAspectRatio="none"
             fill="none"
             aria-hidden="true"
             focusable="false"
@@ -84,8 +85,8 @@ export function DeviceConnection({
                 id={beamId}
                 x1="-32"
                 x2="-2"
-                y1="12"
-                y2="12"
+                y1="17"
+                y2="17"
                 gradientUnits="userSpaceOnUse"
               >
                 <stop stopColor="currentColor" stopOpacity="0" />
@@ -100,21 +101,22 @@ export function DeviceConnection({
             </defs>
             <path
               className="connection-rail"
-              d="M 2 12 H 96"
+              d="M 2 17 H 96"
               stroke="currentColor"
               strokeWidth="1.5"
+              strokeDasharray="5 5"
               strokeLinecap="round"
             />
             <g className="connection-beam">
               <path
-                d="M -32 12 H -2"
+                d="M -32 17 H -2"
                 stroke={`url(#${beamId})`}
                 strokeWidth="3"
                 strokeLinecap="round"
               />
             </g>
             <path
-              d="m 90 7 6 5 -6 5"
+              d="m 90 12 6 5 -6 5"
               stroke="currentColor"
               strokeWidth="1.5"
               strokeLinecap="round"

@@ -1242,7 +1242,7 @@ h1 {
 }
 .connection-flow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 60px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) clamp(80px, 32%, 140px) minmax(0, 1fr);
   align-items: start;
   gap: 8px;
   margin-top: 10px;
@@ -1272,6 +1272,7 @@ h1 {
   display: block;
   font-size: 0.8125rem;
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 .connection-device small,
 .connection-direction small {
@@ -1285,6 +1286,7 @@ h1 {
   display: block;
   margin-top: 6px;
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 .connection-track {
   display: block;
@@ -1295,7 +1297,7 @@ h1 {
   color: var(--green);
 }
 .connection-rail {
-  opacity: 0.22;
+  opacity: 0.42;
 }
 .connection-beam {
   display: none;

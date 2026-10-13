@@ -92,6 +92,10 @@ export class PathScheduler<T> {
     return { queueDelay, timelyBytes };
   }
 
+  receiptDelay(path: T) {
+    return this.observations.get(path)?.delay ?? 0;
+  }
+
   minimumReceiptDelay(paths: T[]) {
     const delays = paths
       .map((path) => this.observations.get(path)?.minimumDelay)

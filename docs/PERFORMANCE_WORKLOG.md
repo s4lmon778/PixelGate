@@ -805,3 +805,100 @@ confirms the new three-button arrangement and reports no runtime errors or
 horizontal overflow. The initial exact footer-text locator failed because the
 footer includes additional text; the corrected footer contains-text check passes.
 The user's ongoing speed test was not refreshed or otherwise interrupted.
+
+## October 13 · 0.3.30 path-aware recovery and dashed connection visual
+
+The user reports both phones on 0.3.28 averaging roughly 5 MB/s, peaking at
+5.2 MB/s. The sender's retained batch reports 421,259,466 bytes, one verified
+file, no resumed/skipped bytes and 92,092 ms Send-to-Verified: approximately
+4.57 decimal MB/s including preparation and verification. Source reads average
+4 ms, maximum 10 ms, with only 3 ms of aggregate pipeline wait. The supplied
+Pixel photos confirm the entire same byte count accepted and durable, IndexedDB
+storage, 396 commits averaging 147 ms, and complete/unpaused receiving. Later
+connection failure/zero traffic is recorded minutes after completion; it does
+not invalidate the completed copy or establish a transfer-time storage stall.
+This establishes a successful new physical baseline, not proof that every part
+of the improvement came from software. The user explicitly asks to continue
+beyond the earlier 50% target.
+
+The sender records 736 application-level replays. These are not a packet-loss
+count: a delayed original can still arrive after its replay. Native reliable
+SCTP already performs retransmission and congestion control, as described by
+[RFC 8831](https://www.rfc-editor.org/rfc/rfc8831.html). Application repair across
+another connection can bypass a stalled path, but sending too early can add
+traffic. This motivates testing each path's own observed receipt delay instead
+of letting fast siblings shorten its recovery deadline.
+
+Four immutable candidates were compared before selecting the new policy:
+per-path delay doubled with a 500 ms ceiling; a smaller 1.5 multiplier with a
+250 ms ceiling; a wider short-link large-frame gate; and waiting up to 200 ms to
+coalesce slow IndexedDB writes. Larger frames were slower in the initial shared
+capacity pairs. Waiting reduced commits from about 32 to 19–20 but produced
+little timing benefit and more replays. The smaller multiplier also failed to
+reduce replays reliably. These alternatives are not in product source.
+
+Selected recovery retains the existing global deadline and also allows twice
+the original path's smoothed receipt delay, capped at 500 ms, only in the existing
+nearby-link mode (lower-median minimum receipt delay 8–40 ms). Missing prefixes
+still have a 50 ms floor, unproven tails a two-second floor, and retries retain
+exponential backoff plus the ten-second ceiling. Repair scans, eight-packet/eight-ms
+work bounds, native queue checks, receive credit and retained payload limits are
+unchanged. No native reliability, checkpoint ACK or readback requirement changes.
+
+The CLI now supports a shared synthetic capacity across every proxied connection
+and return packet, rather than granting each connection independent bandwidth.
+Validation rejects out-of-range rates and configured capacity in direct mode.
+This is a desktop-engine capacity experiment, not a physical Wi-Fi reproduction.
+All runs use native WebKit sending to actual Chromium 101 receiving, marked
+synthetic originals and independent stored-byte SHA-256. Comparisons run
+sequentially without concurrent builds/browser suites; order alternates in some
+pairs. A matching seed/settings does not guarantee an identical lost-payload
+pattern once candidates generate different retransmission traffic.
+
+The [sanitized numeric record](benchmarks/2026-10-13-path-recovery-research.json)
+contains **62 successful measured transfers**, all independently byte-verified:
+
+- Five matched clean shared-link pairs use 32 MiB + 111 bytes, 9 ms one-way delay,
+  a 6 MiB/s shared medium and 150 ms notification delay after actual strict
+  IndexedDB completion. Median Send-to-Verified changes from 8,179 to 7,689 ms:
+  **6.37% higher throughput**. Mean replays fall from 45.8 to 3.0 (93.45%).
+- The same five settings/seeds with about 1% encrypted-datagram loss change median
+  timing from 12,216 to 11,841 ms (3.17%). Mean replays fall from 34.2 to 3.2.
+  Individual candidate runs can be slower by roughly 7%; this is not a consistent
+  loss-path speed gain or a physical-device guarantee.
+- Eighteen uncapped controls cover clean, 1% and 3% loss across three seeds.
+  Timings vary and do not establish another universal speed gain. Median clean
+  timing is 1,442 versus 1,533 ms; 1% is 10,724 versus 10,859 ms; 3% is 17,986 versus
+  17,875 ms. These include fresh-context preparation and short transfers.
+- Three final-build direct pairs transfer 128 MiB + 111 bytes with zero proxy
+  traffic and zero application replays. Median first-payload timing is 2,569
+  versus 2,542 ms, essentially unchanged within run variation.
+- Two final-build longer-route pairs use 60 ms one-way delay. Observed per-path
+  minimum receipt delays are 120–122 ms, so the modified nearby branch does not
+  apply. All originals verify; timing differences are not attributed to this
+  change.
+
+The visual keeps the green theme, fixed SVG/CSS animation, pause behavior and
+reduced-motion preference. Its stem is dashed and responsive (80–140 px column,
+32% of available width), with a solid directional head. The stroke is moved down
+one CSS pixel relative to the circle centers for the requested optical alignment.
+There are no additional animation timers, controls or report buttons.
+
+TypeScript, ESLint, the production build and 225 unit/integration cases pass.
+New fault-injection cases prove a slower path's packet is not copied at 100 ms,
+receives its bounded learned grace, is eventually repaired on another path and
+releases all retained credit after receipt. Existing fast/nearby/long-delay,
+closed-lane, lost-tail, backoff and queue-bound cases remain.
+
+Final release checks pass **16 browser cases**: four modern Chromium cases cover
+400 MiB originals on each backend, byte-exact downloads, 125-file handoffs and
+nine transport/compatibility/recovery modes. Six Chromium/WebKit cases cover
+actual pairing, independent readback/export checks, reconnect, responsive layouts
+and enlarged text. Actual Chromium 101 passes six mobile/cache/selection and
+transport cases, including lost packets, closed lanes and 500 ms receipts.
+A separate actual Chromium 101 visual inspection checks both roles in phone-to-phone
+and computer-to-phone contexts, measures an approximately 99 px stem at 360 px,
+confirms the dashed stroke and exactly one-pixel optical offset, and checks 320 px
+with enlarged text. Screenshots were inspected; no runtime errors or horizontal
+overflow were observed. This validates the proposed release, not a new physical
+speed above the user's 5 MB/s report. Publication is recorded below.
