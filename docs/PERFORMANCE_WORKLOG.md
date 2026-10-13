@@ -751,3 +751,12 @@ The release keeps the green connection visual, compact file lists, save/history
 features and actual staged-cache cleanup. It adds no diagnostic UI or permission
 flow. The measured physical 50% goal remains unverified; this release is a
 bounded, conditional performance improvement rather than a claim of that goal.
+
+0.3.28 is published from `133f6cb74bde0255224fcf068017d9efd9e847c1`.
+GitHub Pages commit `21d0ffc226f7bb4225e3e1ecaf0b136908502457` reports built,
+with no error. Live build metadata matches the source/version, and HTML, all
+four compiled assets and the third-party notice match the tested distribution
+byte for byte. A fresh 360-pixel live Chromium check renders 0.3.28 without
+runtime errors or horizontal overflow. Its first locator used a nonexistent
+`v` prefix and timed out; the corrected footer-version locator passes. The
+physical 50% requirement remains unverified.
