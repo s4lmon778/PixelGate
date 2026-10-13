@@ -32,6 +32,15 @@ if (
   throw new Error('Shared link must be zero or 1 MiB/s–1 GiB/s.');
 let transmissionAt = 0;
 const variant = process.env.PIXELGATE_NATIVE_LABEL || 'candidate';
+const receiverEngine =
+  process.env.PIXELGATE_NATIVE_RECEIVER_ENGINE || 'chromium';
+if (!['chromium', 'webkit'].includes(receiverEngine))
+  throw new Error('Receiver engine must be chromium or webkit.');
+if (
+  receiverEngine === 'webkit' &&
+  process.env.PIXELGATE_NATIVE_RECEIVER_EXECUTABLE
+)
+  throw new Error('Custom receiver executable is supported only for Chromium.');
 const storageDelay = Number(process.env.PIXELGATE_NATIVE_STORAGE_DELAY_MS || 0);
 const sourceDelay = Number(
   process.env.PIXELGATE_NATIVE_SOURCE_READ_DELAY_MS || 0,
@@ -96,7 +105,19 @@ for (let index = 0; index < 10; index++) {
     await new Promise((resolve) => socket.bind(0, '127.0.0.1', resolve));
   const pair = { sockets, targets: [undefined, undefined] };
   sockets.forEach((socket, side) =>
-    socket.on('message', (packet) => {
+    socket.on('message', (packet, sender) => {
+      // A guessed mDNS endpoint may differ from the native socket reaching this
+      // fixture. Learn its IPv4 endpoint from STUN on the mapped proxy socket.
+      // The proxy is loopback-only; this never changes product ICE behavior.
+      const origin = pair.targets[1 - side];
+      if (
+        origin &&
+        packet.length >= 20 &&
+        packet.readUInt32BE(4) === 0x2112a442
+      ) {
+        origin.address = sender.address;
+        origin.port = sender.port;
+      }
       const target = pair.targets[side];
       if (!target) return;
       stats.packets++;
@@ -112,7 +133,7 @@ for (let index = 0; index < 10; index++) {
       }
       stats.queuedBytes += packet.length;
       stats.maxQueuedBytes = Math.max(stats.maxQueuedBytes, stats.queuedBytes);
-      // All five connections share this synthetic medium, including return
+      // All connections share this synthetic medium, including return
       // traffic. This is a capacity model, not an additional physical route.
       const now = performance.now();
       if (linkBytesPerSecond)
@@ -133,13 +154,14 @@ for (let index = 0; index < 10; index++) {
   pairs.push(pair);
 }
 const sendingBrowser = await (sourceCPU > 1 ? chromium : webkit).launch();
-const receiving = await chromium.launchPersistentContext(
-  join(root, 'receiver-profile'),
-  {
-    executablePath: process.env.PIXELGATE_NATIVE_RECEIVER_EXECUTABLE,
-    args: ['--disable-features=WebRtcHideLocalIpsWithMdns'],
-  },
-);
+const receivingBrowser =
+  receiverEngine === 'webkit' ? await webkit.launch() : undefined;
+const receiving = receivingBrowser
+  ? await receivingBrowser.newContext()
+  : await chromium.launchPersistentContext(join(root, 'receiver-profile'), {
+      executablePath: process.env.PIXELGATE_NATIVE_RECEIVER_EXECUTABLE,
+      args: ['--disable-features=WebRtcHideLocalIpsWithMdns'],
+    });
 const sending = await sendingBrowser.newContext();
 for (const page of receiving.pages()) await page.close();
 try {
@@ -450,6 +472,7 @@ try {
   );
   const result = {
     variant,
+    receiverEngine,
     latency,
     linkBytesPerSecond,
     lossSeed,
@@ -546,6 +569,7 @@ try {
 } finally {
   await sending.close();
   await receiving.close();
+  await receivingBrowser?.close();
   await sendingBrowser.close();
   for (const timer of timers) clearTimeout(timer);
   for (const pair of pairs) for (const socket of pair.sockets) socket.close();

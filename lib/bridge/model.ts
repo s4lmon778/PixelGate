@@ -1,4 +1,5 @@
 export const VERSION = 1;
+export const MAX_BULK_LANES = 6;
 export const FRAME_BYTES = 16 * 1024;
 // Leave room for the striped header within the interoperable 64 KiB SCTP message.
 export const STRIPED_FRAME_BYTES = 64 * 1024 - 8;

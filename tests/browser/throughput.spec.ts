@@ -1,6 +1,7 @@
 import { test, expect, chromium } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { writeFile, readFile } from 'node:fs/promises';
+import { MAX_BULK_LANES } from '../../lib/bridge/model';
 
 test('parallel connections hide ACK latency, survive lane loss, and verify stored bytes', async ({
   browser,
@@ -632,6 +633,12 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
         if (mode === 'unavailable-lanes')
           expect(metrics.lanes['pixelgate-bulk-v1']).toBeUndefined();
         expect(metrics.milliseconds).toBeGreaterThan(0);
+        if (mixedPeers && process.env.PIXELGATE_TEST_BASELINE_CONNECTIONS)
+          expect(transport.connections).toBe(
+            mode === 'new-peers-local'
+              ? MAX_BULK_LANES + 1
+              : Number(process.env.PIXELGATE_TEST_BASELINE_CONNECTIONS),
+          );
         if (mixedPeers)
           expect(metrics.maximumPayloadFrameBytes).toBe(
             mode === 'new-peers-local'
@@ -743,7 +750,9 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
           expect(JSON.stringify(withoutBrowserVersion)).not.toMatch(
             /(?:\d{1,3}\.){3}\d{1,3}/,
           );
-          expect(JSON.parse(saved!).transfer.connections).toBe(5);
+          expect(JSON.parse(saved!).transfer.connections).toBe(
+            MAX_BULK_LANES + 1,
+          );
           await sender
             .getByText('File actions & reports', { exact: true })
             .click();

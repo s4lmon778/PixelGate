@@ -12,6 +12,7 @@ import {
   CHECKPOINT_BYTES,
   FRAME_BYTES,
   LEGACY_TRANSFER_WINDOW_BYTES,
+  MAX_BULK_LANES,
   STRIPED_FRAME_BYTES,
   TRANSFER_WINDOW_BYTES,
   VERSION,
@@ -38,7 +39,7 @@ export type TransferChannel = Pick<
 };
 const MAGIC = 0x50475331;
 const LANES = 2;
-const MAX_LANES = 4;
+const MAX_LANES = MAX_BULK_LANES;
 type Lane = {
   pc: RTCPeerConnection;
   inbox: CandidateInbox;

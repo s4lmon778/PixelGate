@@ -608,14 +608,14 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
       }),
     );
     await vi.advanceTimersByTimeAsync(0);
-    expect(Peer.peers).toHaveLength(4);
+    expect(Peer.peers).toHaveLength(6);
     for (const peer of Peer.peers) {
       expect(peer.channel.ordered).toBe(false);
       peer.channel.readyState = 'open';
       peer.channel.dispatchEvent(new Event('open'));
     }
     const all = [primary, ...Peer.peers.map((peer) => peer.channel)];
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < 35; i++) {
       for (const channel of all) channel.bufferedAmount = 0;
       transport.send(new Uint8Array([i]).buffer);
     }
@@ -624,16 +624,54 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
         channel.sent.filter((data) => data instanceof ArrayBuffer),
       ).toHaveLength(5);
     expect(transport.snapshot()).toMatchObject({
-      connections: 5,
+      connections: 7,
       selectiveReceipts: true,
-      unreceivedBytes: 225,
+      unreceivedBytes: 315,
     });
     primary.receive(
       JSON.stringify({ type: 'pg-striped-receipt', received: [0, 1, 2, 3] }),
     );
-    expect(transport.snapshot().unreceivedBytes).toBe(189);
+    expect(transport.snapshot().unreceivedBytes).toBe(279);
     expect(transport.sendBufferBytes).toBe(512 * 1024);
   });
+  it.each<[number | undefined, number]>([
+    [undefined, 2],
+    [4, 4],
+    [6, 6],
+    [99, 6],
+  ])(
+    'negotiates peer bulk limit %s as %i without changing aggregate credit',
+    async (advertised, expected) => {
+      const primary = new Channel();
+      const transport = new StripedChannel(primary.native(), 'send');
+      opened.push(transport);
+      primary.receive(
+        JSON.stringify({
+          type: 'hello',
+          version: 1,
+          stripedTransport: 1,
+          stripedReceipts: 1,
+          stripedLanes: advertised,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(Peer.peers).toHaveLength(expected);
+      for (const peer of Peer.peers) {
+        peer.channel.readyState = 'open';
+        peer.channel.dispatchEvent(new Event('open'));
+      }
+      transport.send(new Uint8Array(FRAME_BYTES));
+      expect(transport.snapshot().connections).toBe(expected + 1);
+      expect(transport.sendBufferBytes).toBe(512 * 1024);
+      expect(transport.receiveWindowBytes).toBe(CHECKPOINT_BYTES);
+      Peer.peers.at(-1)!.channel.close();
+      expect(transport.snapshot().connections).toBe(expected);
+      primary.receive(
+        JSON.stringify({ type: 'pg-striped-receipt', received: [0] }),
+      );
+      expect(transport.snapshot().unreceivedBytes).toBe(0);
+    },
+  );
   it('grows a bounded delivery window only after receipts and restores conservative pacing on delayed delivery', async () => {
     let clock = 100;
     vi.spyOn(performance, 'now').mockImplementation(() => clock);

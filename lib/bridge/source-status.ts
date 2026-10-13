@@ -1,4 +1,5 @@
 import type { BatchTimingSnapshot } from './batch-timing';
+import { MAX_BULK_LANES } from './model';
 
 const stages = new Set([
   'idle',
@@ -73,7 +74,11 @@ export function sourceStatus(value: unknown): SourceStatus | undefined {
     if (!Number.isSafeInteger(number) || (number as number) < 0) return;
     counts[key] = number as number;
   }
-  if (counts.connections > 5 || counts.deprioritizedConnections > 5) return;
+  if (
+    counts.connections > MAX_BULK_LANES + 1 ||
+    counts.deprioritizedConnections > MAX_BULK_LANES + 1
+  )
+    return;
   let reads: SourceReads | undefined;
   if (data.sourceReads !== undefined) {
     if (!data.sourceReads || typeof data.sourceReads !== 'object') return;

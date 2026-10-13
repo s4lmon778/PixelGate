@@ -912,3 +912,81 @@ confirms the version and all three pickers, with no runtime errors or horizontal
 overflow. No active user transfer was refreshed. Further physical speed above
 the user's reported baseline remains to be measured; the ongoing performance
 objective is not marked complete by these desktop model results.
+
+## October 13 · 0.3.31 seven negotiated connections
+
+The user's new iPhone-to-iPhone 0.3.30 reports show 118,271,716 original bytes,
+one verified file, no resumed/skipped bytes and 32,278 ms Send-to-Verified:
+approximately 3.66 decimal MB/s including preparation and verification. The
+sender's source reads average 4 ms, maximum 8 ms, with only 2 ms aggregate wait.
+The receiver uses OPFS, completes all bytes durably, and reports 113 commits
+averaging 4 ms, maximum 9 ms. This pair/file differs from the earlier Pixel test;
+the numbers do not establish a software regression. Its 87 application replays
+are not a native packet-loss count. Receiver frame totals exceed the original by
+about 2.4%, including duplicates and frame headers.
+
+Three alternatives were rejected before selecting an increased negotiated lane
+limit. Preserving warm sender credit through moderate queued delay and gradually
+halving it both failed to improve timings consistently. A 32 KiB nearby frame
+variant changed clean median timing from 15,268 to 15,007 ms, but worsened the
+loss median from 24,513 to 25,243 ms. None of these policies is in product source.
+
+The selected change raises the maximum additional native peer connections from
+four to six, giving seven total when both peers advertise support. Negotiation
+still chooses the smaller peer limit: 0.3.30 retains five total, while peers
+without a lane limit retain three. Raw fallback and protocol/persisted-data
+versions remain unchanged. A shared constant also bounds source-status parsing
+at seven, so receiver reports continue showing the sender's useful state.
+
+Source preparation, frame selection, recovery deadlines, strict checkpoint ACKs,
+readback verification and aggregate retained-payload/receive credit limits are
+unchanged. Two additional native connections have their own resource overhead;
+the unchanged application payload limits are not a claim of identical total
+browser memory usage.
+
+The [sanitized numeric record](benchmarks/2026-10-13-ios-pair-research.json)
+contains **63 successful native transfers**, each independently byte-verified.
+The main comparisons transfer 64 MiB + 111 bytes with three seeds, a shared
+6 MiB/s synthetic medium across every connection and return packet, and 10 ms
+one-way delay. Comparisons run sequentially without concurrent builds or browser
+suites. Matching settings/seeds do not guarantee identical dropped payloads
+after candidates generate different traffic.
+
+- WebKit sending to WebKit receiving: clean median Send-to-Verified changes
+  from 15,941 to 14,031 ms, **13.61% higher throughput**. With about 1% encrypted
+  datagram loss, 24,852 becomes 19,398 ms, **28.12% higher throughput**. Every
+  matched seed improves in both groups.
+- WebKit sending to actual Chromium 101, with 150 ms notification delay after
+  actual strict IndexedDB completion: clean median 15,942 becomes 14,774 ms,
+  **7.91% higher throughput**; 1% loss median 25,088 becomes 20,483 ms,
+  **22.48% higher throughput**. Every matched seed improves in both groups.
+- Final 0.3.31 WebKit controls use the repository CLI and verify seven working
+  connections with sender status intact. Two uncapped/no-added-delay pairs
+  change from 2,533/2,518 to 2,084/2,207 ms. Two shared-medium/3% loss pairs change
+  from 39,025/40,512 to 27,214/28,185 ms. All originals match independently.
+
+These are desktop engine models, not physical iPhone/Wi-Fi measurements. The
+WebKit fixture naturally uses IndexedDB with roughly 2–3 ms commits, whereas the
+user's receiving iPhone uses OPFS. The observed local gains cannot establish a
+new physical speed beyond the user's reports.
+
+The benchmark now supports a WebKit receiver using a normal context; its
+unsupported persistent-context launch failed before timing and is excluded.
+Earlier proxy setup failures were also excluded. The loopback-only fixture now
+learns the native socket endpoint from STUN because a guessed mDNS endpoint can
+differ from the socket reaching the mapped proxy. This fixes the measurement
+fixture and never changes production ICE handling.
+
+TypeScript, ESLint, formatting and 231 unit/integration cases pass. New tests
+cover advertised lane limits, the aggregate credit bound, lane closure, receipt
+release and seven-connection sender status. Five modern Chromium browser cases
+pass, covering 400 MiB copies on OPFS and IndexedDB, byte-exact saving, 125-file
+handoffs, source pause/read waits and nine transport/recovery modes. Seven actual
+Chromium 101 cases pass for mobile selection, cache removal, empty saved cache,
+source status and lost-packet/closed-lane/500 ms receipt modes. Mixed 0.3.30 and
+0.3.31 peers pass both directions with five connections, and current peers pass
+with seven, including independent readback. An initial mixed test used default
+legacy frame expectations rather than 0.3.30's advertised 64 KiB frame; correcting
+the fixture to its actual capabilities resolves that assertion.
+Two WebKit browser cases additionally pass real pairing, independent readback,
+manual export verification, reconnect and held-source/pause-to-verified behavior.

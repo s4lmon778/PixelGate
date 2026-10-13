@@ -84,7 +84,8 @@ describe('paired sender status', () => {
     { ...sample, stage: 'private-filename' },
     { ...sample, visibility: 'private-address' },
     { ...sample, paused: 'false' },
-    { ...sample, connections: 6 },
+    { ...sample, connections: 8 },
+    { ...sample, deprioritizedConnections: 8 },
     { ...sample, unreceivedBytes: -1 },
     { ...sample, oldestUnreceivedMs: Infinity },
     { ...sample, receiptDelayMs: NaN },
@@ -93,5 +94,10 @@ describe('paired sender status', () => {
     { ...sample, replayedPackets: undefined },
   ])('ignores invalid optional telemetry without trusting it: %j', (value) => {
     expect(sourceStatus(value)).toBeUndefined();
+  });
+  it('preserves status for all seven supported connections', () => {
+    expect(
+      sourceStatus({ ...sample, connections: 7, deprioritizedConnections: 7 }),
+    ).toMatchObject({ connections: 7, deprioritizedConnections: 7 });
   });
 });
