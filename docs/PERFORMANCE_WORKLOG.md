@@ -902,3 +902,13 @@ confirms the dashed stroke and exactly one-pixel optical offset, and checks 320 
 with enlarged text. Screenshots were inspected; no runtime errors or horizontal
 overflow were observed. This validates the proposed release, not a new physical
 speed above the user's 5 MB/s report. Publication is recorded below.
+
+0.3.30 is published from `4e20c44e351b13e856a7e7ddbc802d10992de659`.
+Pages commit `715cdf1d93b0ca0e49fc19042203e467ae39733a` reports built with no
+error. Live build metadata identifies the tested source/version. HTML, all four
+compiled assets and the third-party notice match the local distribution byte for
+byte. A fresh actual Chromium 101.0.4951.15 context loads the live 360 px page,
+confirms the version and all three pickers, with no runtime errors or horizontal
+overflow. No active user transfer was refreshed. Further physical speed above
+the user's reported baseline remains to be measured; the ongoing performance
+objective is not marked complete by these desktop model results.
