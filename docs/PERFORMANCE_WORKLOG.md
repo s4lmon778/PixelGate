@@ -795,3 +795,13 @@ for inspection. No runtime errors were observed. These are desktop-engine checks
 not physical phone speed measurements. The requested 50% physical gain remains
 unverified. Sender transport, receiver checkpoints, gap recovery, verification,
 pause behavior, cache cleanup and saving features are unchanged in this release.
+
+Published 0.3.29 from `e6ba6757afe4a3c10a55c346e6f186ddac1d5448`.
+GitHub Pages commit `2cd5edbc792cf640396f8478b957df160b368326` reports
+built with no error. Live build metadata matches; the HTML, all four compiled
+assets and third-party notice match the tested distribution byte for byte.
+A fresh actual Chromium 101.0.4951.15 context loads the live release at 360px,
+confirms the new three-button arrangement and reports no runtime errors or
+horizontal overflow. The initial exact footer-text locator failed because the
+footer includes additional text; the corrected footer contains-text check passes.
+The user's ongoing speed test was not refreshed or otherwise interrupted.
