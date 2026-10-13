@@ -8,10 +8,30 @@ import { chromium, webkit, expect } from '@playwright/test';
 
 // Synthetic bytes in isolated contexts; this is a native UDP latency model,
 // not a physical iPhone/Pixel Wi-Fi benchmark.
+const lossPermille = Number(process.env.PIXELGATE_NATIVE_LOSS_PERMILLE || 0);
+if (!Number.isInteger(lossPermille) || lossPermille < 0 || lossPermille > 100)
+  throw new Error('Loss must be 0–100 per mille.');
+const lossSeed = Number(process.env.PIXELGATE_NATIVE_LOSS_SEED || 7);
+if (!Number.isInteger(lossSeed) || lossSeed < 0 || lossSeed > 0xffffffff)
+  throw new Error('Invalid loss seed.');
+let randomState = lossSeed >>> 0;
+const sourceCPU = Number(process.env.PIXELGATE_NATIVE_SOURCE_CPU || 1);
+if (!Number.isInteger(sourceCPU) || sourceCPU < 1 || sourceCPU > 20)
+  throw new Error('Source CPU model must be an integer from 1 to 20.');
 const latency = Number(process.env.PIXELGATE_NATIVE_ONE_WAY_MS || 0);
 const variant = process.env.PIXELGATE_NATIVE_LABEL || 'candidate';
 const storageDelay = Number(process.env.PIXELGATE_NATIVE_STORAGE_DELAY_MS || 0);
+const sourceDelay = Number(
+  process.env.PIXELGATE_NATIVE_SOURCE_READ_DELAY_MS || 0,
+);
+if (!Number.isInteger(sourceDelay) || sourceDelay < 0 || sourceDelay > 1000)
+  throw new Error('Invalid source delay');
 const trial = process.env.PIXELGATE_NATIVE_TRIAL || '1';
+const direct = process.env.PIXELGATE_NATIVE_DIRECT === '1';
+if (direct && (latency || lossPermille))
+  throw new Error(
+    'Direct mode bypasses proxy latency and loss; set both to zero.',
+  );
 const bytes =
   Number(process.env.PIXELGATE_NATIVE_MIB || 32) * 1024 * 1024 + 111;
 const url = process.env.PIXELGATE_NATIVE_URL || 'http://127.0.0.1:8787/';
@@ -48,7 +68,16 @@ const hostAddress = Object.values(networkInterfaces())
   .flat()
   .find((value) => value?.family === 'IPv4' && !value.internal)?.address;
 const timers = new Set();
-const stats = { packets: 0, bytes: 0, queuedBytes: 0, maxQueuedBytes: 0 };
+const stats = {
+  packets: 0,
+  bytes: 0,
+  queuedBytes: 0,
+  maxQueuedBytes: 0,
+  droppedPackets: 0,
+  droppedBytes: 0,
+  applicationPackets: 0,
+  lossPermille,
+};
 for (let index = 0; index < 10; index++) {
   const sockets = [createSocket('udp4'), createSocket('udp4')];
   for (const socket of sockets)
@@ -60,6 +89,15 @@ for (let index = 0; index < 10; index++) {
       if (!target) return;
       stats.packets++;
       stats.bytes += packet.length;
+      if (packet[0] === 23) {
+        stats.applicationPackets++;
+        randomState = (Math.imul(randomState, 1664525) + 1013904223) >>> 0;
+        if (randomState / 4294967296 < lossPermille / 1000) {
+          stats.droppedPackets++;
+          stats.droppedBytes += packet.length;
+          return;
+        }
+      }
       stats.queuedBytes += packet.length;
       stats.maxQueuedBytes = Math.max(stats.maxQueuedBytes, stats.queuedBytes);
       const timer = setTimeout(() => {
@@ -72,7 +110,7 @@ for (let index = 0; index < 10; index++) {
   );
   pairs.push(pair);
 }
-const sendingBrowser = await webkit.launch();
+const sendingBrowser = await (sourceCPU > 1 ? chromium : webkit).launch();
 const receiving = await chromium.launchPersistentContext(
   join(root, 'receiver-profile'),
   {
@@ -115,7 +153,7 @@ try {
       },
     );
     await context.addInitScript(
-      ({ ports }) => {
+      ({ ports, source, sourceDelay, direct, hostAddress }) => {
         let next = 0;
         const Native = window.RTCPeerConnection;
         const ids = new WeakMap();
@@ -152,8 +190,8 @@ try {
           const target = selected.get(index);
           if (target.address !== fields[4] || target.port !== Number(fields[5]))
             return;
-          fields[4] = '127.0.0.1';
-          fields[5] = String(ports[index]);
+          fields[4] = direct ? hostAddress : '127.0.0.1';
+          fields[5] = direct ? String(target.port) : String(ports[index]);
           return fields.join(' ');
         }
         const local = Object.getOwnPropertyDescriptor(
@@ -221,7 +259,25 @@ try {
           });
         };
         window.installProxy();
-        const metrics = { started: 0, milliseconds: 0, bytes: 0 };
+        const metrics = {
+          started: 0,
+          milliseconds: 0,
+          bytes: 0,
+          sourceReads: 0,
+        };
+        if (source) {
+          const read = Blob.prototype.arrayBuffer;
+          Blob.prototype.arrayBuffer = async function () {
+            if (this.size >= 1024 * 1024) {
+              metrics.sourceReads++;
+              if (sourceDelay)
+                await new Promise((resolve) =>
+                  setTimeout(resolve, sourceDelay),
+                );
+            }
+            return read.call(this);
+          };
+        }
         window.nativeMetrics = metrics;
         const send = RTCDataChannel.prototype.send;
         RTCDataChannel.prototype.send = function (data) {
@@ -240,11 +296,21 @@ try {
           return Reflect.apply(send, this, [data]);
         };
       },
-      { ports: pairs.map((pair) => pair.sockets[side].address().port) },
+      {
+        ports: pairs.map((pair) => pair.sockets[side].address().port),
+        source: side === 0,
+        sourceDelay,
+        direct,
+        hostAddress,
+      },
     );
   }
   const receiver = await receiving.newPage(),
     sender = await sending.newPage();
+  if (sourceCPU > 1) {
+    const cdp = await sending.newCDPSession(sender);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: sourceCPU });
+  }
   const errors = [];
   for (const page of [receiver, sender])
     page.on('pageerror', (error) => errors.push(error.message));
@@ -287,9 +353,13 @@ try {
     .click();
   await sender.waitForFunction(
     () =>
-      ['Browser copy verified', 'Needs retry'].includes(
-        document.querySelector('.file-status')?.textContent,
-      ),
+      [
+        'Browser copy verified',
+        'Needs retry',
+        'Paused',
+        'Cancelled',
+        'Failed',
+      ].includes(document.querySelector('.file-status')?.textContent),
     undefined,
     { timeout: 180000 },
   );
@@ -359,7 +429,11 @@ try {
   const result = {
     variant,
     latency,
+    lossSeed,
     storageDelay,
+    sourceDelay,
+    sourceCPU,
+    direct,
     trial,
     bytes,
     endToEndMs,
@@ -368,11 +442,15 @@ try {
     stats,
     report,
     hashMatched: true,
-    connectionsProxied: pairs.filter((pair) => pair.targets.every(Boolean))
+    connectionsMapped: pairs.filter((pair) => pair.targets.every(Boolean))
       .length,
+    connectionsProxied: direct
+      ? 0
+      : pairs.filter((pair) => pair.targets.every(Boolean)).length,
   };
-  expect(result.connectionsProxied).toBe(report.transfer.connections);
-  expect(result.stats.bytes).toBeGreaterThanOrEqual(bytes);
+  expect(result.connectionsMapped).toBe(report.transfer.connections);
+  if (!direct) expect(result.stats.bytes).toBeGreaterThanOrEqual(bytes);
+  else expect(result.stats.bytes).toBe(0);
   const resultPath =
     process.env.PIXELGATE_NATIVE_RESULT || join(root, 'result.json');
   await writeFile(resultPath, JSON.stringify(result, null, 2) + '\n');

@@ -663,3 +663,91 @@ another throughput increase; the physical 50% target is still unverified.
 all four compiled assets and the distributed license match the tested build
 byte for byte. A fresh 360-pixel live browser renders 0.3.27 without errors or
 horizontal overflow. The same-phone/video/Wi-Fi timing remains pending.
+
+## 0.3.28 recovery research and guarded optimization
+
+The user resumed performance work, explicitly asked for more research rather
+than more diagnostics, and retained standing publication authorization. No phone
+report is requested again and the cancelled automation remains deleted.
+
+Primary research revisited the [WebRTC transport specification](https://www.rfc-editor.org/rfc/rfc8831.html#section-6.6),
+[W3C queue semantics](https://www.w3.org/TR/webrtc/#dom-rtcdatachannel-bufferedamount),
+the [official data-transfer sample](https://github.com/webrtc/samples/blob/gh-pages/src/content/datachannel/datatransfer/js/main.js),
+and [PairDrop's implementation](https://github.com/schlagmichdoch/PairDrop/blob/master/public/scripts/network.js).
+Reliable unordered delivery still performs native congestion control and
+retransmission. An application retry can repair an ordered stream's missing
+prefix through another association, but aggressive retries can also add traffic
+and replay ordinary striping skew. Browser bufferedAmount excludes some native
+queues; it is not an unlimited transmission budget.
+
+The new study retains 150 numeric comparison records, each with independent
+original-byte readback. Immutable variants ran sequentially with isolated
+WebKit senders and actual Chromium 101 persistent receivers. Marked files are
+32 MiB + 111 bytes for 18 ms round-trip, 1%/3% encrypted UDP packet-loss models;
+healthy/direct controls use 128 MiB + 111 bytes. Separate 6x Chromium source CPU
+controls are explicitly synthetic and are not Safari or phone CPU measurements.
+The local UDP proxy can introduce its own scheduling/queue effects. Direct
+controls therefore bypass it, require zero proxy packets, and still independently
+verify stored bytes. None of these runs certifies physical Wi-Fi performance.
+
+Rejected alternatives include repairing only the first missing packet, reducing
+path-scheduling allocations, distributing receipts, duplicating receipts,
+duplicating and ordering durable feedback on independent paths, fixed smaller
+frames, temporarily reducing frames after a replay, and partial-reliability bulk
+channels with rapid application recovery. An initially promising receipt-routing
+result weakened on additional loss patterns. Partial reliability improved some
+lighter-loss runs but regressed heavier loss; all native channels remain fully
+reliable in the retained implementation. Some rejected builds finish correctly
+but add substantial traffic or sharply increase elapsed time.
+
+The retained change accelerates gap recovery only when measured minimum receipt
+latency is 8–40 ms. It scans every 20 ms there, uses a 50 ms minimum gap timeout
+with measured delay and exponential backoff, and keeps all paths participating:
+a single lost packet is not sufficient evidence to sideline a whole association
+for five seconds. Very fast, unobserved and longer-delay links retain the previous
+100 ms cadence, timeout and cooldown behavior. The 2-second missing-tail floor
+and 10-second retry ceiling remain. Every pass snapshots aggregate native buffers,
+respects existing send credit, sends at most eight repair packets and occupies at
+most eight milliseconds. Transfer windows, original frames, strict checkpoints,
+independent final readback, protocol capabilities, UI and cleanup behavior remain.
+
+| Controlled condition                            | Baseline mean Send-to-Verified | Guarded recovery mean | Interpretation                                      |
+| ----------------------------------------------- | -----------------------------: | --------------------: | --------------------------------------------------- |
+| 1% loss, six matching seeds                     |                       13.642 s |              11.366 s | About 20% higher modeled throughput                 |
+| 3% loss, three matching seeds                   |                       20.260 s |              19.320 s | About 5% higher modeled throughput                  |
+| Zero configured loss through proxy, three seeds |                        3.581 s |               3.379 s | Proxy model only; not a healthy-link certification  |
+| Direct, no proxy, three paired controls         |                        3.296 s |               3.321 s | Essentially unchanged; no added application replays |
+
+Individual runs vary; one of the six lighter-loss patterns is slightly slower.
+These are conditional gains, not a universal speed guarantee or proof of the
+requested physical 50% gain. The same iPhone/Pixel/video/Wi-Fi target remains
+unverified. Sanitized numeric results are retained in
+[the comparison record](benchmarks/2026-10-12-recovery-research.json).
+
+The developer benchmark now supports bounded, seeded encrypted-datagram loss,
+source-read delays, optional Chromium CPU throttling, and direct controls. Its
+normal WebKit-to-Chromium mode and independent hash checks remain. Direct mode
+rejects configured proxy latency/loss instead of silently claiming they applied.
+The updated CLI completes a byte-verified direct WebKit-to-Chromium-101 control
+with all five native connections mapped and zero packets through the proxy.
+
+TypeScript, ESLint and 222 unit/integration cases pass. Recovery checks cover
+very fast/nearby/long-delay links, bounded repair bursts, aggregate native queue
+credit, tail recovery and eventual receipt release. Initial unit expectations
+assumed the old polling phase and exactly one nearby retry; they were revised to
+check the new bounded cadence and backoff, without weakening byte verification.
+Release browser checks and publication are recorded below.
+
+Final release validation passes five Chromium browser cases, including 400 MiB
+originals on both durable backends, byte-exact downloads, 125-file batches,
+source pause/readback, lane loss, raw/older transport and reconnect paths. Four
+Firefox/WebKit pause/readback and transfer/recovery cases pass. Actual Chromium
+101 passes fourteen mobile, cache-cleanup, pause/readback and transport cases,
+including a 500 ms receipt-delay control. All 23 browser cases pass; no test
+deadline or verification requirement is weakened. The new CLI direct control
+and three additional seeded loss runs use the final 0.3.28 build.
+
+The release keeps the green connection visual, compact file lists, save/history
+features and actual staged-cache cleanup. It adds no diagnostic UI or permission
+flow. The measured physical 50% goal remains unverified; this release is a
+bounded, conditional performance improvement rather than a claim of that goal.

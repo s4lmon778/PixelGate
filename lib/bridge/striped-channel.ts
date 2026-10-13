@@ -86,6 +86,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
   private delay = 0;
   private highestReceived = -1;
   private replayed = 0;
+  private nextRecoveryAt = 0;
   private cooldown = new Map<RTCDataChannel, number>();
   private burstBuffers?: Map<RTCDataChannel, number>;
   private burstBufferedBytes = 0;
@@ -439,7 +440,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       this.write(this.primary, JSON.stringify({ type: 'pg-striped-start' }));
       this.sending = true;
       if (this.selective)
-        this.retryTimer = setInterval(() => this.recoverGaps(), 100);
+        this.retryTimer = setInterval(() => this.recoverGaps(), 20);
     }
     if (!this.sending) {
       this.write(this.primary, data);
@@ -557,30 +558,50 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     packet.retries++;
   }
   private recoverGaps() {
-    if (this.stopped || this.readyState !== 'open') return;
+    if (this.stopped || this.readyState !== 'open' || !this.pending.size)
+      return;
     const now = performance.now();
+    const minimum = this.scheduler.minimumReceiptDelay(this.healthyLanes());
+    // Very fast links routinely reorder striped bursts while browser tasks run.
+    // Preserve their original recovery timing instead of duplicating healthy traffic.
+    const nearby = minimum !== undefined && minimum >= 8 && minimum <= 40;
+    if (now < this.nextRecoveryAt) return;
+    this.nextRecoveryAt = now + (nearby ? 20 : 100);
     let count = 0;
+    let native =
+      this.primary.bufferedAmount +
+      this.openLanes().reduce(
+        (total, channel) => total + channel.bufferedAmount,
+        0,
+      );
+    const credit = this.sendBufferBytes;
+    const started = performance.now();
     for (const [sequence, packet] of this.pending) {
+      if (native > credit || performance.now() - started >= 8) break;
       if (
         now - packet.sentAt <
         Math.min(
           10000,
           Math.max(
-            sequence < this.highestReceived ? 250 : 2000,
-            this.delay * 3,
+            sequence < this.highestReceived ? (nearby ? 50 : 250) : 2000,
+            nearby ? Math.min(250, this.delay * 2) : this.delay * 3,
           ) *
             2 ** Math.min(packet.retries, 3),
         )
       )
         continue;
-      // Moving a missing packet off a slow lane must not immediately make that
-      // lane look empty and attract new bytes. Give the other paths five seconds
-      // to carry the stream, then let this path participate again.
-      this.cooldown.set(packet.lane, now + 5000);
+      // On nearby links, one lost packet is not proof that its entire path is
+      // unusable. Keep all paths working while repairing gaps promptly. Preserve
+      // the established cooldown on very fast/unobserved and longer-delay links.
+      if (!nearby) this.cooldown.set(packet.lane, now + 5000);
       const lane = this.chooseLane(packet.lane);
       if (lane.bufferedAmount > this.sendBufferBytes) continue;
       try {
         this.write(lane, packet.wire);
+        native +=
+          typeof packet.wire === 'string'
+            ? new TextEncoder().encode(packet.wire).byteLength
+            : packet.wire.byteLength;
         this.movePacket(packet, lane);
         this.replayed++;
       } catch {

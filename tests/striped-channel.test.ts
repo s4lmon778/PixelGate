@@ -703,7 +703,7 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
     expect(transport.pacingDelayMs).toBe(4);
     vi.restoreAllMocks();
   });
-  it.each([20, 800])(
+  it.each([2, 20, 800])(
     'keeps healthy siblings running after a path stalls at %i ms baseline latency',
     async (latency) => {
       vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
@@ -755,9 +755,15 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
           received: [640, 642, 643],
         }),
       );
-      await vi.advanceTimersByTimeAsync(Math.max(300, latency * 3));
-      expect(transport.snapshot().deprioritizedConnections).toBe(1);
-      expect(transport.snapshot().replayedPackets).toBe(1);
+      await vi.advanceTimersByTimeAsync(
+        Math.max(latency < 8 ? 400 : 300, latency * 3),
+      );
+      const quickRecovery = latency >= 8 && latency <= 40;
+      expect(transport.snapshot().deprioritizedConnections).toBe(
+        quickRecovery ? 0 : 1,
+      );
+      // A deliberately unacknowledged repair gets another bounded attempt.
+      expect(transport.snapshot().replayedPackets).toBe(quickRecovery ? 2 : 1);
       expect(transport.sendBufferBytes).toBe(
         LEGACY_TRANSFER_WINDOW_BYTES - 64 * 1024,
       );
@@ -837,6 +843,54 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
     expect(transport.burstBytes).toBe(256 * 1024);
     vi.restoreAllMocks();
   });
+  it('bounds each quick repair pass and waits when aggregate native queues exceed credit', async () => {
+    vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
+    const primary = new Channel();
+    const transport = new StripedChannel(primary.native(), 'send');
+    opened.push(transport);
+    primary.receive(
+      JSON.stringify({
+        type: 'hello',
+        version: 1,
+        stripedTransport: 1,
+        stripedReceipts: 1,
+        stripedLanes: 4,
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    for (const peer of Peer.peers) {
+      peer.channel.readyState = 'open';
+      peer.channel.dispatchEvent(new Event('open'));
+    }
+    const all = [primary, ...Peer.peers.map((peer) => peer.channel)];
+    for (let sequence = 0; sequence < 12; sequence++)
+      transport.send(new Uint8Array(FRAME_BYTES));
+    for (const channel of all) channel.bufferedAmount = 0;
+    await vi.advanceTimersByTimeAsync(20);
+    // One later receipt proves a gap and establishes a nearby path baseline.
+    primary.receive(
+      JSON.stringify({ type: 'pg-striped-receipt', received: [11] }),
+    );
+    await vi.advanceTimersByTimeAsync(100);
+    expect(transport.snapshot().replayedPackets).toBe(8);
+    expect(all.reduce((sum, channel) => sum + channel.bufferedAmount, 0)).toBe(
+      8 * (FRAME_BYTES + 8),
+    );
+    primary.bufferedAmount = transport.sendBufferBytes + 1;
+    await vi.advanceTimersByTimeAsync(100);
+    expect(transport.snapshot().replayedPackets).toBe(8);
+    for (const channel of all) channel.bufferedAmount = 0;
+    primary.receive(
+      JSON.stringify({
+        type: 'pg-striped-receipt',
+        received: Array.from({ length: 11 }, (_, i) => i),
+      }),
+    );
+    expect(transport.snapshot().unreceivedBytes).toBe(0);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(transport.snapshot().replayedPackets).toBe(8);
+    vi.restoreAllMocks();
+  });
   it('selectively receipts displaced packets without delivering them before the missing prefix', async () => {
     const primary = new Channel(),
       transport = new StripedChannel(primary.native(), 'receive');
@@ -901,7 +955,9 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
     primary.receive(
       JSON.stringify({ type: 'pg-striped-receipt', received: [0, 2, 3] }),
     );
-    await vi.advanceTimersByTimeAsync(300);
+    await vi.advanceTimersByTimeAsync(240);
+    expect(transport.snapshot().replayedPackets).toBe(0);
+    await vi.advanceTimersByTimeAsync(160);
     expect(transport.snapshot().replayedPackets).toBe(1);
     expect(
       all.some(
