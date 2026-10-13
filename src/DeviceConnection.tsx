@@ -2,7 +2,7 @@ import { useId } from 'react';
 import {
   Laptop,
   LockKeyhole,
-  MonitorSmartphone,
+  CircleHelp,
   Smartphone,
   Tablet,
 } from 'lucide-react';
@@ -12,7 +12,7 @@ const devices = {
   phone: { Icon: Smartphone, label: 'Phone' },
   tablet: { Icon: Tablet, label: 'Tablet' },
   computer: { Icon: Laptop, label: 'Computer' },
-  unknown: { Icon: MonitorSmartphone, label: 'Device' },
+  unknown: { Icon: CircleHelp, label: 'Device' },
 };
 
 export function DeviceConnection({
@@ -35,7 +35,15 @@ export function DeviceConnection({
   const endpoint = (kind: DeviceKind | undefined, side: 'send' | 'receive') => {
     const { Icon, label } = devices[kind ?? 'unknown'];
     return (
-      <div className="connection-device" data-device={kind ?? 'unknown'}>
+      <div
+        className="connection-device"
+        data-device={kind ?? 'unknown'}
+        title={
+          kind
+            ? undefined
+            : 'Device type unavailable. Reopen PixelGate on both devices to update this visual.'
+        }
+      >
         <span className="connection-device-icon">
           <Icon size={21} strokeWidth={1.7} aria-hidden="true" />
         </span>

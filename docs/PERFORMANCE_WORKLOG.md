@@ -760,3 +760,38 @@ byte for byte. A fresh 360-pixel live Chromium check renders 0.3.28 without
 runtime errors or horizontal overflow. Its first locator used a nonexistent
 `v` prefix and timed out; the corrected footer-version locator passes. The
 physical 50% requirement remains unverified.
+
+## October 13 · 0.3.29 interface corrections, unchanged transfer tuning
+
+The supplied sender report identifies 0.3.23, while the Pixel photographs identify
+0.3.28. This mixed-version run cannot measure the newer sender optimizations.
+The later Pixel snapshot reports a failed primary connection, only one remaining
+open channel, more than two minutes without payload, an empty storage queue and
+a paused receiver. These observations do not establish why the network failed,
+why the receiver paused, or a sustained storage bottleneck. Terminal connection
+handling and higher-latency tuning remain investigation items; neither is changed
+in this interface release, following the user's request to test the current speed
+settings before further tuning. A temporary latency-scaled credit candidate was
+built separately but was not measured, retained in product source or published.
+
+The Android media picker now spans the mobile row above equal-sized files/folder
+buttons. Device icons and the green directional arrow share the same vertical
+center; labels sit below the icons. Local Android client hints and touch-screen
+size supplement the existing user-agent classification when desktop browsing
+hides the Mobile token. Only the broad device class is shared with the approved
+peer. An older peer that sends no device class keeps an explicit unknown symbol,
+without guessing that it is a phone or computer. Both tabs need the newer device
+metadata support for both ends of the visual to identify their peers.
+
+TypeScript, ESLint, 223 unit/integration cases and the production build pass.
+Six Chromium/WebKit browser cases pass: actual peer transfer, independent stored
+and exported readback, reconnect, responsive layouts and enlarged text. Five
+actual Chromium 101 cases pass: Android media/files picker behavior, both staged
+cache backends, stale browser allowance estimates and contained file selection.
+A separate Chromium 101 visual check pairs emulated phone-to-phone and
+computer-to-phone contexts, verifies both roles' device classes, measures identical
+arrow/icon centers, checks 320-pixel enlarged-text overflow and captures screenshots
+for inspection. No runtime errors were observed. These are desktop-engine checks,
+not physical phone speed measurements. The requested 50% physical gain remains
+unverified. Sender transport, receiver checkpoints, gap recovery, verification,
+pause behavior, cache cleanup and saving features are unchanged in this release.

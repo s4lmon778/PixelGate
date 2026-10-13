@@ -40,3 +40,28 @@ it('accepts only known peer categories and leaves old or invalid peers unspecifi
   for (const value of [undefined, null, {}, '<script>', 'Phone', 1])
     expect(peerDevice(value)).toBeUndefined();
 });
+
+it('uses Android client hints and physical screen size when desktop browsing hides Mobile', () => {
+  const desktopAndroid =
+    'Mozilla/5.0 (Linux; Android 9; Pixel XL) Chrome/101 Safari/537.36';
+  expect(deviceKind(desktopAndroid, 5, { mobile: true })).toBe('phone');
+  expect(
+    deviceKind(desktopAndroid, 5, { mobile: false, shortScreen: 393 }),
+  ).toBe('phone');
+  expect(
+    deviceKind(desktopAndroid, 5, { mobile: false, shortScreen: 800 }),
+  ).toBe('tablet');
+  expect(
+    deviceKind('Mozilla/5.0 (X11; Linux x86_64) Chrome/130 Safari/537.36', 5, {
+      platform: 'Android',
+      mobile: false,
+      shortScreen: 393,
+    }),
+  ).toBe('phone');
+  expect(
+    deviceKind('Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 10, {
+      mobile: false,
+      shortScreen: 393,
+    }),
+  ).toBe('computer');
+});

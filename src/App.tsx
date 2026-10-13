@@ -1681,7 +1681,9 @@ export default function PixelGate() {
                               Documents, photos, videos, archives, and other
                               files.
                             </p>
-                            <div className="button-row">
+                            <div
+                              className={`button-row file-picker-actions${/Android/i.test(navigator.userAgent) ? ' has-media-picker' : ''}`}
+                            >
                               {/Android/i.test(navigator.userAgent) && (
                                 <button
                                   className="button"
