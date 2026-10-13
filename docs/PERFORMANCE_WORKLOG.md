@@ -990,3 +990,13 @@ legacy frame expectations rather than 0.3.30's advertised 64 KiB frame; correcti
 the fixture to its actual capabilities resolves that assertion.
 Two WebKit browser cases additionally pass real pairing, independent readback,
 manual export verification, reconnect and held-source/pause-to-verified behavior.
+
+0.3.31 is published from `a922aec50008107546dda39542bbe6af4bb0a841`.
+Pages commit `d9a1de7ff1cb912409564007d9a9c12ef969a27e` reports built with no
+error. Live metadata identifies the tested source/version, and HTML, all four
+compiled assets and the third-party notice match the local distribution byte for
+byte. A fresh actual Chromium 101.0.4951.15 context confirms the live version,
+all three pickers and both mobile roles at 360 px with no runtime errors or
+horizontal overflow. Active user tabs and transfers were not refreshed. The
+next physical comparison requires both peers on 0.3.31 with the same original,
+device pair and Wi-Fi; these model gains do not yet establish that phone result.
