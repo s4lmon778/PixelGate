@@ -2,6 +2,7 @@ import { test, expect, chromium, webkit } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { mkdir, open, rm, writeFile } from 'node:fs/promises';
+import { isolateHostIce } from './host-only';
 
 const largeMiB = Number(process.env.PIXELGATE_TEST_LARGE_MIB || 400);
 const largeName = `original-${largeMiB}MiB.mp4`;
@@ -84,6 +85,8 @@ for (const backend of ['opfs', 'indexeddb']) {
         );
       });
     const sending = await browser.newContext();
+    await isolateHostIce(receiving);
+    await isolateHostIce(sending);
     await receiving.addInitScript(() => {
       Object.assign(window, { shareCalls: 0 });
       // Exercise real streamed directory writes/readback. This substitutes only

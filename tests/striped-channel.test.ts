@@ -897,6 +897,72 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
     expect(transport.pacingDelayMs).toBe(4);
     vi.restoreAllMocks();
   });
+  it('keeps healthy paths supplied when one path queues, but backs off when several do', async () => {
+    let clock = 100;
+    vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    const primary = new Channel();
+    const transport = new StripedChannel(primary.native(), 'send');
+    opened.push(transport);
+    primary.receive(
+      JSON.stringify({
+        type: 'hello',
+        version: 1,
+        stripedTransport: 1,
+        stripedReceipts: 1,
+        stripedLanes: 4,
+        stripedFrameBytes: STRIPED_FRAME_BYTES,
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    for (const peer of Peer.peers) {
+      peer.channel.readyState = 'open';
+      peer.channel.dispatchEvent(new Event('open'));
+    }
+    const channels = [primary, ...Peer.peers.map((peer) => peer.channel)];
+    const receipt = (received: number[]) =>
+      primary.receive(JSON.stringify({ type: 'pg-striped-receipt', received }));
+    for (let sequence = 0; sequence < 800; sequence += 16) {
+      for (const channel of channels) channel.bufferedAmount = 0;
+      for (let i = 0; i < 16; i++)
+        transport.send(new Uint8Array(FRAME_BYTES).buffer);
+      clock += 20;
+      receipt(Array.from({ length: 16 }, (_, i) => sequence + i));
+    }
+    const delayed = channels[4];
+    const batch = (first: number, slow: Channel[]) => {
+      for (const channel of channels) {
+        channel.sent = [];
+        channel.bufferedAmount = 0;
+      }
+      for (let i = 0; i < 16; i++)
+        transport.send(new Uint8Array(FRAME_BYTES).buffer);
+      const ids = (paths: Channel[]) =>
+        paths
+          .flatMap((channel) =>
+            channel.sent
+              .filter(
+                (wire): wire is ArrayBuffer => wire instanceof ArrayBuffer,
+              )
+              .map((wire) => new DataView(wire).getUint32(4)),
+          )
+          .filter((id) => id >= first);
+      clock += 20;
+      receipt(ids(channels.filter((channel) => !slow.includes(channel))));
+      clock += 1000;
+      receipt(ids(slow));
+    };
+    batch(800, [delayed]);
+    expect(transport.snapshot().queuedDelayMs).toBeGreaterThan(750);
+    expect(transport.sendBufferBytes).toBe(
+      LEGACY_TRANSFER_WINDOW_BYTES - 64 * 1024,
+    );
+    expect(transport.pacingDelayMs).toBe(0);
+    batch(816, [delayed, channels[3]]);
+    expect(transport.sendBufferBytes).toBe(128 * 1024);
+    expect(transport.pacingDelayMs).toBe(4);
+    expect(transport.snapshot().unreceivedBytes).toBe(0);
+    vi.restoreAllMocks();
+  });
   it.each([2, 20, 800])(
     'keeps healthy siblings running after a path stalls at %i ms baseline latency',
     async (latency) => {

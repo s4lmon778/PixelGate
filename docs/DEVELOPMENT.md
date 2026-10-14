@@ -98,3 +98,12 @@ For same-host throughput and source-status browser fixtures,
 native-constructor wrapper. Real host ICE, SCTP, data channels, stored-byte
 hashing and all assertions remain. Production ICE configuration is unchanged;
 this mode does not validate NAT traversal or physical Wi-Fi performance.
+
+For asymmetric native-path experiments, set `PIXELGATE_NATIVE_SLOW_PATHS`
+(0–13), `PIXELGATE_NATIVE_SLOW_PATH_START` (default 1, leaving the primary path
+unchanged), and `PIXELGATE_NATIVE_SLOW_PATH_MS` (0–1000 extra milliseconds in
+each direction). The total selected path range must fit fourteen connections.
+All connections still share the same configured link capacity. Direct mode
+rejects added delays. When `PIXELGATE_NATIVE_RESULT` is provided, a failed run
+also saves a `.failure.json` with isolated-fixture states before cleanup. These
+controls change the developer proxy only, not the production ICE selection.

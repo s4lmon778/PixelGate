@@ -19,6 +19,21 @@ const sourceCPU = Number(process.env.PIXELGATE_NATIVE_SOURCE_CPU || 1);
 if (!Number.isInteger(sourceCPU) || sourceCPU < 1 || sourceCPU > 20)
   throw new Error('Source CPU model must be an integer from 1 to 20.');
 const latency = Number(process.env.PIXELGATE_NATIVE_ONE_WAY_MS || 0);
+const slowPathCount = Number(process.env.PIXELGATE_NATIVE_SLOW_PATHS || 0);
+const slowPathStart = Number(process.env.PIXELGATE_NATIVE_SLOW_PATH_START || 1);
+const slowPathMs = Number(process.env.PIXELGATE_NATIVE_SLOW_PATH_MS || 0);
+if (
+  !Number.isInteger(slowPathCount) ||
+  slowPathCount < 0 ||
+  slowPathCount > 13 ||
+  !Number.isInteger(slowPathStart) ||
+  slowPathStart < 0 ||
+  slowPathStart + slowPathCount > 14 ||
+  !Number.isInteger(slowPathMs) ||
+  slowPathMs < 0 ||
+  slowPathMs > 1000
+)
+  throw new Error('Invalid asymmetric-path delay.');
 const linkBytesPerSecond = Number(
   process.env.PIXELGATE_NATIVE_LINK_BYTES_PER_SECOND || 0,
 );
@@ -49,7 +64,7 @@ if (!Number.isInteger(sourceDelay) || sourceDelay < 0 || sourceDelay > 1000)
   throw new Error('Invalid source delay');
 const trial = process.env.PIXELGATE_NATIVE_TRIAL || '1';
 const direct = process.env.PIXELGATE_NATIVE_DIRECT === '1';
-if (direct && (latency || lossPermille || linkBytesPerSecond))
+if (direct && (latency || slowPathMs || lossPermille || linkBytesPerSecond))
   throw new Error(
     'Direct mode bypasses proxy latency, loss and link capacity; set all to zero.',
   );
@@ -154,7 +169,11 @@ for (let index = 0; index < 16; index++) {
           stats.queuedBytes -= packet.length;
           sockets[1 - side].send(packet, target.port, target.address);
         },
-        latency + (linkBytesPerSecond ? transmissionAt - now : 0),
+        latency +
+          (index >= slowPathStart && index < slowPathStart + slowPathCount
+            ? slowPathMs
+            : 0) +
+          (linkBytesPerSecond ? transmissionAt - now : 0),
       );
       timers.add(timer);
     }),
@@ -482,6 +501,9 @@ try {
     variant,
     receiverEngine,
     latency,
+    slowPathCount,
+    slowPathStart,
+    slowPathMs,
     linkBytesPerSecond,
     lossSeed,
     storageDelay,
@@ -531,48 +553,47 @@ try {
     }),
   );
 } catch (error) {
-  console.log(
-    JSON.stringify({
-      stats,
-      targets: pairs.map((pair) => pair.targets.map(Boolean)),
-      senderDebug: await sending.pages()[0].evaluate(() => window.proxyDebug),
-      receiverDebug: await receiving
-        .pages()[0]
-        .evaluate(() => window.proxyDebug),
-      senderAlerts: await sending
-        .pages()[0]
-        .getByRole('alert')
-        .allTextContents(),
-      receiverAlerts: await receiving
-        .pages()[0]
-        .getByRole('alert')
-        .allTextContents(),
-      senderReport: await sending
-        .pages()[0]
-        .getByLabel('Connection report', { exact: true })
-        .textContent()
-        .catch(() => null),
-      receiverReport: await receiving
-        .pages()[0]
-        .getByLabel('Connection report', { exact: true })
-        .textContent()
-        .catch(() => null),
-      senderFiles: await sending
-        .pages()[0]
-        .locator('.file-list')
-        .innerText()
-        .catch(() => null),
-      receiverFiles: await receiving
-        .pages()[0]
-        .locator('.file-list')
-        .innerText()
-        .catch(() => null),
-      metrics: await sending
-        .pages()[0]
-        .evaluate(() => window.nativeMetrics)
-        .catch(() => null),
-    }),
-  );
+  const failure = {
+    stats,
+    targets: pairs.map((pair) => pair.targets.map(Boolean)),
+    senderDebug: await sending.pages()[0].evaluate(() => window.proxyDebug),
+    receiverDebug: await receiving.pages()[0].evaluate(() => window.proxyDebug),
+    senderAlerts: await sending.pages()[0].getByRole('alert').allTextContents(),
+    receiverAlerts: await receiving
+      .pages()[0]
+      .getByRole('alert')
+      .allTextContents(),
+    senderReport: await sending
+      .pages()[0]
+      .getByLabel('Connection report', { exact: true })
+      .textContent()
+      .catch(() => null),
+    receiverReport: await receiving
+      .pages()[0]
+      .getByLabel('Connection report', { exact: true })
+      .textContent()
+      .catch(() => null),
+    senderFiles: await sending
+      .pages()[0]
+      .locator('.file-list')
+      .innerText()
+      .catch(() => null),
+    receiverFiles: await receiving
+      .pages()[0]
+      .locator('.file-list')
+      .innerText()
+      .catch(() => null),
+    metrics: await sending
+      .pages()[0]
+      .evaluate(() => window.nativeMetrics)
+      .catch(() => null),
+  };
+  if (process.env.PIXELGATE_NATIVE_RESULT)
+    await writeFile(
+      process.env.PIXELGATE_NATIVE_RESULT + '.failure.json',
+      JSON.stringify(failure, null, 2) + '\n',
+    );
+  console.log(JSON.stringify(failure));
   throw error;
 } finally {
   await sending.close();

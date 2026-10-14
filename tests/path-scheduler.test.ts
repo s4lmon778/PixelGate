@@ -15,6 +15,27 @@ function learn(
 }
 
 describe('delivery-aware scheduling', () => {
+  it('can isolate a minority delayed path without ignoring shared congestion or small pools', () => {
+    const scheduler = new PathScheduler<string>();
+    const paths = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+    for (const path of paths) learn(scheduler, path, 20);
+    const delay = (path: string) => {
+      for (let i = 0; i < 5; i++) {
+        scheduler.sent(path, 2000 + i * 1000, FRAME_BYTES);
+        scheduler.received(path, FRAME_BYTES, 2000 + i * 1000, 3000 + i * 1000);
+      }
+    };
+    delay('g');
+    expect(scheduler.feedback(paths).queueDelay).toBeGreaterThan(750);
+    expect(scheduler.feedback(paths, true).queueDelay).toBe(0);
+    expect(scheduler.feedback(['a', 'g'], true).queueDelay).toBeGreaterThan(
+      750,
+    );
+    delay('f');
+    expect(scheduler.feedback(paths, true).queueDelay).toBeGreaterThan(750);
+    for (const path of paths) delay(path);
+    expect(scheduler.feedback(paths, true).queueDelay).toBeGreaterThan(750);
+  });
   it('uses observed median latency without including unknown or excluded paths', () => {
     const scheduler = new PathScheduler<string>();
     expect(scheduler.minimumReceiptDelay(['unknown'])).toBeUndefined();

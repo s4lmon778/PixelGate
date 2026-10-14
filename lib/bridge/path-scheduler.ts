@@ -77,9 +77,13 @@ export class PathScheduler<T> {
     observation.delivered = 0;
   }
 
-  feedback(paths: T[]) {
+  // Keep worst-path delay for diagnostics. With enough observed paths, the
+  // sending policy may use the upper quartile so a minority backlog does not
+  // starve every independent association. Broad queue growth still backs off.
+  feedback(paths: T[], tolerateOutlier = false) {
     let queueDelay = 0;
     let timelyBytes = 0;
+    const queues: number[] = [];
     for (const path of paths) {
       const observation = this.observations.get(path);
       if (!observation) continue;
@@ -87,7 +91,12 @@ export class PathScheduler<T> {
         queueDelay,
         observation.delay - observation.minimumDelay,
       );
+      queues.push(Math.max(0, observation.delay - observation.minimumDelay));
       timelyBytes += observation.timelyBytes;
+    }
+    if (tolerateOutlier && queues.length >= 5) {
+      queues.sort((a, b) => a - b);
+      queueDelay = queues[Math.ceil(queues.length * 0.75) - 1];
     }
     return { queueDelay, timelyBytes };
   }

@@ -161,7 +161,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
   get sendFrameBytes() {
     // Large messages reduce receiver work on nearby links. At longer native
     // delivery delays, smaller messages avoid expensive SCTP fragmentation.
-    const { timelyBytes, queueDelay } = this.deliveryFeedback();
+    const { timelyBytes, queueDelay } = this.deliveryFeedback(true);
     const delay = this.scheduler.minimumReceiptDelay(this.healthyLanes());
     return timelyBytes >= CHECKPOINT_BYTES / 2 &&
       queueDelay <= 100 &&
@@ -172,7 +172,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
   }
   get sendBufferBytes() {
     if (!this.selective || !this.sending) return 64 * 1024;
-    const { timelyBytes, queueDelay } = this.deliveryFeedback();
+    const { timelyBytes, queueDelay } = this.deliveryFeedback(true);
     if (queueDelay > 750) return 128 * 1024;
     if (queueDelay > 250) return 256 * 1024;
     if (queueDelay > 150) return 512 * 1024;
@@ -193,7 +193,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
   get pacingDelayMs() {
     // Transport receipts bound the hidden queues. Once delivery is established,
     // yield a browser task without imposing a timer delay on every healthy burst.
-    const { timelyBytes, queueDelay } = this.deliveryFeedback();
+    const { timelyBytes, queueDelay } = this.deliveryFeedback(true);
     return this.selective &&
       this.sending &&
       timelyBytes >= CHECKPOINT_BYTES / 2 &&
@@ -201,10 +201,13 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       ? 0
       : 4;
   }
-  private deliveryFeedback() {
+  private deliveryFeedback(tolerateOutlier = false) {
     const paths = [this.primary, ...this.openLanes()];
     const healthy = this.healthyLanes();
-    const feedback = this.scheduler.feedback(healthy.length ? healthy : paths);
+    const feedback = this.scheduler.feedback(
+      healthy.length ? healthy : paths,
+      tolerateOutlier,
+    );
     // A path already excluded from scheduling must not throttle its healthy
     // siblings. If all paths stall, retain feedback and restart conservatively.
     return healthy.length
@@ -227,7 +230,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       : paths;
   }
   get burstBytes() {
-    const { timelyBytes, queueDelay } = this.deliveryFeedback();
+    const { timelyBytes, queueDelay } = this.deliveryFeedback(true);
     if (!this.selective || !this.sending || queueDelay > 150) return 64 * 1024;
     if (
       this.frameBytes > FRAME_BYTES &&

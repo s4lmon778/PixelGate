@@ -1157,3 +1157,101 @@ Actual Chromium 101 also passes the four saving/animation/source cases. Its SVG
 visibility bounds initially made the pause assertion report visible despite the
 computed display state. Checking computed `display: none` resolves that fixture
 assertion; the rerun completes and independently verifies the original bytes.
+
+0.3.33 is published from `4e88b7ccbd7b7be7e7a7adcf4e38a2a94c60146c`;
+Pages `9e5d873817788948cab13189148caf2d61a3b29a` reports built without error.
+Live HTML, all four compiled assets and notices equal the tested distribution.
+A fresh actual Chromium 101 context verifies the 0.3.33 footer and receiver saving
+group at 360 px without horizontal overflow or runtime errors.
+
+## October 14 · 0.3.34 isolating minority transport queues
+
+The next speed change addresses a sender policy found during code inspection:
+any one path's excess receipt delay previously reduced aggregate sender credit,
+burst size and pacing for every healthy sibling. With five or more observed
+participating paths, those four sending decisions now use the upper-quartile
+queue delay. Smaller pools retain the maximum. With fourteen observations this
+can isolate up to three delayed paths; with five, one. Broad congestion still
+reduces credit and restores timed pacing. Worst-path `queuedDelayMs` and per-path
+reporting remain unchanged, so a slow connection is still visible.
+
+The existing fourteen-connection negotiation, seven-path long-route guard,
+receiver window, aggregate retained-payload limits, independent receiver
+readback, checkpoints, pause/cancellation, retry and reconnect behavior remain.
+This changes how the existing bounded credit is used; it does not raise the
+memory or connection limits. It also leaves production ICE routes unchanged.
+
+The research checks the protocol distinction in
+[RFC 8831 section 5](https://www.rfc-editor.org/rfc/rfc8831.html#section-5):
+SCTP congestion control is per association. The
+[WebRTC bufferedAmount definition](https://www.w3.org/TR/webrtc/#dom-rtcdatachannel-bufferedamount)
+excludes OS/network buffering. These sources support retaining receipt feedback
+and bounded application credit; they do not prescribe this percentile policy
+or establish its performance. The policy is evaluated by the comparisons below.
+
+Baseline 0.3.33 preserves the 0.3.32 transport. Repeated native WebKit sending
+models use 64 MiB + 111 original bytes, a single shared 12 MiB/s medium including
+return traffic, and 10 ms added one-way latency. All fourteen connections are
+mapped and proxied; every accepted copy passes an additional independent stored
+SHA-256 check. Trials alternate baseline/candidate order, without concurrent
+builds or other browser suites. An initial baseline run overlapping a candidate
+build is excluded as warmup. These are desktop-engine models, not phone Wi-Fi
+measurements or a promise of the same improvement on the user's devices.
+
+- Chromium OPFS receiver, three clean pairs: median Send-to-Verified
+  8,444 → 7,698 ms, **9.69% higher throughput**. Every pair improves.
+- One bulk path receives an extra 120 ms each way from setup, same shared medium:
+  three pairs, 8,863 → 8,466 ms, **4.69% higher throughput**, all pairs improve.
+- About 1% encrypted-datagram loss, three completed pairs using seeds 7, 14, 21:
+  11,585 → 10,833 ms, **6.94% higher throughput**, all completed pairs improve.
+  The original third pair fails: the baseline pauses before verification and the
+  candidate times out after 180 seconds. Both same-seed retries complete and
+  verify their stored bytes. The original failures remain in the record and are
+  not counted as timings. Their cause is unresolved; successful retries do not
+  prove the absence of intermittent stalls in these engine/proxy conditions.
+- WebKit receiver using its actual IndexedDB backend, three clean pairs:
+  8,825 → 7,917 ms, **11.47% higher throughput**, all pairs improve. This is a
+  WebKit engine check; it does not substitute for the Mac/iPhone OPFS setup.
+- Actual Chromium 101 with 150 ms added notification delay after strict
+  IndexedDB completion, 32 MiB + 111: 4,852 → 4,588 ms (**5.75%**). Both report
+  171 ms average commit time. The storage limit remains rather than disappearing.
+- A 100 ms one-way long-route control, 32 MiB + 111: 30,744 → 30,580 ms,
+  essentially unchanged. Both keep fourteen open and seven active paths and
+  independently verify their stored bytes.
+
+Clean Chromium models use somewhat more recovery sends (16–28 versus 2–6),
+while finishing faster. The maximum shared wire queue remains under 0.8 MiB
+in those runs; unchanged application bounds still apply. This tradeoff is kept
+visible alongside timing rather than claiming congestion or duplicate traffic
+has disappeared. The comparison fixture now supports bounded per-path delay
+and retains structured failure diagnostics when a result path is supplied.
+
+New unit cases cover minority queue growth, small-pool fallback, broad queue
+growth, actual transport credit/pacing, unchanged maximum diagnostics and all
+receipts being released. All 245 unit/integration cases, TypeScript and ESLint
+pass. The numeric comparison is retained in
+[the sanitized record](benchmarks/2026-10-14-queue-policy-research.json).
+
+A sustained 400 MiB + 111-byte native comparison also independently verifies:
+50,708 → 43,626 ms from Send to Verified, **16.23% higher throughput**. Payload
+timing is 47,928 → 41,001 ms. Both use fourteen paths and the same shared 12 MiB/s
+medium. Replays are 39 versus 48 and total wire bytes grow about 0.2%. This is a
+single sustained model pair, not a repeated physical iPhone/Mac or Pixel result.
+The research record contains thirty accepted byte-verified native copies, the
+two original failed loss attempts, and a separately excluded warmup.
+
+The final compiled candidate passes eighteen modern Chromium browser cases:
+400 MiB OPFS and IndexedDB transfers, byte-exact downloads and directory readback,
+125-file handoffs/batching, mobile selection, cancellation and sharing, screen
+awake state, both storage-cache deletion paths, unchanged allowance estimates,
+source pause/resume and nine transport compatibility/recovery modes. Optional
+host-only isolation is now also available in the large-file fixture to remove
+external STUN discovery from same-host checks; native transport is retained.
+The final build emits the same `index-CeJyNSO8.js` as the native timing trials.
+
+Five final actual Chromium 101 cases pass: both cache backends, unchanged browser
+allowance estimates, held source/pause-to-verified behavior, and independent stored
+readback after a dropped packet, closed lane, and 500 ms delayed receipts. A final
+WebKit source/pause-to-verified case passes too, giving twenty-four passing browser
+cases for the compiled candidate. TypeScript, ESLint, production build, formatting
+and diff whitespace checks pass. The physical phone/Mac gain remains unmeasured.
