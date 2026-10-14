@@ -212,9 +212,19 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       : { timelyBytes: 0, queueDelay: Math.max(151, feedback.queueDelay) };
   }
   private healthyLanes() {
-    return [this.primary, ...this.openLanes()].filter(
-      (channel) => (this.cooldown.get(channel) ?? 0) <= performance.now(),
+    return this.participatingLanes(
+      [this.primary, ...this.openLanes()].filter(
+        (channel) => (this.cooldown.get(channel) ?? 0) <= performance.now(),
+      ),
     );
+  }
+  private participatingLanes(paths: RTCDataChannel[]) {
+    // Splitting a bounded flight across too many distant SCTP associations
+    // can underfill each one. Keep the wider pool for nearby routes.
+    const delay = this.scheduler.minimumReceiptDelay(paths);
+    return paths.length > 7 && delay !== undefined && delay > 80
+      ? paths.slice(0, 7)
+      : paths;
   }
   get burstBytes() {
     const { timelyBytes, queueDelay } = this.deliveryFeedback();
@@ -255,6 +265,9 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       };
     });
     const senderMeasurements = {
+      activePayloadConnections: this.payloadCandidates().filter(
+        (channel) => channel.readyState === 'open',
+      ).length,
       unreceivedBytes: this.pendingBytes,
       oldestUnreceivedMs: Math.round(
         Math.max(
@@ -508,14 +521,17 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       !lane.failed && lane.channel?.readyState === 'open' ? [lane.channel] : [],
     );
   }
-  private chooseLane(exclude?: RTCDataChannel, bytes = FRAME_BYTES) {
+  private payloadCandidates(exclude?: RTCDataChannel) {
     let available = [this.primary, ...this.openLanes()];
     if (exclude && available.length > 1)
       available = available.filter((channel) => channel !== exclude);
     const healthy = available.filter(
       (channel) => (this.cooldown.get(channel) ?? 0) <= performance.now(),
     );
-    if (healthy.length) available = healthy;
+    return this.participatingLanes(healthy.length ? healthy : available);
+  }
+  private chooseLane(exclude?: RTCDataChannel, bytes = FRAME_BYTES) {
+    const available = this.payloadCandidates(exclude);
     return this.scheduler.choose(
       available,
       (channel) =>
@@ -690,9 +706,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
                 ? Math.min(MAX_LANES, value.stripedLanes)
                 : LANES;
             this.bufferedAmountLowThreshold = this.threshold;
-            if (this.role === 'send')
-              for (let index = 0; index < this.laneCount; index++)
-                void this.offer(index);
+            if (this.role === 'send') void this.offerLanes();
           }
           this.deliver(data);
         } else if (value.type === 'pg-source-status') {
@@ -893,6 +907,14 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       this.dispatchEvent(new Event('bufferedamountlow')),
     );
     channel.addEventListener('close', () => this.failLane(lane));
+  }
+  private async offerLanes() {
+    // Serialize native offer creation so a larger pool does not flood the
+    // primary connection with simultaneous setup work. ICE can still overlap.
+    for (let index = 0; index < this.laneCount; index++) {
+      if (this.stopped || this.readyState !== 'open') return;
+      await this.offer(index);
+    }
   }
   private async offer(index: number) {
     let lane: Lane | undefined;

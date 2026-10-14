@@ -2,6 +2,7 @@ import { test, expect, chromium } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { writeFile, readFile } from 'node:fs/promises';
 import { MAX_BULK_LANES } from '../../lib/bridge/model';
+import { isolateHostIce } from './host-only';
 
 test('parallel connections hide ACK latency, survive lane loss, and verify stored bytes', async ({
   browser,
@@ -96,6 +97,8 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
     for (const mode of selectedModes) {
       const receiving = await receivingBrowser.newContext();
       const sending = await browser.newContext();
+      await isolateHostIce(receiving);
+      await isolateHostIce(sending);
       try {
         if (mode.includes('storage-delay')) {
           await receiving.addInitScript(() =>

@@ -84,8 +84,11 @@ describe('paired sender status', () => {
     { ...sample, stage: 'private-filename' },
     { ...sample, visibility: 'private-address' },
     { ...sample, paused: 'false' },
-    { ...sample, connections: 8 },
-    { ...sample, deprioritizedConnections: 8 },
+    { ...sample, connections: 15 },
+    { ...sample, deprioritizedConnections: 15 },
+    { ...sample, activePayloadConnections: 6 },
+    { ...sample, activePayloadConnections: -1 },
+    { ...sample, activePayloadConnections: 1.5 },
     { ...sample, unreceivedBytes: -1 },
     { ...sample, oldestUnreceivedMs: Infinity },
     { ...sample, receiptDelayMs: NaN },
@@ -95,9 +98,19 @@ describe('paired sender status', () => {
   ])('ignores invalid optional telemetry without trusting it: %j', (value) => {
     expect(sourceStatus(value)).toBeUndefined();
   });
-  it('preserves status for all seven supported connections', () => {
+  it('preserves status for all fourteen supported connections', () => {
     expect(
-      sourceStatus({ ...sample, connections: 7, deprioritizedConnections: 7 }),
-    ).toMatchObject({ connections: 7, deprioritizedConnections: 7 });
+      sourceStatus({
+        ...sample,
+        connections: 14,
+        deprioritizedConnections: 14,
+      }),
+    ).toMatchObject({ connections: 14, deprioritizedConnections: 14 });
+  });
+  it('distinguishes open connections from bounded active payload paths', () => {
+    expect(
+      sourceStatus({ ...sample, connections: 14, activePayloadConnections: 7 }),
+    ).toMatchObject({ connections: 14, activePayloadConnections: 7 });
+    expect(sourceStatus(sample)).not.toHaveProperty('activePayloadConnections');
   });
 });

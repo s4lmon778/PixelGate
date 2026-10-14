@@ -34,6 +34,7 @@ export type SourceState = {
 };
 export type SourceStatus = SourceState & {
   connections: number;
+  activePayloadConnections?: number;
   unreceivedBytes: number;
   oldestUnreceivedMs: number;
   receiptDelayMs: number;
@@ -77,6 +78,14 @@ export function sourceStatus(value: unknown): SourceStatus | undefined {
   if (
     counts.connections > MAX_BULK_LANES + 1 ||
     counts.deprioritizedConnections > MAX_BULK_LANES + 1
+  )
+    return;
+  const active = data.activePayloadConnections;
+  if (
+    active !== undefined &&
+    (!Number.isSafeInteger(active) ||
+      (active as number) < 0 ||
+      (active as number) > counts.connections)
   )
     return;
   let reads: SourceReads | undefined;
@@ -143,6 +152,9 @@ export function sourceStatus(value: unknown): SourceStatus | undefined {
     paused: data.paused,
     visibility: data.visibility as SourceState['visibility'],
     ...counts,
+    ...(active !== undefined
+      ? { activePayloadConnections: active as number }
+      : {}),
     ...(reads ? { sourceReads: reads } : {}),
     ...(batch ? { batch } : {}),
   };

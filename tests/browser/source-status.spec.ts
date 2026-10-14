@@ -1,5 +1,6 @@
 import { test, expect, chromium } from '@playwright/test';
 import { createHash } from 'node:crypto';
+import { isolateHostIce } from './host-only';
 
 test('Pixel report distinguishes a held source read and sender pause, then verifies the original', async ({
   browser,
@@ -13,6 +14,8 @@ test('Pixel report distinguishes a held source read and sender pause, then verif
       : browser;
   const receiving = await receiverBrowser.newContext();
   const sending = await browser.newContext();
+  await isolateHostIce(receiving);
+  await isolateHostIce(sending);
   try {
     const receiver = await receiving.newPage();
     const sender = await sending.newPage();

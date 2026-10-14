@@ -1000,3 +1000,105 @@ all three pickers and both mobile roles at 360 px with no runtime errors or
 horizontal overflow. Active user tabs and transfers were not refreshed. The
 next physical comparison requires both peers on 0.3.31 with the same original,
 device pair and Wi-Fi; these model gains do not yet establish that phone result.
+
+## October 13–14 · 0.3.32 fourteen connections and bottleneck controls
+
+The user asks to double the seven connections and the speed improvement, then
+explicitly asks to check bottlenecks and limits. The candidate advertises thirteen
+additional independent native peer connections, giving fourteen total when both
+peers support them. The smaller advertised limit preserves seven with 0.3.31,
+five with 0.3.30, and older fallback. Source-status validation shares the same
+constant and accepts fourteen. No interface, saving, cache, recovery deadline,
+payload frame, receive window or aggregate retained-payload bound changes.
+Extra native connections have additional browser/OS resource overhead and share
+the physical Wi-Fi capacity; they do not create a second physical interface.
+
+The simple fourteen-connection candidate with concurrent native offer creation
+failed two headless WebKit proxy setups before file payload, while seven-connection
+controls completed. Pinning the proxy endpoint after DTLS alone did not resolve
+the failure. Serializing native offer creation resolved the subsequent fourteen-
+connection runs; ICE checks can still overlap. Setup stops on primary closure.
+This is an observed setup improvement, not proof of the native failure's root
+cause. A direct guessed-mDNS IPv4 fixture also failed pairing and is excluded.
+The loopback fixture now reserves sixteen proxy pairs and prevents later STUN
+checks from unused candidates from redirecting a DTLS-established endpoint.
+These changes do not alter production ICE candidates.
+
+Repeated comparisons use three seeds and 64 MiB + 111 independently verified
+original bytes, without concurrent builds or browser suites. All fourteen native
+connections must be mapped and proxied; no candidate receives an independent
+capacity allowance. One shared medium includes return packets and every
+connection. Matching loss seeds do not guarantee identical lost payloads after
+candidates generate different traffic.
+
+- WebKit pairs on a clean 6 MiB/s shared medium, with 10 ms one-way delay:
+  median Send-to-Verified 13,983 → 13,625 ms, **2.63% higher throughput**. One
+  paired seed is about 1% slower; this capped clean link shows little benefit.
+- The same WebKit configuration with about 1% encrypted-datagram loss:
+  19,559 → 15,856 ms, **23.35% higher throughput**, with every pair faster.
+- Clean WebKit pairs with a 12 MiB/s shared medium and the same delay:
+  10,672 → 8,385 ms, **27.27% higher throughput**, with every pair faster.
+  This demonstrates headroom under different capacity settings, not a doubling
+  of the earlier 0.3.31 statistic under identical conditions.
+- WebKit sending to actual Chromium 101 with 150 ms notification delay after
+  strict IndexedDB completion, on the 6 MiB/s medium: clean median
+  14,123 → 14,023 ms, **0.71% higher throughput**; one pair is slower. With 1%
+  loss, 20,375 → 15,570 ms, **30.86% higher throughput**, every pair faster.
+- A 32 MiB + 111 slow-storage control uses actual Chromium 101, 1,000 ms
+  completion notification delay and a clean 12 MiB/s shared medium. Timings
+  are 10,952 versus 10,932 ms, essentially unchanged. Both copies verify.
+  Increasing native connections does not remove this storage constraint.
+
+These are desktop-engine models. WebKit's receiving fixture uses IndexedDB;
+the user's iPhone used OPFS. Neither these gains nor the fourteen connection
+count proves doubled physical phone throughput.
+
+A 100 ms one-way / 12 MiB/s long-route control exposed a limitation of forcing
+payload across all fourteen associations: 32 MiB + 111 verified bytes took
+82,198 ms. The first seven-connection control failed pairing without payload.
+Its retry completed and passed independent stored-byte SHA-256 with a retained
+batch timing of 40,053 ms, but failed the fixture's connection-count assertion:
+seven sockets mapped versus six surviving open connections. This is not a valid
+strict seven-versus-fourteen speed pair, yet the large difference is a useful
+regression warning and is not discarded as a pre-payload failure.
+
+The final scheduler keeps fourteen connections open but selects at most seven
+payload paths when the lower-median observed minimum receipt delay exceeds
+80 ms. Nearby links retain the wider pool. Existing cooldown exclusions are
+applied before selection; receipts and repair still process packets originally
+sent on paths outside the selected pool. Feedback uses the selected healthy
+paths. The threshold is a conservative guard for the observed long-route issue,
+not a claim of an optimal path count for every network. Diagnostics separately
+report bounded `activePayloadConnections` on both peers; older peers can omit it.
+
+The guarded fourteen-connection long-route copy independently verifies in
+41,596 ms, avoiding the observed 82-second behavior without expanding buffers.
+A final-build nearby capacity pair still verifies all bytes using fourteen
+active paths: 10,477 → 8,880 ms, **17.98% higher throughput**. This single control
+does not replace the repeated earlier models or certify physical phone speed.
+The [numeric record](benchmarks/2026-10-13-fourteen-connection-research.json)
+keeps accepted measurements and excluded fixture attempts distinct.
+
+The record contains **37 accepted, independently byte-verified native transfers**,
+plus the separately described hash-verified control excluded for its connection
+count. Final TypeScript, ESLint, build, formatting and 243 unit/integration cases
+pass. New cases cover fourteen-way distribution, lower advertised peer limits,
+serialized setup/cancellation, learned-delay boundaries, repair of pending bytes
+from a path outside the active pool, and bounded optional active-path metadata.
+
+Five modern Chromium browser cases pass 400 MiB OPFS/IndexedDB copies and
+byte-exact downloads, 125-file handoffs, source waits/pause and nine transport
+compatibility/recovery modes. Actual Chromium 101 passes six mobile/cache and
+lost-packet/closed-lane/500 ms receipt cases. Its source-pause case initially
+failed before a sender response existed, then passes with host-only localhost
+ICE. Mixed-version checks initially lost native connectivity or stalled during
+pairing; with external STUN discovery isolated, both directions pass independent
+readback with seven connections, and current peers pass with fourteen.
+This supports a fixture discovery issue, not proof of its exact cause. The
+optional host-only wrapper changes neither real native file transport nor
+production ICE configuration and does not certify internet NAT traversal.
+Two final WebKit cases pass real pairing, readback/export verification,
+reconnect and held-source/pause-to-verified behavior. The release has fifteen
+passing browser cases in total. An optional fixture helper was renamed after
+React Hooks lint mistook its initial `use` prefix for a component hook; the
+helper's behavior is unchanged.

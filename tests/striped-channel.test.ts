@@ -608,14 +608,14 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
       }),
     );
     await vi.advanceTimersByTimeAsync(0);
-    expect(Peer.peers).toHaveLength(6);
+    expect(Peer.peers).toHaveLength(13);
     for (const peer of Peer.peers) {
       expect(peer.channel.ordered).toBe(false);
       peer.channel.readyState = 'open';
       peer.channel.dispatchEvent(new Event('open'));
     }
     const all = [primary, ...Peer.peers.map((peer) => peer.channel)];
-    for (let i = 0; i < 35; i++) {
+    for (let i = 0; i < 70; i++) {
       for (const channel of all) channel.bufferedAmount = 0;
       transport.send(new Uint8Array([i]).buffer);
     }
@@ -624,21 +624,22 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
         channel.sent.filter((data) => data instanceof ArrayBuffer),
       ).toHaveLength(5);
     expect(transport.snapshot()).toMatchObject({
-      connections: 7,
+      connections: 14,
       selectiveReceipts: true,
-      unreceivedBytes: 315,
+      unreceivedBytes: 630,
     });
     primary.receive(
       JSON.stringify({ type: 'pg-striped-receipt', received: [0, 1, 2, 3] }),
     );
-    expect(transport.snapshot().unreceivedBytes).toBe(279);
+    expect(transport.snapshot().unreceivedBytes).toBe(594);
     expect(transport.sendBufferBytes).toBe(512 * 1024);
   });
   it.each<[number | undefined, number]>([
     [undefined, 2],
     [4, 4],
     [6, 6],
-    [99, 6],
+    [13, 13],
+    [99, 13],
   ])(
     'negotiates peer bulk limit %s as %i without changing aggregate credit',
     async (advertised, expected) => {
@@ -672,6 +673,161 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
       expect(transport.snapshot().unreceivedBytes).toBe(0);
     },
   );
+  it.each([false, true])(
+    'serializes native offers and stops setup after close=%s',
+    async (close) => {
+      let finishOffer!: (value: { type: 'offer'; sdp: string }) => void;
+      vi.spyOn(Peer.prototype, 'createOffer').mockImplementationOnce(
+        () => new Promise((resolve) => (finishOffer = resolve)),
+      );
+      const primary = new Channel();
+      const transport = new StripedChannel(primary.native(), 'send');
+      opened.push(transport);
+      primary.receive(
+        JSON.stringify({
+          type: 'hello',
+          version: 1,
+          stripedTransport: 1,
+          stripedReceipts: 1,
+          stripedLanes: 13,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(Peer.peers).toHaveLength(1);
+      if (close) transport.close();
+      finishOffer({
+        type: 'offer',
+        sdp: 'v=0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\n',
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(Peer.peers).toHaveLength(close ? 1 : 13);
+      const offers = primary.sent.filter(
+        (wire) =>
+          typeof wire === 'string' &&
+          JSON.parse(wire).description !== undefined,
+      );
+      expect(offers).toHaveLength(close ? 0 : 13);
+    },
+  );
+  it.each([40, 80, 81, 200])(
+    'keeps fourteen connections but bounds active paths at learned delay %i ms',
+    async (delay) => {
+      let clock = 100;
+      vi.spyOn(performance, 'now').mockImplementation(() => clock);
+      const primary = new Channel();
+      const transport = new StripedChannel(primary.native(), 'send');
+      opened.push(transport);
+      primary.receive(
+        JSON.stringify({
+          type: 'hello',
+          version: 1,
+          stripedTransport: 1,
+          stripedReceipts: 1,
+          stripedLanes: 13,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      const channels = [primary, ...Peer.peers.map((peer) => peer.channel)];
+      for (const channel of channels) {
+        channel.readyState = 'open';
+        channel.dispatchEvent(new Event('open'));
+      }
+      for (let index = 0; index < 14; index++) {
+        for (const channel of channels) channel.bufferedAmount = 0;
+        transport.send(new Uint8Array(FRAME_BYTES));
+      }
+      clock += delay;
+      primary.receive(
+        JSON.stringify({
+          type: 'pg-striped-receipt',
+          received: Array.from({ length: 14 }, (_, index) => index),
+        }),
+      );
+      const active = delay > 80 ? 7 : 14;
+      expect(transport.snapshot()).toMatchObject({
+        connections: 14,
+        activePayloadConnections: active,
+        unreceivedBytes: 0,
+      });
+      for (let index = 0; index < 14; index++) {
+        for (const channel of channels) channel.bufferedAmount = 0;
+        transport.send(new Uint8Array(FRAME_BYTES));
+      }
+      for (const [index, channel] of channels.entries()) {
+        const sent = channel.sent.filter((wire) => wire instanceof ArrayBuffer);
+        expect(sent).toHaveLength(active === 14 ? 2 : index < 7 ? 3 : 1);
+      }
+      clock += delay;
+      primary.receive(
+        JSON.stringify({
+          type: 'pg-striped-receipt',
+          received: Array.from({ length: 14 }, (_, index) => index + 14),
+        }),
+      );
+      expect(transport.snapshot().unreceivedBytes).toBe(0);
+    },
+  );
+  it('repairs a pending packet from a path no longer selected on a distant route', async () => {
+    let clock = 100;
+    vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    const primary = new Channel();
+    const transport = new StripedChannel(primary.native(), 'send');
+    opened.push(transport);
+    primary.receive(
+      JSON.stringify({
+        type: 'hello',
+        version: 1,
+        stripedTransport: 1,
+        stripedReceipts: 1,
+        stripedLanes: 13,
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    const channels = [primary, ...Peer.peers.map((peer) => peer.channel)];
+    for (const channel of channels) {
+      channel.readyState = 'open';
+      channel.dispatchEvent(new Event('open'));
+    }
+    for (let index = 0; index < 14; index++) {
+      for (const channel of channels) channel.bufferedAmount = 0;
+      transport.send(new Uint8Array(FRAME_BYTES));
+    }
+    const original = channels[13].sent.find(
+      (wire) => wire instanceof ArrayBuffer,
+    )! as ArrayBuffer;
+    const missing = new DataView(original).getUint32(4);
+    clock += 200;
+    primary.receive(
+      JSON.stringify({
+        type: 'pg-striped-receipt',
+        received: Array.from({ length: 14 }, (_, index) => index).filter(
+          (sequence) => sequence !== missing,
+        ),
+      }),
+    );
+    expect(transport.snapshot().activePayloadConnections).toBe(7);
+    for (const channel of channels) channel.bufferedAmount = 0;
+    clock = 800;
+    await vi.advanceTimersByTimeAsync(100);
+    expect(
+      channels
+        .slice(0, 7)
+        .flatMap((channel) =>
+          channel.sent.filter(
+            (wire) =>
+              wire instanceof ArrayBuffer &&
+              new DataView(wire).getUint32(4) === missing,
+          ),
+        ),
+    ).toHaveLength(1);
+    expect(
+      channels[13].sent.filter((wire) => wire instanceof ArrayBuffer),
+    ).toHaveLength(1);
+    primary.receive(
+      JSON.stringify({ type: 'pg-striped-receipt', received: [missing] }),
+    );
+    expect(transport.snapshot().unreceivedBytes).toBe(0);
+  });
   it('grows a bounded delivery window only after receipts and restores conservative pacing on delayed delivery', async () => {
     let clock = 100;
     vi.spyOn(performance, 'now').mockImplementation(() => clock);

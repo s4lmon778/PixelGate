@@ -99,7 +99,7 @@ const stats = {
   applicationPackets: 0,
   lossPermille,
 };
-for (let index = 0; index < 10; index++) {
+for (let index = 0; index < 16; index++) {
   const sockets = [createSocket('udp4'), createSocket('udp4')];
   for (const socket of sockets)
     await new Promise((resolve) => socket.bind(0, '127.0.0.1', resolve));
@@ -112,11 +112,19 @@ for (let index = 0; index < 10; index++) {
       const origin = pair.targets[1 - side];
       if (
         origin &&
+        !origin.applicationBound &&
         packet.length >= 20 &&
         packet.readUInt32BE(4) === 0x2112a442
       ) {
         origin.address = sender.address;
         origin.port = sender.port;
+      }
+      // Pin the endpoint once DTLS starts. Later checks from an unselected
+      // local candidate must not redirect an established synthetic route.
+      if (origin && packet.length >= 13 && packet[0] >= 20 && packet[0] <= 63) {
+        origin.address = sender.address;
+        origin.port = sender.port;
+        origin.applicationBound = true;
       }
       const target = pair.targets[side];
       if (!target) return;
