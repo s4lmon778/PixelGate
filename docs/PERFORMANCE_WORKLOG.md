@@ -1255,3 +1255,11 @@ readback after a dropped packet, closed lane, and 500 ms delayed receipts. A fin
 WebKit source/pause-to-verified case passes too, giving twenty-four passing browser
 cases for the compiled candidate. TypeScript, ESLint, production build, formatting
 and diff whitespace checks pass. The physical phone/Mac gain remains unmeasured.
+
+0.3.34 is published from `a48765b15d9ddcff62a6aab587c1aa9457f8def0`.
+Pages `f1b29c8a7176f20574f782d4b5daa91059d8b49d` reports built without error.
+Live build metadata matches that exact source/version, and HTML, all four
+compiled assets and third-party notices match the tested distribution byte for
+byte. A fresh actual Chromium 101 context verifies the 0.3.34 footer and receiver
+action group at 360 px without overflow or runtime errors. Active user tabs are
+not refreshed, and the existing 8787 server is not changed.
