@@ -1102,3 +1102,13 @@ reconnect and held-source/pause-to-verified behavior. The release has fifteen
 passing browser cases in total. An optional fixture helper was renamed after
 React Hooks lint mistook its initial `use` prefix for a component hook; the
 helper's behavior is unchanged.
+
+0.3.32 is published from `e8b94994fb2360bf2502826ac994a03282e2cfa1`.
+Pages commit `c3b14a5e756c63c20e77ef519df53ba65d66e4ef` reports built without
+error. Live metadata identifies the tested source/version. HTML, all four
+compiled assets and the third-party notice match the local distribution byte
+for byte. A fresh actual Chromium 101.0.4951.15 context confirms the live footer,
+all three pickers and both mobile roles at 360 px with no runtime errors or
+horizontal overflow. Active user tabs were not refreshed. Physical phone
+throughput still needs the same-file/device/Wi-Fi comparison with both peers on
+0.3.32; publication does not establish a doubled physical speed.
