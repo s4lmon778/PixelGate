@@ -32,6 +32,7 @@ export function DeviceConnection({
   const receiver = role === 'receive' ? local : peer;
   const state = paused ? 'Paused' : moving ? 'Transferring' : 'Ready';
   const beamId = `connection-beam-${useId().replace(/:/g, '')}`;
+  const clipId = `${beamId}-clip`;
   const endpoint = (kind: DeviceKind | undefined, side: 'send' | 'receive') => {
     const { Icon, label } = devices[kind ?? 'unknown'];
     return (
@@ -83,8 +84,8 @@ export function DeviceConnection({
             <defs>
               <linearGradient
                 id={beamId}
-                x1="-32"
-                x2="-2"
+                x1="-20"
+                x2="0"
                 y1="17"
                 y2="17"
                 gradientUnits="userSpaceOnUse"
@@ -95,9 +96,11 @@ export function DeviceConnection({
                   stopColor="currentColor"
                   stopOpacity="0.3"
                 />
-                <stop offset="75%" stopColor="currentColor" />
-                <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+                <stop offset="100%" stopColor="currentColor" />
               </linearGradient>
+              <clipPath id={clipId}>
+                <rect x="2" y="11" width="84" height="12" rx="6" />
+              </clipPath>
             </defs>
             <path
               className="connection-rail"
@@ -107,15 +110,34 @@ export function DeviceConnection({
               strokeDasharray="5 5"
               strokeLinecap="round"
             />
-            <g className="connection-beam">
-              <path
-                d="M -32 17 H -2"
-                stroke={`url(#${beamId})`}
-                strokeWidth="3"
-                strokeLinecap="round"
-              />
+            <g clipPath={`url(#${clipId})`}>
+              <g className="connection-beam">
+                <ellipse
+                  cx="0"
+                  cy="17"
+                  rx="4.5"
+                  ry="3.5"
+                  fill="currentColor"
+                  opacity="0.14"
+                />
+                <path
+                  d="M -20 17 H 0"
+                  stroke={`url(#${beamId})`}
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+                <rect
+                  x="-3"
+                  y="14.75"
+                  width="6"
+                  height="4.5"
+                  rx="2.25"
+                  fill="currentColor"
+                />
+              </g>
             </g>
             <path
+              className="connection-arrowhead"
               d="m 90 12 6 5 -6 5"
               stroke="currentColor"
               strokeWidth="1.5"

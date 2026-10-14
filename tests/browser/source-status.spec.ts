@@ -5,7 +5,7 @@ import { isolateHostIce } from './host-only';
 test('Pixel report distinguishes a held source read and sender pause, then verifies the original', async ({
   browser,
   browserName,
-}) => {
+}, testInfo) => {
   const receiverBrowser =
     browserName === 'webkit'
       ? await chromium.launch({
@@ -94,7 +94,42 @@ test('Pixel report distinguishes a held source read and sender pause, then verif
     expect(JSON.stringify(held.transfer.source)).not.toContain(
       'held-source.bin',
     );
+    // Inspect actual SVG animation positions, including its final visible frame.
+    const beam = sender.locator('.connection-flow.moving .connection-beam');
+    await expect(beam).toBeVisible();
+    for (const width of [320, 390, 1280]) {
+      await sender.setViewportSize({ width, height: 844 });
+      const positions = await beam.evaluate((element) => {
+        const animation = element.getAnimations()[0];
+        animation.pause();
+        const duration = Number(animation.effect!.getTiming().duration);
+        return [0, 0.12, 0.5, 0.76, 0.99].map((fraction) => {
+          animation.currentTime = duration * fraction;
+          const packet = element.querySelector('rect')!.getBoundingClientRect();
+          const arrow = element
+            .closest('svg')!
+            .querySelector('.connection-arrowhead')!
+            .getBoundingClientRect();
+          return { right: packet.right, arrow: arrow.left };
+        });
+      });
+      for (const position of positions)
+        expect(position.right).toBeLessThan(position.arrow);
+    }
+    await sender.setViewportSize({ width: 390, height: 844 });
+    await beam.evaluate((element) => {
+      const animation = element.getAnimations()[0];
+      animation.currentTime =
+        Number(animation.effect!.getTiming().duration) * 0.5;
+    });
+    await sender
+      .locator('.device-connection')
+      .screenshot({ path: testInfo.outputPath('green-connection-packet.png') });
+    await sender.emulateMedia({ reducedMotion: 'reduce' });
+    await expect(beam).toHaveCSS('animation-name', 'none');
+    await sender.emulateMedia({ reducedMotion: 'no-preference' });
     await sender.getByRole('button', { name: 'Pause', exact: true }).click();
+    await expect(sender.locator('.connection-beam')).toHaveCSS('display', 'none');
     await expect
       .poll(async () => (await readReport()).transfer?.source?.paused, {
         timeout: 15000,

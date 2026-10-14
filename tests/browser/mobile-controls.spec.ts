@@ -269,10 +269,67 @@ test('unsupported mobile capabilities keep downloads available and show truthful
   ).toBeDisabled();
   await expect(
     page.getByRole('button', { name: 'Choose folder', exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
+  await page
+    .getByRole('button', { name: 'Choose folder', exact: true })
+    .click();
+  await expect(
+    page.getByRole('region', { name: 'Choose a save folder', exact: true }),
+  ).toContainText('does not grant websites direct writable-folder access');
+  await expect(
+    page
+      .getByRole('group', { name: 'Save actions', exact: true })
+      .getByRole('button', { name: 'Choose folder', exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByText('Manual download', { exact: true }),
   ).toBeVisible();
+});
+
+test('Safari keeps a folder action beside saving controls with native download-folder guidance', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    userAgent:
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/26.5 Safari/605.1.15',
+  });
+  try {
+    await context.addInitScript(() =>
+      Object.defineProperty(window, 'showDirectoryPicker', {
+        value: undefined,
+      }),
+    );
+    const page = await context.newPage();
+    await page.goto('./');
+    await page
+      .getByRole('button', { name: 'Receive files', exact: true })
+      .click();
+    const group = page.getByRole('group', {
+      name: 'Save actions',
+      exact: true,
+    });
+    await group
+      .getByRole('button', { name: 'Choose folder', exact: true })
+      .click();
+    const guidance = page.getByRole('region', {
+      name: 'Choose a save folder',
+      exact: true,
+    });
+    await expect(guidance).toContainText('Ask for each download');
+    await expect(guidance).toContainText('Safari’s save dialog');
+    await expect(
+      group.getByRole('button', {
+        name: 'Prepare selected files',
+        exact: true,
+      }),
+    ).toBeVisible();
+    await group
+      .getByRole('button', { name: 'Choose folder', exact: true })
+      .click();
+    await expect(guidance).toBeHidden();
+  } finally {
+    await context.close();
+  }
 });
 
 test('save/share opens from a fresh tap, preserves bytes, handles cancel, and never claims destination verification', async ({
@@ -333,6 +390,19 @@ test('save/share opens from a fresh tap, preserves bytes, handles cancel, and ne
   await expect(
     dialog.getByRole('button', { name: 'Choose app or save location' }),
   ).toBeEnabled();
+  const saveActions = dialog.getByRole('group', {
+    name: 'Save actions',
+    exact: true,
+  });
+  for (const name of [
+    'Choose folder',
+    'Choose app or save location',
+    'Download verified files',
+    'Select next batch',
+  ])
+    await expect(
+      saveActions.getByRole('button', { name, exact: true }),
+    ).toBeVisible();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,

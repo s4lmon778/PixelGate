@@ -1975,21 +1975,32 @@ export default function PixelGate() {
                                       <span>Save to Photos folder</span>
                                     </button>
                                   )}
-                                <button
-                                  className="button"
-                                  disabled={
-                                    busy ||
-                                    !!active ||
-                                    typeof (window as BrowserFolderWindow)
-                                      .showDirectoryPicker !== 'function'
-                                  }
-                                  onClick={() =>
-                                    void guarded(() => selectFolder())
-                                  }
-                                >
-                                  <Folder size={16} aria-hidden="true" />
-                                  <span>Choose folder</span>
-                                </button>
+                                {typeof (window as BrowserFolderWindow)
+                                  .showDirectoryPicker === 'function' && (
+                                  <button
+                                    className="button"
+                                    disabled={busy || !!active || saveWorking}
+                                    onClick={() =>
+                                      void guarded(() => selectFolder())
+                                    }
+                                  >
+                                    <Folder size={16} aria-hidden="true" />
+                                    <span>Choose folder</span>
+                                  </button>
+                                )}
+                                {folder.current && (
+                                  <button
+                                    className="text-button"
+                                    disabled={busy || !!active || saveWorking}
+                                    onClick={() => {
+                                      folder.current = undefined;
+                                      photosFolder.current = false;
+                                      setFolderName('Manual download');
+                                    }}
+                                  >
+                                    Use downloads
+                                  </button>
+                                )}
                               </>
                             }
                             folderHint={
@@ -2035,19 +2046,6 @@ export default function PixelGate() {
                               );
                             }}
                           />
-                          {folder.current && (
-                            <button
-                              className="text-button"
-                              disabled={busy || !!active || saveWorking}
-                              onClick={() => {
-                                folder.current = undefined;
-                                photosFolder.current = false;
-                                setFolderName('Manual download');
-                              }}
-                            >
-                              Use downloads
-                            </button>
-                          )}
                           {reportActions}
                         </>
                       )}

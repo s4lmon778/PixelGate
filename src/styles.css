@@ -1218,6 +1218,10 @@ h1 {
 .inline-save-actions {
   margin-top: 10px;
 }
+.save-location-hint {
+  margin: 8px 0;
+  line-height: 1.5;
+}
 .cache-actions {
   margin-top: 6px;
 }
@@ -1304,20 +1308,27 @@ h1 {
 }
 .moving .connection-beam {
   display: block;
-  animation: connection-beam-travel 2.8s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  animation: connection-beam-travel 2.6s linear infinite;
 }
 @keyframes connection-beam-travel {
-  from {
-    transform: translateX(0);
+  0% {
+    transform: translateX(8px);
+    opacity: 0;
   }
-  to {
-    transform: translateX(132px);
+  12%,
+  76% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(80px);
+    opacity: 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {
   .moving .connection-beam {
     animation: none;
-    transform: translateX(64px);
+    transform: translateX(44px);
+    opacity: 0.7;
   }
 }
 .queue-controls {

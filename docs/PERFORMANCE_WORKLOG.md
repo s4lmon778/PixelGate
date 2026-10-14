@@ -1112,3 +1112,48 @@ all three pickers and both mobile roles at 360 px with no runtime errors or
 horizontal overflow. Active user tabs were not refreshed. Physical phone
 throughput still needs the same-file/device/Wi-Fi comparison with both peers on
 0.3.32; publication does not establish a doubled physical speed.
+
+## October 14 · 0.3.33 saving controls and connection animation
+
+The user's physical iPhone-to-Mac 0.3.32 report verifies 421,259,466 bytes
+in 89,435 ms from Send through Verified: 4.71 decimal MB/s. All fourteen
+connections carried payload. Source reads average 4 ms; Mac OPFS commits
+average 3 ms. The completed sender sample retains 452 ms maximum path queue
+delay and 194 recovery sends. These idle samples do not identify the limiting
+path during transfer. The later sender ICE failure occurs about 264 seconds
+after the batch finishes; it is not evidence of failure during that verified
+transfer. Hidden visibility is also reported after completion. The physical
+result justifies investigating transport queues before enlarging storage windows.
+
+This release groups the receiver folder action, preparation, native app/location
+saving, verified downloads and next-batch selection in one responsive action
+group below the contained file list. Existing direct writable-folder selection
+and independent destination readback remain available when the browser exposes
+showDirectoryPicker. The user explicitly chose browser-only native saving for
+Safari. An enabled folder action expands browser-specific saving guidance rather
+than leaving a disabled control. Mac Safari uses Settings → General → File
+download location → Ask for each download, then its native download/save dialog.
+This is a browser setting, not a writable-folder permission granted to PixelGate.
+Apple documents this setting at
+https://support.apple.com/en-ie/guide/safari/ibrw1072/mac .
+Other unsupported browsers retain native sharing when available and their own
+download destination settings. No native helper is introduced.
+
+The green dashed connection visual keeps its device types and direction. A
+rounded packet with a fading tail now travels inside a clipped lane and fades
+before the arrowhead. The packet cannot overshoot the arrow. Pausing hides it;
+reduced-motion preference makes it static. This uses CSS/SVG without JS ticks.
+Actual Chromium and WebKit browser cases sample the animated packet at five
+positions for 320, 390 and 1280 px viewports, test pause/reduced motion, and finish
+the same real transfer with independent stored-byte SHA-256 verification.
+Saving cases exercise grouped controls, native sharing cancellation, original
+bytes and truthful Safari folder guidance. Seven browser cases pass, with the
+existing WebKit OS-sharing mock case intentionally skipped. TypeScript, ESLint,
+build and all 243 unit/integration cases pass. The packet screenshot was inspected.
+No transport tuning is included in this UI release; speed research continues
+against the unchanged 0.3.32/0.3.33 transport.
+
+Actual Chromium 101 also passes the four saving/animation/source cases. Its SVG
+visibility bounds initially made the pause assertion report visible despite the
+computed display state. Checking computed `display: none` resolves that fixture
+assertion; the rerun completes and independently verifies the original bytes.

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Download, Share2 } from 'lucide-react';
+import { Download, Folder, Share2 } from 'lucide-react';
 import { formatBytes, isVerified, type RecordFile } from '@/lib/bridge/model';
 import { local } from '@/lib/bridge/database';
 import {
@@ -13,6 +13,7 @@ import {
 } from '@/lib/bridge/save-options';
 import { version } from '../package.json';
 import { TransferFiles } from './TransferFiles';
+import { deviceKind } from '@/lib/bridge/device';
 
 export function SaveToApp({
   records,
@@ -51,6 +52,7 @@ export function SaveToApp({
   const [preparedIds, setPreparedIds] = useState<string[]>([]);
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState('');
+  const [choosingLocation, setChoosingLocation] = useState(false);
   const available = useMemo(
     () => [
       ...new Map(
@@ -95,6 +97,12 @@ export function SaveToApp({
   }, [working, workingChanged]);
   const offered = (r: RecordFile) => !!(r.shared || r.downloaded);
   const android = /Android/i.test(navigator.userAgent);
+  const macSafari =
+    !folderAccessAvailable &&
+    deviceKind() === 'computer' &&
+    /Macintosh/i.test(navigator.userAgent) &&
+    /Safari\//i.test(navigator.userAgent) &&
+    !/Chrome|Chromium|CriOS|FxiOS|Edg/i.test(navigator.userAgent);
   const shareFiles =
     supported && prepared
       ? nativeShareBatch(
@@ -267,7 +275,6 @@ export function SaveToApp({
 
   return (
     <div className="app-save" role="region" aria-label="Save received files">
-      <div className="save-actions">{folderControl}</div>
       <div className="file-selection-bar">
         <span className="hint">
           {selected.length} selected ·{' '}
@@ -326,7 +333,23 @@ export function SaveToApp({
           setMessage('');
         }}
       />
-      <div className="save-actions inline-save-actions">
+      <div
+        className="save-actions inline-save-actions"
+        role="group"
+        aria-label="Save actions"
+      >
+        {folderControl}
+        {!folderAccessAvailable && (
+          <button
+            className="button"
+            disabled={working || disabled}
+            aria-expanded={choosingLocation}
+            onClick={() => setChoosingLocation((shown) => !shown)}
+          >
+            <Folder size={16} aria-hidden="true" />
+            Choose folder
+          </button>
+        )}
         {prepared ? (
           <>
             {shareAllowed && (
@@ -381,6 +404,24 @@ export function SaveToApp({
           Select next batch
         </button>
       </div>
+      {!folderAccessAvailable && choosingLocation && (
+        <div
+          className="save-location-hint"
+          role="region"
+          aria-label="Choose a save folder"
+        >
+          <strong>Choose where your files are saved</strong>
+          <p className="hint">
+            {macSafari
+              ? 'In Safari → Settings → General → File download location, select “Ask for each download”. Then prepare your files and use Download verified files to choose their folder in Safari’s save dialog.'
+              : 'Prepare your files, then use Choose app or save location when available to open your device’s saving options. For downloads, enable “Ask where to save each file” in your browser’s download settings to choose a folder when saving.'}
+          </p>
+          <p className="hint">
+            This browser does not grant websites direct writable-folder access.
+            Your originals stay staged until you clear them.
+          </p>
+        </div>
+      )}
       <div className="cache-actions">{clearControl(working)}</div>
       {message && (
         <p className="share-status" role="status">
