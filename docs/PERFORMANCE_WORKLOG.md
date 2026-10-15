@@ -1378,3 +1378,12 @@ at 360 px without overflow or runtime errors. Actual supported pickers remain
 in the product. The short desktop internet sample is labelled as such and is
 not used to claim phone Wi-Fi capacity. Native comparison bundles remain fixed
 during timing trials; no concurrent browser suites or builds affect them.
+
+0.3.35 is published from `b5bc41bd2535ce568bd81142e0ef9915f7bb1069`.
+Pages `fdfa1096ede8aa3201a3ca2ee1157217911beb05` reports built without error.
+Live build metadata matches that exact source and version. HTML, all four
+compiled assets and third-party notices match the tested distribution byte for
+byte. A fresh actual Chromium 101 context verifies the published 0.3.35 footer,
+both roles and the unsupported-folder text disclosure at 360 px without
+overflow or runtime errors. The owned 8798/8799 test servers are closed;
+existing 8787 and active user tabs remain untouched.
