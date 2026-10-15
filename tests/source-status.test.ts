@@ -18,6 +18,23 @@ const sample = {
 };
 
 describe('paired sender status', () => {
+  it('retains bounded stage durations without forwarding arbitrary keys', () => {
+    expect(
+      sourceStatus({
+        ...sample,
+        stageTimes: {
+          'network-backpressure': 100,
+          paused: 200,
+          'private-filename.mov': 100,
+        },
+      }),
+    ).toMatchObject({
+      stageTimes: { 'network-backpressure': 100, paused: 200 },
+    });
+    expect(
+      sourceStatus({ ...sample, stageTimes: { sending: -1 } }),
+    ).toBeUndefined();
+  });
   it('retains only states and counts, never arbitrary source metadata', () => {
     expect(
       sourceStatus({

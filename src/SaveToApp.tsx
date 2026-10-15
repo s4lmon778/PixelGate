@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Download, Folder, Share2 } from 'lucide-react';
+import { Download, Share2 } from 'lucide-react';
 import { formatBytes, isVerified, type RecordFile } from '@/lib/bridge/model';
 import { local } from '@/lib/bridge/database';
 import {
@@ -52,7 +52,6 @@ export function SaveToApp({
   const [preparedIds, setPreparedIds] = useState<string[]>([]);
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState('');
-  const [choosingLocation, setChoosingLocation] = useState(false);
   const available = useMemo(
     () => [
       ...new Map(
@@ -339,17 +338,6 @@ export function SaveToApp({
         aria-label="Save actions"
       >
         {folderControl}
-        {!folderAccessAvailable && (
-          <button
-            className="button"
-            disabled={working || disabled}
-            aria-expanded={choosingLocation}
-            onClick={() => setChoosingLocation((shown) => !shown)}
-          >
-            <Folder size={16} aria-hidden="true" />
-            Choose folder
-          </button>
-        )}
         {prepared ? (
           <>
             {shareAllowed && (
@@ -404,23 +392,19 @@ export function SaveToApp({
           Select next batch
         </button>
       </div>
-      {!folderAccessAvailable && choosingLocation && (
-        <div
-          className="save-location-hint"
-          role="region"
-          aria-label="Choose a save folder"
-        >
-          <strong>Choose where your files are saved</strong>
+      {!folderAccessAvailable && (
+        <details className="help-details save-location-hint">
+          <summary>Choose where downloads are saved</summary>
           <p className="hint">
             {macSafari
               ? 'In Safari → Settings → General → File download location, select “Ask for each download”. Then prepare your files and use Download verified files to choose their folder in Safari’s save dialog.'
-              : 'Prepare your files, then use Choose app or save location when available to open your device’s saving options. For downloads, enable “Ask where to save each file” in your browser’s download settings to choose a folder when saving.'}
+              : 'Prepare your files, then use Choose app or save location when available to open your device’s saving options. For downloads, your browser’s download settings control the destination folder and whether a save dialog appears.'}
           </p>
           <p className="hint">
             This browser does not grant websites direct writable-folder access.
             Your originals stay staged until you clear them.
           </p>
-        </div>
+        </details>
       )}
       <div className="cache-actions">{clearControl(working)}</div>
       {message && (

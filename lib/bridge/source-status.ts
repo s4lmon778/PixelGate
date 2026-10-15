@@ -31,6 +31,7 @@ export type SourceState = {
   visibility: 'visible' | 'hidden';
   sourceReads?: SourceReads;
   batch?: BatchTimingSnapshot;
+  stageTimes?: Record<string, number>;
 };
 export type SourceStatus = SourceState & {
   connections: number;
@@ -89,6 +90,17 @@ export function sourceStatus(value: unknown): SourceStatus | undefined {
   )
     return;
   let reads: SourceReads | undefined;
+  let stageTimes: Record<string, number> | undefined;
+  if (data.stageTimes !== undefined) {
+    if (!data.stageTimes || typeof data.stageTimes !== 'object') return;
+    stageTimes = {};
+    for (const key of [...stages, 'paused']) {
+      const value = (data.stageTimes as Record<string, unknown>)[key];
+      if (value === undefined) continue;
+      if (!Number.isSafeInteger(value) || (value as number) < 0) return;
+      stageTimes[key] = value as number;
+    }
+  }
   if (data.sourceReads !== undefined) {
     if (!data.sourceReads || typeof data.sourceReads !== 'object') return;
     const input = data.sourceReads as Record<string, unknown>;
@@ -156,6 +168,7 @@ export function sourceStatus(value: unknown): SourceStatus | undefined {
       ? { activePayloadConnections: active as number }
       : {}),
     ...(reads ? { sourceReads: reads } : {}),
+    ...(stageTimes ? { stageTimes } : {}),
     ...(batch ? { batch } : {}),
   };
 }

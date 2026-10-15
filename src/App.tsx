@@ -7,6 +7,8 @@ import { SaveToApp } from './SaveToApp';
 import { ThemeMenu } from './ThemeMenu';
 import { TransferFiles } from './TransferFiles';
 import { DeviceConnection } from './DeviceConnection';
+import { NetworkDiagnostics } from './NetworkDiagnostics';
+import { browserNetwork, type InternetResult } from '@/lib/bridge/network-test';
 import { deviceKind, peerDevice, type DeviceKind } from '@/lib/bridge/device';
 import { version } from '../package.json';
 import {
@@ -94,7 +96,12 @@ export default function PixelGate() {
     modules?: number;
     error?: string;
   }>();
-  const [busy, setBusy] = useState(false);
+  const [operationBusy, setBusy] = useState(false);
+  const [networkBusy, setNetworkBusy] = useState(false);
+  const [internetResult, setInternetResult] = useState<
+    InternetResult | undefined
+  >(() => savedReport?.network?.internetDownload);
+  const busy = operationBusy || networkBusy;
   const [running, setRunning] = useState(false);
   const [paused, setPaused] = useState(false);
   const [queue, setQueue] = useState<QueuedFile[]>([]);
@@ -138,6 +145,7 @@ export default function PixelGate() {
   const baseBytes = useRef(0);
   const releaseLock = useRef<(() => void) | undefined>(undefined);
   const latestReport = useRef<ConnectionReport | undefined>(undefined);
+  const networkAllowed = useRef(false);
 
   const currentReport: ConnectionReport | undefined = room?.diagnostics
     ? {
@@ -150,6 +158,10 @@ export default function PixelGate() {
         transfer: transport.current?.snapshot(),
         receiving: receiver.current?.snapshot(),
         sending: sender.current?.snapshot(),
+        network: {
+          connection: browserNetwork(),
+          ...(internetResult ? { internetDownload: internetResult } : {}),
+        },
         routeStatsScope: 'primary-connection',
       }
     : undefined;
@@ -163,6 +175,10 @@ export default function PixelGate() {
       transfer: transport.current?.snapshot(),
       receiving: receiver.current?.snapshot(),
       sending: sender.current?.snapshot(),
+      network: {
+        ...previous.network,
+        connection: browserNetwork(),
+      },
     };
     retainConnectionReport(report);
     setSavedReport(report);
@@ -191,12 +207,16 @@ export default function PixelGate() {
       transfer: transport.current.snapshot(),
       receiving: receiver.current?.snapshot(),
       sending: sender.current?.snapshot(),
+      network: {
+        connection: browserNetwork(),
+        ...(internetResult ? { internetDownload: internetResult } : {}),
+      },
       routeStatsScope: 'primary-connection',
     };
     latestReport.current = report;
     retainConnectionReport(report);
     setSavedReport(report);
-  }, [room, role, storageMode, connected]);
+  }, [room, role, storageMode, connected, internetResult]);
 
   const refresh = useCallback(async () => {
     const [records, stored, usage] = await Promise.all([
@@ -439,6 +459,14 @@ export default function PixelGate() {
           pairingMode === 'code' && role === 'receive' ? senderAddress : '',
         );
         transport.current = transfer;
+        transfer.linkTest.allowed = () =>
+          networkAllowed.current &&
+          !transfer.hasActiveFile &&
+          transport.current === transfer &&
+          transfer.readyState === 'open';
+        transfer.addEventListener('linktestchange', () => {
+          if (transport.current === transfer) retainLiveReport();
+        });
         transfer.addEventListener('peer-device', (event) => {
           if (transport.current === transfer)
             setRemoteDevice(peerDevice((event as CustomEvent).detail));
@@ -585,6 +613,8 @@ export default function PixelGate() {
   }
   async function send() {
     if (!sender.current || running) return;
+    if (networkBusy || transport.current?.linkTest.snapshot().running)
+      throw new Error('Stop the speed test before sending files.');
     setRunning(true);
     setPaused(sender.current.paused);
     setProblem('');
@@ -773,6 +803,9 @@ export default function PixelGate() {
     elapsed && !paused && (running || (role === 'receive' && active))
       ? transferClock.current.rate(bytes)
       : 0;
+  useEffect(() => {
+    networkAllowed.current = !running && !active && !busy && !saveWorking;
+  }, [running, active, busy, saveWorking]);
   const eta = speed ? Math.ceil((total - bytes) / speed) : 0;
   const historyRecords =
     historySession === 'all'
@@ -1583,61 +1616,74 @@ export default function PixelGate() {
                           )}
                         </div>
                       )}
-                      {connectionReport && (
-                        <details className="route-diagnostics">
-                          <summary>Connection diagnostics</summary>
-                          <p className="hint">
-                            Local connection states, route types, latency, and
-                            transfer buffers. No IP addresses, pairing codes,
-                            filenames, or file data. Sender status is shared
-                            with the paired receiver. Reports are never sent to
-                            a diagnostics service.
-                          </p>
-                          {!currentReport && (
-                            <p className="hint">
-                              Last connection report, saved on this device at{' '}
-                              {new Date(
-                                connectionReport.recordedAt,
-                              ).toLocaleString()}
-                              . Clearing files does not remove it.
-                            </p>
-                          )}
-                          <pre aria-label="Connection report">
-                            {JSON.stringify(connectionReport, null, 2)}
-                          </pre>
-                          <button
-                            className="text-button"
-                            onClick={() =>
-                              void guarded(async () => {
-                                await navigator.clipboard.writeText(
-                                  JSON.stringify(connectionReport, null, 2),
-                                );
-                                setNotice('Connection report copied.');
-                              })
-                            }
-                          >
-                            <Copy size={14} /> Copy connection report
-                          </button>
-                          <button
-                            className="text-button"
-                            onClick={() =>
-                              downloadConnectionReport(connectionReport)
-                            }
-                          >
-                            <ArrowDownToLine size={14} /> Download connection
-                            report
-                          </button>
-                          <button
-                            className="text-button"
-                            onClick={() => {
-                              clearConnectionReport();
-                              setSavedReport(undefined);
-                            }}
-                          >
-                            Clear saved report
-                          </button>
-                        </details>
-                      )}
+                      <details className="route-diagnostics">
+                        <summary>Connection diagnostics</summary>
+                        <p className="hint">
+                          Local connection states, route types, latency, and
+                          transfer buffers. No IP addresses, pairing codes,
+                          filenames, or file data. Sender status is shared with
+                          the paired receiver. Reports are never sent to a
+                          diagnostics service.
+                        </p>
+                        <NetworkDiagnostics
+                          transport={transport.current}
+                          disabled={
+                            operationBusy || running || !!active || saveWorking
+                          }
+                          fileBusy={running || !!active || saveWorking}
+                          internet={internetResult}
+                          savedPeer={connectionReport?.transfer?.linkTest}
+                          measured={setInternetResult}
+                          busyChanged={setNetworkBusy}
+                        />
+                        {connectionReport && (
+                          <>
+                            {!currentReport && (
+                              <p className="hint">
+                                Last connection report, saved on this device at{' '}
+                                {new Date(
+                                  connectionReport.recordedAt,
+                                ).toLocaleString()}
+                                . Clearing files does not remove it.
+                              </p>
+                            )}
+                            <pre aria-label="Connection report">
+                              {JSON.stringify(connectionReport, null, 2)}
+                            </pre>
+                            <button
+                              className="text-button"
+                              onClick={() =>
+                                void guarded(async () => {
+                                  await navigator.clipboard.writeText(
+                                    JSON.stringify(connectionReport, null, 2),
+                                  );
+                                  setNotice('Connection report copied.');
+                                })
+                              }
+                            >
+                              <Copy size={14} /> Copy connection report
+                            </button>
+                            <button
+                              className="text-button"
+                              onClick={() =>
+                                downloadConnectionReport(connectionReport)
+                              }
+                            >
+                              <ArrowDownToLine size={14} /> Download connection
+                              report
+                            </button>
+                            <button
+                              className="text-button"
+                              onClick={() => {
+                                clearConnectionReport();
+                                setSavedReport(undefined);
+                              }}
+                            >
+                              Clear saved report
+                            </button>
+                          </>
+                        )}
+                      </details>
                     </section>
                     <section className="panel files-panel">
                       <div className="section-head">

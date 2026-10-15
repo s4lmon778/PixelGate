@@ -1263,3 +1263,118 @@ compiled assets and third-party notices match the tested distribution byte for
 byte. A fresh actual Chromium 101 context verifies the 0.3.34 footer and receiver
 action group at 360 px without overflow or runtime errors. Active user tabs are
 not refreshed, and the existing 8787 server is not changed.
+
+## October 14 · 0.3.35 investigating physical regression and isolating speed measurements
+
+The user's same-version iPhone-to-Pixel 0.3.34 run verified 421,259,466 bytes
+in 186,731 ms: **2.256 MB/s decimal**, below the earlier roughly 5 MB/s
+observation. A second run approached 4 MB/s. Fourteen paths carried traffic;
+1,359 application replays and up to 497 ms excess receipt delay justify
+investigating duplicate traffic and queue feedback. Source reads averaged 5 ms
+with only 5 ms total waited time. Pixel IndexedDB commits averaged 143 ms,
+close to the earlier faster report's 147 ms, so these averages alone do not
+identify storage as the cause. The Pixel's failed ICE state, one remaining
+connection, and hidden sender visibility were captured many minutes after
+successful verification. They do not establish a mid-transfer disconnect or
+background pause. No Wi-Fi capacity measurement was supplied for either run.
+
+An unpublished experiment excluded short application-demand gaps from path
+capacity estimates. It did not produce a broad repeatable gain and slowed the
+100 ms one-way control from 31,443 to 36,978 ms. It was rejected before release;
+0.3.34 capacity estimation is retained. Its other outcomes, including slower
+400 MiB and WebKit controls and mixed repeated loss results, remain in the
+benchmark record. Five- and seven-path exploratory controls also slowed the
+CPU/storage-limited model, so fourteen remains the automatic nearby limit.
+
+Two narrower unpublished candidates changed nearby-path replay grace using
+smoothed delay and variation, inspired by [RFC 6298](https://www.rfc-editor.org/rfc/rfc6298.html#section-2).
+The second also preserved the old delay as a floor. Both remained application
+hedges above native SCTP, rather than replacing its timer. Neither produced a
+consistent completion-time improvement, despite fewer duplicate frames in some
+models. Both were rejected. The release retains the published retry timing and
+path-capacity estimator.
+
+The retained optimization reuses the eligible payload-path list within each
+bounded synchronous send burst. Previously every frame rebuilt that list,
+queried all bulk channel states and sorted unchanged receipt observations.
+Scheduler weights still use each frame's updated outstanding bytes. The chosen
+bulk channel's native state is checked before use; a closed selection rebuilds
+the list immediately. Every burst discards its list in `finally`, including
+send failures, so later tasks rediscover changed or recovered paths. Pacing,
+credit, frame limits, recovery timing and connection counts remain unchanged.
+A fault case closes a native path before its close event and checks that the
+burst avoids it, then rediscovers it on the next burst after reopening.
+
+Manual network checks separate three different observations:
+
+- **Peer link:** 8 MiB synthetic bytes on the current existing sender paths,
+  with no source reads, file hashing, file manifests or staging writes. Both
+  peers retain bytes, duration, rate, time and used path count. A deduplication
+  bitmap and session IDs reject duplicates and late payloads. A 15-second
+  deadline, bounded buffers and explicit cancellation release the probe.
+- **Internet download:** up to 8.25 MiB from Cloudflare, including a 256 KiB
+  warmup and two parallel 4 MiB measured requests. Streaming GETs omit
+  credentials and referrer, bypass caches, reject unexpected response lengths,
+  and expire after 15 seconds. No SDK, upload or automatic test is used.
+  The endpoint is documented by [Cloudflare](https://github.com/cloudflare/speedtest/blob/main/README.md).
+  Provider IP/location response headers are neither read nor stored.
+- **Browser hint:** supported Network Information API estimates are labelled
+  estimates, with unsupported values omitted. This follows the distinction in
+  the [Network Information specification](https://wicg.github.io/netinfo/).
+  An internet result includes the ISP/server path; a peer result includes
+  WebRTC/browser work. Neither is a Wi-Fi radio maximum or proof of causation.
+
+Peer tests require both endpoints to advertise the capability, refuse active
+file/save operations, and abort on file start or disconnect. The binary probe
+namespace is isolated from framed file traffic, and raw fallback originals
+beginning with the same four bytes remain byte-exact. Sender-only Automatic,
+up-to-seven and up-to-five controls affect future payload participation on the
+current connection; they do not alter protocol compatibility, close peers,
+change persisted defaults or permit changing the limit mid-transfer. Sender
+stage durations accumulate source preparation, reading, sending, yielding,
+backpressure, acknowledgements, verification waits and pause time; final totals
+stop at batch completion instead of growing during idle minutes.
+
+Unsupported folder guidance is now a text disclosure below saving controls.
+Actual writable-folder pickers remain functional on supporting browsers.
+Mac Safari retains native downloads and explains Apple's
+[Ask for each download setting](https://support.apple.com/en-ie/guide/safari/ibrw1072/mac).
+A browser-only site cannot force Safari to display a destination dialog when
+the user has configured automatic downloads. No helper app is installed.
+
+The retained candidate is compiled as `index-DiTsAP3s.js`. Final native controls
+use the same fixed 0.3.34 baseline, alternate order by trial and independently
+hash every stored copy. Clean 64 MiB timing is 7,386 → 7,373 ms. The repeated
+Chromium 101 receiver with main-thread CPU factor four and 150 ms added strict
+IndexedDB completion delay has median 12,971 → 12,895 ms across three pairs;
+every candidate finishes slightly sooner, but the roughly 0.6% median change is
+small and does not establish a large gain. The seeded 1% loss control is
+13,767 → 13,683 ms. The separate 400 MiB control is 44,596 → 43,768 ms (1.89% higher
+throughput in one pair, insufficient to establish a general improvement). These
+models do not reproduce iPhone hardware or certify restored physical 5 MB/s.
+All twelve retained-candidate comparisons independently verify stored bytes.
+The full record also preserves all 68 completed trials of rejected candidates,
+including their negative results:
+[raw comparisons](benchmarks/2026-10-14-speed-isolation-research.json).
+
+Validation for the retained candidate: TypeScript, ESLint, all **259** unit and
+integration checks and the production build pass. **32 browser cases** pass:
+twenty in modern Chromium, seven in actual Chromium 101 and five in WebKit.
+Coverage includes 400 MiB originals through OPFS and IndexedDB with independent
+saved-byte hashes and directory readback, 125-file native handoffs/download
+batches, cache deletion and retained partials, held-source/pause reporting,
+nine compatibility/recovery modes plus old-engine dropped-packet, closed-path
+and 500 ms receipt-delay cases. New network cases verify repeated five/seven
+path probes without file manifests, a subsequent untouched original download,
+manual-only bounded internet requests, cancellation and automatic internet-test
+abort when a remote file transfer starts. The new close-before-event unit case
+also validates burst-list refresh and rediscovery.
+
+A separate browser smoke check completes the real Cloudflare dummy download
+under the shipped CSP. A first smoke helper incorrectly expected unsupported
+folder guidance in Chromium while its real folder API was available; after
+explicitly disabling that API in the isolated mobile fixture, the view passes
+at 360 px without overflow or runtime errors. Actual supported pickers remain
+in the product. The short desktop internet sample is labelled as such and is
+not used to claim phone Wi-Fi capacity. Native comparison bundles remain fixed
+during timing trials; no concurrent browser suites or builds affect them.

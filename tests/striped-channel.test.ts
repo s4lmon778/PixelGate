@@ -103,6 +103,64 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe('parallel transport compatibility, ordering, and fallback', () => {
+  it.each([false, true])(
+    'preserves arbitrary raw-file bytes resembling a probe header with probe support=%s',
+    (supported) => {
+      const primary = new Channel();
+      const transport = new StripedChannel(primary.native(), 'receive');
+      opened.push(transport);
+      const delivered: unknown[] = [];
+      transport.onmessage = (event) => delivered.push(event.data);
+      primary.receive(
+        JSON.stringify({
+          type: 'hello',
+          version: 1,
+          ...(supported ? { peerLinkTest: 1 } : {}),
+        }),
+      );
+      primary.receive(JSON.stringify({ type: 'start', file: {} }));
+      const bytes = new Uint8Array(FRAME_BYTES + 12);
+      new DataView(bytes.buffer).setUint32(0, 0x50475431);
+      primary.receive(bytes.buffer);
+      expect(delivered.at(-1)).toBe(bytes.buffer);
+      expect(transport.snapshot().deliveredBytes).toBe(bytes.length);
+      expect(primary.readyState).toBe('open');
+    },
+  );
+  it('can limit the active payload pool without closing connections and rejects changing it during a file', async () => {
+    const primary = new Channel();
+    const transport = new StripedChannel(primary.native(), 'send');
+    opened.push(transport);
+    primary.receive(
+      JSON.stringify({
+        type: 'hello',
+        version: 1,
+        stripedTransport: 1,
+        stripedReceipts: 1,
+        stripedLanes: 13,
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    for (const peer of Peer.peers) {
+      peer.channel.readyState = 'open';
+      peer.channel.dispatchEvent(new Event('open'));
+    }
+    transport.setPayloadLimit(5);
+    expect(transport.snapshot()).toMatchObject({
+      connections: 14,
+      activePayloadConnections: 5,
+      payloadConnectionLimit: 5,
+    });
+    transport.send(JSON.stringify({ type: 'start', file: {} }));
+    expect(() => transport.setPayloadLimit(7)).toThrow('Finish the transfer');
+    primary.receive(
+      JSON.stringify({ type: 'pg-striped-receipt', received: [0] }),
+    );
+    primary.receive(JSON.stringify({ type: 'result' }));
+    transport.setPayloadLimit(7);
+    expect(transport.snapshot().activePayloadConnections).toBe(7);
+    expect(() => transport.setPayloadLimit(6)).toThrow('Invalid');
+  });
   it('shares sender status only with a capable peer, at bounded intervals and without file credit', () => {
     let clock = 100;
     vi.spyOn(performance, 'now').mockImplementation(() => clock);
@@ -366,6 +424,46 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
       JSON.stringify({ type: 'pg-striped-ack', sequence: frames.length }),
     );
     expect(transport.sendBurst(input.subarray(sent))).toBeGreaterThan(0);
+  });
+  it('refreshes a burst path when native state closes before its event, then rediscovers it next burst', async () => {
+    const primary = new Channel();
+    const transport = new StripedChannel(primary.native(), 'send');
+    opened.push(transport);
+    primary.receive(
+      JSON.stringify({
+        type: 'hello',
+        version: 1,
+        stripedTransport: 1,
+        stripedReceipts: 1,
+        stripedLanes: 4,
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    for (const peer of Peer.peers) peer.channel.readyState = 'open';
+    const unavailable = Peer.peers[1].channel;
+    let closed = false;
+    for (const channel of [
+      primary,
+      ...Peer.peers.map((peer) => peer.channel),
+    ]) {
+      channel.send = (wire) => {
+        if (channel === unavailable && channel.readyState !== 'open')
+          throw new Error('Closed native path');
+        Channel.prototype.send.call(channel, wire);
+        if (wire instanceof ArrayBuffer && !closed) {
+          unavailable.readyState = 'closed';
+          closed = true; // Deliberately no close event yet.
+        }
+      };
+    }
+    expect(transport.sendBurst(new Uint8Array(64 * 1024))).toBe(64 * 1024);
+    expect(unavailable.sent).toEqual([]);
+    unavailable.readyState = 'open';
+    expect(transport.sendBurst(new Uint8Array(64 * 1024))).toBe(64 * 1024);
+    expect(unavailable.sent.some((wire) => wire instanceof ArrayBuffer)).toBe(
+      true,
+    );
+    expect(primary.readyState).toBe('open');
   });
   it('drops a native buffer snapshot after send throws', async () => {
     const primary = new Channel();

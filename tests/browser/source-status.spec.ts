@@ -129,7 +129,10 @@ test('Pixel report distinguishes a held source read and sender pause, then verif
     await expect(beam).toHaveCSS('animation-name', 'none');
     await sender.emulateMedia({ reducedMotion: 'no-preference' });
     await sender.getByRole('button', { name: 'Pause', exact: true }).click();
-    await expect(sender.locator('.connection-beam')).toHaveCSS('display', 'none');
+    await expect(sender.locator('.connection-beam')).toHaveCSS(
+      'display',
+      'none',
+    );
     await expect
       .poll(async () => (await readReport()).transfer?.source?.paused, {
         timeout: 15000,

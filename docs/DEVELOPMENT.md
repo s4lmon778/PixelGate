@@ -107,3 +107,19 @@ All connections still share the same configured link capacity. Direct mode
 rejects added delays. When `PIXELGATE_NATIVE_RESULT` is provided, a failed run
 also saves a `.failure.json` with isolated-fixture states before cleanup. These
 controls change the developer proxy only, not the production ICE selection.
+
+For a slower receiver main-thread control, `PIXELGATE_NATIVE_RECEIVER_CPU=4`
+uses CDP CPU throttling on the Chromium receiver only. Workers and the physical
+radio are not throttled; this is not Pixel hardware emulation. Values 1–20 are
+accepted; WebKit receiver runs reject a value above 1. The result records the
+configured factor. `PIXELGATE_NATIVE_PAYLOAD_LIMIT=5` or `7` selects the new
+sender-side diagnostic control before the synthetic transfer. The automatic
+setting still negotiates up to fourteen connections and retains its long-route
+guard. A smaller active pool is an experiment, not an assumed improvement.
+
+`tests/browser/network-tests.spec.ts` checks no automatic internet requests,
+exact bounded dummy downloads, cancellation, repeated peer tests at five and
+seven paths, no staged probe files, and a subsequent independently hashed
+original download. It mocks the internet provider for deterministic checks;
+a separate live smoke check verifies the real endpoint. Peer probes require
+capability negotiation on both devices and never enter the file protocol.

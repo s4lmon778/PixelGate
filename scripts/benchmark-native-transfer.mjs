@@ -16,6 +16,9 @@ if (!Number.isInteger(lossSeed) || lossSeed < 0 || lossSeed > 0xffffffff)
   throw new Error('Invalid loss seed.');
 let randomState = lossSeed >>> 0;
 const sourceCPU = Number(process.env.PIXELGATE_NATIVE_SOURCE_CPU || 1);
+const receiverCPU = Number(process.env.PIXELGATE_NATIVE_RECEIVER_CPU || 1);
+if (!Number.isInteger(receiverCPU) || receiverCPU < 1 || receiverCPU > 20)
+  throw new Error('Invalid receiver CPU model.');
 if (!Number.isInteger(sourceCPU) || sourceCPU < 1 || sourceCPU > 20)
   throw new Error('Source CPU model must be an integer from 1 to 20.');
 const latency = Number(process.env.PIXELGATE_NATIVE_ONE_WAY_MS || 0);
@@ -49,6 +52,8 @@ let transmissionAt = 0;
 const variant = process.env.PIXELGATE_NATIVE_LABEL || 'candidate';
 const receiverEngine =
   process.env.PIXELGATE_NATIVE_RECEIVER_ENGINE || 'chromium';
+if (receiverEngine === 'webkit' && receiverCPU > 1)
+  throw new Error('Receiver CPU model requires Chromium.');
 if (!['chromium', 'webkit'].includes(receiverEngine))
   throw new Error('Receiver engine must be chromium or webkit.');
 if (
@@ -378,6 +383,10 @@ try {
   }
   const receiver = await receiving.newPage(),
     sender = await sending.newPage();
+  if (receiverCPU > 1) {
+    const cdp = await receiving.newCDPSession(receiver);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: receiverCPU });
+  }
   if (sourceCPU > 1) {
     const cdp = await sending.newCDPSession(sender);
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: sourceCPU });
@@ -414,6 +423,14 @@ try {
   await expect(sender.getByText('Connected', { exact: true })).toBeVisible({
     timeout: 45000,
   });
+  if (process.env.PIXELGATE_NATIVE_PAYLOAD_LIMIT) {
+    if (!['5', '7'].includes(process.env.PIXELGATE_NATIVE_PAYLOAD_LIMIT))
+      throw new Error('Invalid payload limit model.');
+    await sender.getByText('Connection diagnostics', { exact: true }).click();
+    await sender
+      .getByLabel('Payload connection limit', { exact: true })
+      .selectOption(process.env.PIXELGATE_NATIVE_PAYLOAD_LIMIT);
+  }
   await sender
     .getByLabel('Choose files', { exact: true })
     .setInputFiles(root + '/proxy-source.bin');
@@ -509,6 +526,7 @@ try {
     storageDelay,
     sourceDelay,
     sourceCPU,
+    receiverCPU,
     direct,
     trial,
     bytes,

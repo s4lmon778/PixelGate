@@ -23,7 +23,7 @@ PixelGate moves files between computers, phones, and tablets using their browser
 
 The app is a static **TypeScript / React / Vite** build hosted on GitHub Pages. **PeerJS** exchanges connection metadata for six-digit pairing; it carries no file payloads. No native app, account, cloud media storage, or TURN relay is required.
 
-> **Status:** experimental. The current app is **0.3.34**. Automated checks exercise integrity and recovery; browser capabilities, available storage, and network policies still determine usability. Large-file and physical-device boundaries are documented below.
+> **Status:** experimental. The current app is **0.3.35**. Automated checks exercise integrity and recovery; browser capabilities, available storage, and network policies still determine usability. Large-file and physical-device boundaries are documented below.
 
 Android senders have **Choose photos & videos** for the media library and **Choose files** for documents. Direct **Save to Photos folder** appears only when the browser supports choosing a local folder; older Chrome uses verified downloads with Photos device-folder backup. Updating the browser can enable the folder option without changing the Android system.
 
@@ -63,6 +63,8 @@ Codes expire after ten minutes and accept one sender. A code is a temporary look
 
 For large collections, receive a batch, save it, and choose **Clear verified staging** before the next batch. It deletes PixelGate’s cached file bytes from both storage backends, removes cleared files from the receiving list, and releases prepared download references in open tabs. Receipts remain available only in History. For downloads or app saves, confirm the save finished and the files open before clearing; optional independent saved-copy checks remain in History. Saved originals, unfinished transfers, and reports are kept. **Clear history** is a separate action that preserves staging and resume data.
 
+On browsers without writable-folder access, **Choose where downloads are saved** is a text disclosure beneath the saving buttons. Mac Safari uses its native download flow; enable **Safari → Settings → General → File download location → Ask for each download** to choose a destination for downloads. PixelGate cannot enable that browser setting for you.
+
 See the [usage guide](docs/USAGE.md) for saving modes and storage behavior, or [troubleshooting](docs/TROUBLESHOOTING.md) for network and browser issues.
 
 <details>
@@ -84,6 +86,7 @@ Screenshots show the 0.3.13 interface with empty queues, including paired saving
 - **Parallel transfers:** learn path delivery rates and sequence chunks across up to fourteen independent peer connections, recover gaps on another lane, restore order, and overlap up to eight checkpoints between capable peers, with legacy fallback.
 - **Saving:** Android Chrome 132+ Photos device-folder saving for the whole collection, direct folder writes with destination readback, native save/share where supported, whole-collection verified downloads, Google Photos device-folder guidance, duplicate checks, and numbered conflicting filenames.
 - **Batch controls:** inline file selection/saving, pause/resume/cancel, pinned mobile progress, optional final-byte verification in History, direct file-cache cleanup, and JSON/CSV/text reports.
+- **Speed checks:** explicit peer-link measurements without storage, separate bounded internet dummy downloads, browser network estimates where available, sender stage durations, and optional 5/7-path limits for same-version comparisons. Tests run only while idle and do not upload originals or reports.
 - **Accessible interface:** contained scrolling file lists, compact mobile action rows, keyboard controls, Light / Dark / System appearance, reduced-motion support, expandable help, and an optional screen-awake switch.
 
 ## Architecture
@@ -181,7 +184,7 @@ Recorded through **0.3.21 on October 10, 2026** across full and targeted runs. T
 
 | Evidence                        | What was checked                                                                                                                                                                           |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **192 unit/integration tests**  | Independent hashes, recovery, latency-relative bounded transfer windows, retained reports, ordered parallel transport, lane failure fallback, pairing lifecycle, and deployment provenance |
+| **259 unit/integration tests**  | Independent hashes, recovery, latency-relative bounded transfer windows, retained reports, ordered parallel transport, lane failure fallback, pairing lifecycle, and deployment provenance |
 | Browser integration             | Real WebRTC transfers, approval, QR decoding, independent stored/exported hashes, interruption and refresh recovery, and corruption rejection                                              |
 | Interface and capability checks | Mobile/desktop layouts, enlarged text, appearance, native-share fixtures, download bytes, wake-lock lifecycle, and history preservation                                                    |
 | Legacy engine                   | Actual Chromium 101 compatibility storage, public signaling, downloads, checkpoint recovery, and current layout controls                                                                   |

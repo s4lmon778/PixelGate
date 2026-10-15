@@ -505,6 +505,8 @@ export class Receiver {
 }
 
 export class Sender {
+  private stageTimes: Record<string, number> = {};
+  private trackingStages = false;
   paused = false;
   private stage = 'idle';
   private stageStarted = performance.now();
@@ -541,6 +543,7 @@ export class Sender {
           this.compatible = message.version === VERSION;
           if (!this.compatible) channel.close();
         } else if (message.type === 'pause' || message.type === 'resume') {
+          this.accountStage();
           this.paused = message.type === 'pause';
           this.pausedChanged(this.paused);
         } else {
@@ -567,6 +570,12 @@ export class Sender {
       stageElapsedMs: Math.round(performance.now() - this.stageStarted),
       paused: this.paused,
       batch: this.batchTiming.snapshot(),
+      stageTimes: Object.fromEntries(
+        Object.entries(this.stageTimesWithCurrent()).map(([key, value]) => [
+          key,
+          Math.round(value),
+        ]),
+      ),
       sourceReads: {
         calls: this.sourceReads,
         bytes: this.sourceReadBytes,
@@ -582,7 +591,20 @@ export class Sender {
   }
   private processing(stage: string) {
     if (stage === this.stage) return;
+    this.accountStage();
     this.stage = stage;
+    this.stageStarted = performance.now();
+  }
+  private stageTimesWithCurrent() {
+    const result = { ...this.stageTimes };
+    if (this.trackingStages) {
+      const key = this.paused ? 'paused' : this.stage;
+      result[key] = (result[key] ?? 0) + performance.now() - this.stageStarted;
+    }
+    return result;
+  }
+  private accountStage() {
+    this.stageTimes = this.stageTimesWithCurrent();
     this.stageStarted = performance.now();
   }
   private activity(timeout = RESPONSE_TIMEOUT_MS) {
@@ -695,6 +717,9 @@ export class Sender {
     }
   }
   async run(queue: QueuedFile[], sessionId: string) {
+    this.stageTimes = {};
+    this.trackingStages = true;
+    this.stageStarted = performance.now();
     const pending = queue.filter(
       (q) => !['verified', 'duplicate', 'cancelled'].includes(q.phase),
     );
@@ -705,6 +730,8 @@ export class Sender {
     try {
       await this.runBatch(queue, sessionId);
     } finally {
+      this.accountStage();
+      this.trackingStages = false;
       this.batchTiming.finish(
         pending.filter((q) => q.phase === 'verified').length,
         pending.filter((q) => q.phase === 'duplicate').length,
@@ -1019,12 +1046,14 @@ export class Sender {
     this.processing('idle');
   }
   pause() {
+    this.accountStage();
     this.paused = true;
     if (this.channel.readyState === 'open')
       control(this.channel, { type: 'pause' });
     this.wake();
   }
   resume() {
+    this.accountStage();
     this.paused = false;
     if (this.channel.readyState === 'open')
       control(this.channel, { type: 'resume' });

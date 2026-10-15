@@ -310,6 +310,7 @@ describe('receiver-owned verification and checkpoints', () => {
     p.receiver.resume();
     await run;
     expect(p.pauses.send).toEqual([false]);
+    expect(p.sender.snapshot().stageTimes.paused).toBeGreaterThanOrEqual(15);
     expect(p.receiver.snapshot().paused).toBe(false);
     expect(q[0].phase).toBe('verified');
     expect(

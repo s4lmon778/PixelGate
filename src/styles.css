@@ -1222,6 +1222,15 @@ h1 {
   margin: 8px 0;
   line-height: 1.5;
 }
+.network-tests {
+  margin: 12px 0;
+  padding: 12px 0;
+  border-block: 1px solid var(--line);
+}
+.network-tests .hint {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
 .cache-actions {
   margin-top: 6px;
 }

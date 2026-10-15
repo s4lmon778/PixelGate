@@ -269,24 +269,24 @@ test('unsupported mobile capabilities keep downloads available and show truthful
   ).toBeDisabled();
   await expect(
     page.getByRole('button', { name: 'Choose folder', exact: true }),
-  ).toBeEnabled();
-  await page
-    .getByRole('button', { name: 'Choose folder', exact: true })
-    .click();
-  await expect(
-    page.getByRole('region', { name: 'Choose a save folder', exact: true }),
-  ).toContainText('does not grant websites direct writable-folder access');
-  await expect(
-    page
-      .getByRole('group', { name: 'Save actions', exact: true })
-      .getByRole('button', { name: 'Choose folder', exact: true }),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  const guidance = page.locator('details.save-location-hint');
+  await guidance.locator('summary').click();
+  await expect(guidance).toContainText(
+    'does not grant websites direct writable-folder access',
+  );
+  const below = await guidance.evaluate(
+    (element) =>
+      element.getBoundingClientRect().top >=
+      element.previousElementSibling!.getBoundingClientRect().bottom,
+  );
+  expect(below).toBe(true);
   await expect(
     page.getByText('Manual download', { exact: true }),
   ).toBeVisible();
 });
 
-test('Safari keeps a folder action beside saving controls with native download-folder guidance', async ({
+test('Safari keeps folder guidance below saving controls as a text disclosure', async ({
   browser,
 }) => {
   const context = await browser.newContext({
@@ -308,13 +308,11 @@ test('Safari keeps a folder action beside saving controls with native download-f
       name: 'Save actions',
       exact: true,
     });
-    await group
-      .getByRole('button', { name: 'Choose folder', exact: true })
-      .click();
-    const guidance = page.getByRole('region', {
-      name: 'Choose a save folder',
-      exact: true,
-    });
+    await expect(
+      group.getByRole('button', { name: 'Choose folder', exact: true }),
+    ).toHaveCount(0);
+    const guidance = page.locator('details.save-location-hint');
+    await guidance.locator('summary').click();
     await expect(guidance).toContainText('Ask for each download');
     await expect(guidance).toContainText('Safari’s save dialog');
     await expect(
@@ -323,10 +321,8 @@ test('Safari keeps a folder action beside saving controls with native download-f
         exact: true,
       }),
     ).toBeVisible();
-    await group
-      .getByRole('button', { name: 'Choose folder', exact: true })
-      .click();
-    await expect(guidance).toBeHidden();
+    await guidance.locator('summary').click();
+    await expect(guidance).not.toHaveAttribute('open');
   } finally {
     await context.close();
   }
@@ -395,7 +391,6 @@ test('save/share opens from a fresh tap, preserves bytes, handles cancel, and ne
     exact: true,
   });
   for (const name of [
-    'Choose folder',
     'Choose app or save location',
     'Download verified files',
     'Select next batch',

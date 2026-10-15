@@ -1,6 +1,7 @@
 import type { RouteDiagnostics } from './route-diagnostics';
 import type { StripedChannel } from './striped-channel';
 import type { Receiver, Sender } from './transfer';
+import type { InternetResult, browserNetwork } from './network-test';
 
 export type ConnectionReport = RouteDiagnostics & {
   version: string;
@@ -12,6 +13,10 @@ export type ConnectionReport = RouteDiagnostics & {
   receiving?: ReturnType<Receiver['snapshot']>;
   sending?: ReturnType<Sender['snapshot']>;
   routeStatsScope?: 'primary-connection';
+  network?: {
+    connection: ReturnType<typeof browserNetwork>;
+    internetDownload?: InternetResult;
+  };
 };
 const KEY = 'pixelgate-last-connection-report';
 const MAX_BYTES = 16 * 1024;

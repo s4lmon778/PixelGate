@@ -1,5 +1,6 @@
 import { CandidateInbox } from './candidate-inbox';
 import { PathScheduler } from './path-scheduler';
+import { LINK_TEST_MAGIC, PeerLinkTest } from './peer-link-test';
 import { LanRoute, lanAddress } from './lan-route';
 import { deviceKind, peerDevice } from './device';
 import {
@@ -60,6 +61,31 @@ type Payload = string | ArrayBuffer | Uint8Array<ArrayBuffer>;
 
 /** Independent SCTP connections; restore the existing engine's ordered stream. */
 export class StripedChannel extends EventTarget implements TransferChannel {
+  readonly linkTest: PeerLinkTest;
+  private payloadLimit?: number;
+  private fileActive = false;
+  get hasActiveFile() {
+    return this.fileActive;
+  }
+  get canLimitPayload() {
+    return this.role === 'send';
+  }
+  setPayloadLimit(limit?: number) {
+    if (!this.canLimitPayload)
+      throw new Error('Change the connection limit on the sending device.');
+    if (limit !== undefined && ![5, 7].includes(limit))
+      throw new Error('Invalid payload connection limit.');
+    if (
+      this.fileActive ||
+      this.pendingBytes ||
+      this.linkTest.snapshot().running
+    )
+      throw new Error(
+        'Finish the transfer or speed test before changing the connection limit.',
+      );
+    this.payloadLimit = limit;
+    this.dispatchEvent(new Event('linktestchange'));
+  }
   onmessage: RTCDataChannel['onmessage'] = null;
   private lanes = new Map<number, Lane>();
   private negotiated = false;
@@ -89,6 +115,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
   private replayed = 0;
   private nextRecoveryAt = 0;
   private cooldown = new Map<RTCDataChannel, number>();
+  private burstCandidates?: RTCDataChannel[];
   private burstBuffers?: Map<RTCDataChannel, number>;
   private burstBufferedBytes = 0;
   private incomingPaths = new Map<
@@ -107,6 +134,12 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     private senderAddress = '',
   ) {
     super();
+    this.linkTest = new PeerLinkTest(
+      role,
+      () => this.payloadCandidates(),
+      (message) => this.write(this.primary, JSON.stringify(message)),
+      () => this.dispatchEvent(new Event('linktestchange')),
+    );
     this.senderAddress = role === 'receive' ? lanAddress(senderAddress) : '';
     primary.onmessage = ({ data }) => this.receive(data, false, primary);
     primary.addEventListener('bufferedamountlow', () =>
@@ -114,6 +147,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     );
     primary.addEventListener('close', () => {
       this.stopped = true;
+      this.linkTest.cancel('Connection closed.', false);
       clearTimeout(this.receiptTimer);
       clearInterval(this.retryTimer);
       for (const lane of this.lanes.values()) this.dispose(lane);
@@ -225,9 +259,11 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     // Splitting a bounded flight across too many distant SCTP associations
     // can underfill each one. Keep the wider pool for nearby routes.
     const delay = this.scheduler.minimumReceiptDelay(paths);
-    return paths.length > 7 && delay !== undefined && delay > 80
-      ? paths.slice(0, 7)
-      : paths;
+    const limit = Math.min(
+      this.payloadLimit ?? MAX_LANES + 1,
+      delay !== undefined && delay > 80 ? 7 : MAX_LANES + 1,
+    );
+    return paths.slice(0, limit);
   }
   get burstBytes() {
     const { timelyBytes, queueDelay } = this.deliveryFeedback(true);
@@ -271,6 +307,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       activePayloadConnections: this.payloadCandidates().filter(
         (channel) => channel.readyState === 'open',
       ).length,
+      payloadConnectionLimit: this.payloadLimit ?? MAX_LANES + 1,
       unreceivedBytes: this.pendingBytes,
       oldestUnreceivedMs: Math.round(
         Math.max(
@@ -310,6 +347,9 @@ export class StripedChannel extends EventTarget implements TransferChannel {
         ? { paths: receivedPaths, measurement: 'receiver-wire-bytes' as const }
         : {}),
       frameBytes: this.frameBytes,
+      ...(this.linkTest.snapshot().result || this.linkTest.snapshot().running
+        ? { linkTest: this.linkTest.snapshot() }
+        : {}),
       ...(this.role === 'receive' && this.peerSourceStatus
         ? {
             source: {
@@ -395,6 +435,8 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       const credit = this.sendBufferBytes;
       const limit = this.burstBytes;
       const frameBytes = this.sendFrameBytes;
+      // No receipt or signaling task can interleave this bounded synchronous burst.
+      this.burstCandidates = this.payloadCandidates();
       const started = performance.now();
       let sent = 0;
       while (
@@ -415,6 +457,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     } finally {
       // Never reuse a queue snapshot across an await, error, or browser task.
       this.burstBuffers = undefined;
+      this.burstCandidates = undefined;
       this.burstBufferedBytes = 0;
     }
   }
@@ -437,6 +480,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
   send(data: string | Blob | ArrayBuffer | ArrayBufferView<ArrayBuffer>) {
     if (typeof data === 'string') {
       const value = JSON.parse(data);
+      this.observeFileControl(value);
       if (value.type === 'hello')
         data = JSON.stringify({
           ...value,
@@ -446,6 +490,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
           stripedLanes: MAX_LANES,
           stripedFrameBytes: STRIPED_FRAME_BYTES,
           sourceStatus: 1,
+          peerLinkTest: 1,
         });
     }
     if (
@@ -533,10 +578,9 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     );
     return this.participatingLanes(healthy.length ? healthy : available);
   }
-  private chooseLane(exclude?: RTCDataChannel, bytes = FRAME_BYTES) {
-    const available = this.payloadCandidates(exclude);
+  private chooseFrom(paths: RTCDataChannel[], bytes: number) {
     return this.scheduler.choose(
-      available,
+      paths,
       (channel) =>
         Math.max(
           this.burstBuffers?.get(channel) ?? channel.bufferedAmount,
@@ -545,6 +589,20 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       performance.now(),
       bytes,
     );
+  }
+  private chooseLane(exclude?: RTCDataChannel, bytes = FRAME_BYTES) {
+    const cached = !exclude && this.burstCandidates;
+    const lane = this.chooseFrom(
+      cached || this.payloadCandidates(exclude),
+      bytes,
+    );
+    // A native path can become unavailable before its close event is delivered.
+    // Rebuild on that exceptional path; ordinary frames check one native state.
+    if (cached && lane !== this.primary && lane.readyState !== 'open') {
+      this.burstCandidates = this.payloadCandidates();
+      return this.chooseFrom(this.burstCandidates, bytes);
+    }
+    return lane;
   }
   private received(sequence: number) {
     const packet = this.pending.get(sequence);
@@ -658,14 +716,41 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       );
   }
   private deliver(data: Payload) {
+    if (typeof data === 'string') this.observeFileControl(JSON.parse(data));
     if (typeof data !== 'string') {
       this.deliveredBytes += data.byteLength;
       this.lastDeliveryAt = performance.now();
     }
     this.onmessage?.call(this.primary, new MessageEvent('message', { data }));
   }
+  private observeFileControl(value: { type?: string; duplicate?: boolean }) {
+    if (value.type === 'start') {
+      this.fileActive = true;
+      this.linkTest.cancel('File transfer started.');
+      this.dispatchEvent(new Event('file-transfer-start'));
+    }
+    if (
+      ['result', 'cancel', 'error', 'complete'].includes(value.type ?? '') ||
+      (value.type === 'ready' && value.duplicate)
+    )
+      this.fileActive = false;
+  }
   private receive(data: unknown, bulk: boolean, channel: RTCDataChannel) {
     if (this.stopped) return;
+    if (
+      this.linkTest.supported &&
+      (bulk || !this.fileActive || this.receiving) &&
+      data instanceof ArrayBuffer &&
+      data.byteLength >= 4 &&
+      new DataView(data).getUint32(0) === LINK_TEST_MAGIC
+    ) {
+      try {
+        this.linkTest.receiveBytes(data, channel);
+      } catch {
+        this.linkTest.cancel('Peer test interrupted.', false);
+      }
+      return;
+    }
     if (data instanceof ArrayBuffer) {
       let path = this.incomingPaths.get(channel);
       if (!path) {
@@ -684,6 +769,9 @@ export class StripedChannel extends EventTarget implements TransferChannel {
         if (data.length > 32000) throw new Error('Transfer control too large.');
         const value = JSON.parse(data);
         if (value.type === 'hello') {
+          this.linkTest.supported =
+            value.version === VERSION && value.peerLinkTest === 1;
+          this.dispatchEvent(new Event('linktestchange'));
           if (value.version === VERSION)
             this.sourceStatusEnabled = value.sourceStatus === 1;
           if (value.version === VERSION)
@@ -712,6 +800,8 @@ export class StripedChannel extends EventTarget implements TransferChannel {
             if (this.role === 'send') void this.offerLanes();
           }
           this.deliver(data);
+        } else if (value.type === 'pg-link-test') {
+          if (!bulk) this.linkTest.receiveControl(value);
         } else if (value.type === 'pg-source-status') {
           const now = performance.now();
           if (
