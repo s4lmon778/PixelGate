@@ -1,9 +1,9 @@
 {
-  "name": "speedgate",
-  "version": "0.4.0",
+  "name": "pixelgate",
+  "version": "0.3.35",
   "private": true,
   "type": "module",
-  "description": "Lossless browser file transfers with optional local HTTP/TCP streaming and independent SHA-256 verification.",
+  "description": "Direct browser-to-browser file transfers with independent SHA-256 verification.",
   "license": "MIT",
   "engines": {
     "node": ">=22.13.0"
@@ -20,11 +20,7 @@
     "check": "npm run typecheck && npm run lint && npm test",
     "deploy:pages": "node scripts/deploy-pages.mjs",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "serve:lan": "node --experimental-strip-types scripts/serve-lan.mjs",
-    "bench:http": "playwright test tests/browser/http-transfer.spec.ts --project=chromium",
-    "bench:compare": "node --experimental-strip-types scripts/benchmark-http-transfer.mjs",
-    "package:helper": "npm run build && node scripts/package-helper.mjs"
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "fflate": "0.8.3",

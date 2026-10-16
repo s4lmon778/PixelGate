@@ -457,13 +457,13 @@ export function SaveToApp({
             </summary>
             <p className="hint">
               {folderAccessAvailable
-                ? 'To skip downloading and moving files, use Save to Photos folder above. Choose or create DCIM/SpeedGate in internal storage and allow editing. All received originals are saved and verified in that folder; future transfers save there automatically in this tab. Enable SpeedGate in Photos device-folder backup once. '
+                ? 'To skip downloading and moving files, use Save to Photos folder above. Choose or create DCIM/PixelGate in internal storage and allow editing. All received originals are saved and verified in that folder; future transfers save there automatically in this tab. Enable PixelGate in Photos device-folder backup once. '
                 : 'Chrome 132 or newer supports saving directly to a local Photos device folder. Update Chrome through the Play Store and use Save to Photos folder. If folder access is unavailable, use downloads: '}
               Download verified files, then open Google Photos → Collections →
               On this device → Download. To back up that folder, open Photos
               settings → Backup → Back up device folders and enable Download.
               Alternatively, use the phone’s Files app to move the downloaded
-              media into DCIM/SpeedGate. This works with videos larger than the
+              media into DCIM/PixelGate. This works with videos larger than the
               browser’s 50 MiB sharing limit. Files remain unchanged; check
               playback and backup in Photos. Older Photos versions may label
               Collections as Library and the folder as Downloads.
@@ -493,7 +493,7 @@ export function SaveToApp({
               <li>
                 Use Google Photos → profile → Free up space on this device when
                 you want to remove backed-up phone copies. This does not enable
-                unlimited backup or clear SpeedGate’s separate browser copies.
+                unlimited backup or clear PixelGate’s separate browser copies.
               </li>
             </ol>
             <p className="hint">

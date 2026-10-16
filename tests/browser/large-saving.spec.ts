@@ -4,11 +4,11 @@ import { createReadStream } from 'node:fs';
 import { mkdir, open, rm, writeFile } from 'node:fs/promises';
 import { isolateHostIce } from './host-only';
 
-const largeMiB = Number(process.env.SPEEDGATE_TEST_LARGE_MIB || 400);
+const largeMiB = Number(process.env.PIXELGATE_TEST_LARGE_MIB || 400);
 const largeName = `original-${largeMiB}MiB.mp4`;
 const transferTimeout = Math.max(120000, largeMiB * 80);
 const savingTimeout = Math.max(60000, largeMiB * 60);
-const safariReceiver = Boolean(process.env.SPEEDGATE_TEST_SAFARI_RECEIVER);
+const safariReceiver = Boolean(process.env.PIXELGATE_TEST_SAFARI_RECEIVER);
 
 for (const backend of ['opfs', 'indexeddb']) {
   const scenario = safariReceiver
@@ -19,7 +19,7 @@ for (const backend of ['opfs', 'indexeddb']) {
     browserName,
   }, testInfo) => {
     test.skip(
-      browserName !== 'chromium' && !process.env.SPEEDGATE_TEST_ALL_ENGINES,
+      browserName !== 'chromium' && !process.env.PIXELGATE_TEST_ALL_ENGINES,
       'Additional sending engines run in the explicit large-file comparison.',
     );
     test.setTimeout(Math.max(240000, largeMiB * 200));
@@ -67,7 +67,7 @@ for (const backend of ['opfs', 'indexeddb']) {
           {
             ...contextOptions,
             headless: true,
-            executablePath: process.env.SPEEDGATE_TEST_CHROMIUM_EXECUTABLE,
+            executablePath: process.env.PIXELGATE_TEST_CHROMIUM_EXECUTABLE,
             args: ['--disable-features=WebRtcHideLocalIpsWithMdns'],
           },
         );

@@ -35,8 +35,6 @@ import {
 } from 'lucide-react';
 import { Connection, type PairRoom } from '@/lib/bridge/connection';
 import { CodeConnection } from '@/lib/bridge/code-connection';
-import { HttpConnection, hasHttpBridge } from '@/lib/bridge/http-connection';
-import { HttpChannel } from '@/lib/bridge/http-channel';
 import { pairingLink } from '@/lib/bridge/pairing';
 import { local } from '@/lib/bridge/database';
 import { Receiver, Sender } from '@/lib/bridge/transfer';
@@ -79,18 +77,12 @@ type BrowserFolderWindow = Window & {
 };
 const errorText = (e: unknown) =>
   e instanceof Error ? e.message : 'Something went wrong. Try again.';
-export default function SpeedGate() {
+export default function PixelGate() {
   const [view, setView] = useState<'transfer' | 'history' | 'guide'>(
     'transfer',
   );
   const [role, setRole] = useState<'send' | 'receive'>('send');
   const [pairingMode, setPairingMode] = useState<'code' | 'manual'>('code');
-  const [httpAvailable, setHttpAvailable] = useState(false);
-  const [transferMode, setTransferMode] = useState<'webrtc' | 'http'>(() =>
-    new URLSearchParams(location.search).get('transport') === 'http'
-      ? 'http'
-      : 'webrtc',
-  );
   const [status, setStatus] = useState('Not connected');
   const [connected, setConnected] = useState(false);
   const [room, setRoom] = useState<PairRoom>();
@@ -131,10 +123,8 @@ export default function SpeedGate() {
   const [cacheRevision, setCacheRevision] = useState(0);
   const [historySession, setHistorySession] = useState('all');
   const [elapsed, setElapsed] = useState(0);
-  const connection = useRef<
-    Connection | CodeConnection | HttpConnection | undefined
-  >(undefined);
-  const transport = useRef<StripedChannel | HttpChannel | undefined>(undefined);
+  const connection = useRef<Connection | CodeConnection | undefined>(undefined);
+  const transport = useRef<StripedChannel | undefined>(undefined);
   const sender = useRef<Sender | undefined>(undefined);
   const receiver = useRef<Receiver | undefined>(undefined);
   const folder = useRef<FileSystemDirectoryHandle | undefined>(undefined);
@@ -156,23 +146,6 @@ export default function SpeedGate() {
   const releaseLock = useRef<(() => void) | undefined>(undefined);
   const latestReport = useRef<ConnectionReport | undefined>(undefined);
   const networkAllowed = useRef(false);
-  const transportChosen = useRef(
-    new URLSearchParams(location.search).get('transport') === 'webrtc' ||
-      !!new URLSearchParams(location.hash.slice(1))
-        .get('connect')
-        ?.startsWith('pg1.'),
-  );
-  useEffect(() => {
-    let active = true;
-    void hasHttpBridge().then((available) => {
-      if (!active) return;
-      setHttpAvailable(available);
-      if (available && !transportChosen.current) setTransferMode('http');
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const currentReport: ConnectionReport | undefined = room?.diagnostics
     ? {
@@ -312,10 +285,6 @@ export default function SpeedGate() {
       const pairing = params.get('connect');
       if (pairing && pairing.length <= 16004) {
         queueMicrotask(() => {
-          if (pairing.startsWith('pg1.')) {
-            transportChosen.current = true;
-            setTransferMode('webrtc');
-          }
           setPairingMode(/^\d{6}$/.test(pairing) ? 'code' : 'manual');
           setCode(pairing);
         });
@@ -345,7 +314,7 @@ export default function SpeedGate() {
     if (!pairingOffer || role !== 'receive') return;
     let active = true;
     const offer = pairingOffer;
-    const link = pairingLink(pairingOffer, transferMode);
+    const link = pairingLink(pairingOffer);
     QRCode.toString(link, {
       type: 'svg',
       width: 1024,
@@ -373,7 +342,7 @@ export default function SpeedGate() {
     return () => {
       active = false;
     };
-  }, [pairingOffer, role, transferMode]);
+  }, [pairingOffer, role]);
   useEffect(() => {
     if (!running && !connected) return;
     const tick = setInterval(
@@ -439,14 +408,9 @@ export default function SpeedGate() {
     setPaused(false);
   }
   async function preflight() {
-    if (
-      !isSecureContext ||
-      (transferMode === 'webrtc' && !window.RTCPeerConnection)
-    )
+    if (!isSecureContext || !window.RTCPeerConnection)
       throw new Error(
-        transferMode === 'http'
-          ? 'Open the local helper using browser-trusted HTTPS.'
-          : 'Open SpeedGate over HTTPS in a browser with WebRTC support.',
+        'Open PixelGate over HTTPS in a browser with WebRTC support.',
       );
     setStorageMode(await prepareStaging());
     void navigator.storage?.persist?.().catch(() => {});
@@ -476,7 +440,6 @@ export default function SpeedGate() {
     }
   }
   async function connect() {
-    transportChosen.current = true;
     await disconnect();
     latestReport.current = undefined;
     if (role === 'receive') await preflight();
@@ -486,22 +449,16 @@ export default function SpeedGate() {
     setReceived([]);
     transferClock.current.reset();
     setElapsed(0);
-    const events = {
+    const events: ConstructorParameters<typeof CodeConnection>[1] = {
       room: setRoom,
       status: setStatus,
-      connected: (channel: RTCDataChannel | HttpChannel) => {
-        const transfer =
-          channel instanceof HttpChannel
-            ? channel
-            : new StripedChannel(
-                channel,
-                role,
-                pairingMode === 'code' && role === 'receive'
-                  ? senderAddress
-                  : '',
-              );
+      connected: (channel) => {
+        const transfer = new StripedChannel(
+          channel,
+          role,
+          pairingMode === 'code' && role === 'receive' ? senderAddress : '',
+        );
         transport.current = transfer;
-        if (transfer instanceof HttpChannel) setRemoteDevice(transfer.peerKind);
         transfer.linkTest.allowed = () =>
           networkAllowed.current &&
           !transfer.hasActiveFile &&
@@ -576,7 +533,7 @@ export default function SpeedGate() {
             peerPaused,
           );
       },
-      error: (e: Error) => {
+      error: (e) => {
         setProblem(e.message);
         if (conn.channel?.readyState !== 'open') {
           setConnected(false);
@@ -585,11 +542,9 @@ export default function SpeedGate() {
       },
     };
     const conn =
-      transferMode === 'http'
-        ? new HttpConnection(role, events)
-        : pairingMode === 'code'
-          ? new CodeConnection(role, events, senderAddress)
-          : new Connection(role, events);
+      pairingMode === 'code'
+        ? new CodeConnection(role, events, senderAddress)
+        : new Connection(role, events);
     connection.current = conn;
     try {
       await conn.start(code);
@@ -738,7 +693,7 @@ export default function SpeedGate() {
     const pending = candidates.some((r) => r.scope === 'browser');
     if (
       !confirm(
-        `Clear ${candidates.length} cached copies (${formatBytes(candidates.reduce((n, r) => n + r.size, 0))}) from SpeedGate? ` +
+        `Clear ${candidates.length} cached copies (${formatBytes(candidates.reduce((n, r) => n + r.size, 0))}) from PixelGate? ` +
           (pending
             ? 'Confirm their downloads or app saves have finished and you can open the saved files. Their saved bytes have not been independently verified. '
             : '') +
@@ -907,7 +862,7 @@ export default function SpeedGate() {
         <button
           className="brand"
           onClick={() => setView('transfer')}
-          aria-label="SpeedGate home"
+          aria-label="PixelGate home"
         >
           <span className="brand-symbol">
             <i />
@@ -915,7 +870,7 @@ export default function SpeedGate() {
             <i />
             <i />
           </span>
-          SpeedGate
+          PixelGate
         </button>
         <div className="workspace-label">YOUR WORKSPACE</div>
         <nav aria-label="Main navigation">
@@ -971,9 +926,7 @@ export default function SpeedGate() {
           <div className="topbar-actions">
             <span className="local-badge">
               <Wifi size={14} />
-              {transferMode === 'http'
-                ? 'Local network transfer'
-                : 'Direct device transfer'}
+              Direct device transfer
             </span>
             <ThemeMenu />
           </div>
@@ -1028,7 +981,7 @@ export default function SpeedGate() {
                 <h2>From one browser to another</h2>
                 <ol>
                   <li>
-                    Open SpeedGate on both devices. No account or installation
+                    Open PixelGate on both devices. No account or installation
                     is required.
                   </li>
                   <li>
@@ -1060,7 +1013,7 @@ export default function SpeedGate() {
               <section className="panel">
                 <h2>What “verified” means</h2>
                 <p>
-                  SpeedGate hashes the source file, writes its untouched bytes,
+                  PixelGate hashes the source file, writes its untouched bytes,
                   then rereads the stored copy and compares SHA-256 hashes.
                 </p>
                 <p>
@@ -1069,11 +1022,11 @@ export default function SpeedGate() {
                 </p>
                 <p>
                   <strong>Destination / exported copy verified:</strong>{' '}
-                  SpeedGate reread the actual saved file and confirmed its hash.
+                  PixelGate reread the actual saved file and confirmed its hash.
                 </p>
                 <p>
                   Downloads and files handed to another app stay pending until
-                  checked. SpeedGate does not verify backups made by other apps
+                  checked. PixelGate does not verify backups made by other apps
                   or services.
                 </p>
               </section>
@@ -1083,7 +1036,7 @@ export default function SpeedGate() {
                   Guest, campus, hotel, and workplace Wi-Fi may allow internet
                   access while blocking local discovery or connections between
                   devices. Use the same exact network on both devices; matching
-                  network names alone do not guarantee a direct route. SpeedGate
+                  network names alone do not guarantee a direct route. PixelGate
                   cannot change network access rules.
                 </p>
                 <p>
@@ -1095,7 +1048,7 @@ export default function SpeedGate() {
                 <p>
                   For example, Apple Photos originals, paired Live Photos, and
                   iCloud-original retrieval are not guaranteed by a browser
-                  picker. SpeedGate preserves the bytes it receives from the
+                  picker. PixelGate preserves the bytes it receives from the
                   picker without further conversion.
                 </p>
                 <p>
@@ -1120,7 +1073,7 @@ export default function SpeedGate() {
                   transfer.
                 </p>
                 <p>
-                  File cache counts the copies currently stored by SpeedGate and
+                  File cache counts the copies currently stored by PixelGate and
                   updates after cleanup. Cleared files leave the receiving list;
                   their receipts remain in History. The browser allowance
                   estimate can lag after deletion and varies by profile and
@@ -1142,10 +1095,7 @@ export default function SpeedGate() {
                   pairing; it receives no files, filenames, hashes, or history.
                   Copy/paste pairing is also available. No TURN relay is
                   configured; file bytes use the direct encrypted peer
-                  connection. In HTTP/TCP mode a local helper carries the bytes;
-                  both browsers connect to that same trusted HTTPS address. The
-                  helper can see file contents and metadata while forwarding
-                  them. It stores no file payloads.
+                  connection.
                 </p>
               </section>
             </div>
@@ -1198,38 +1148,6 @@ export default function SpeedGate() {
                       </div>
                       {!room ? (
                         <div className="pairing-start">
-                          <div className="hint transport-choice">
-                            <label htmlFor="transfer-mode">
-                              Transfer transport{' '}
-                            </label>
-                            <select
-                              id="transfer-mode"
-                              aria-label="Transfer transport"
-                              disabled={busy || running}
-                              value={transferMode}
-                              onChange={(event) => {
-                                transportChosen.current = true;
-                                setTransferMode(
-                                  event.target.value as 'webrtc' | 'http',
-                                );
-                                setPairingMode('code');
-                                setCode('');
-                              }}
-                            >
-                              <option value="webrtc">
-                                Browser-only · WebRTC
-                              </option>
-                              <option value="http" disabled={!httpAvailable}>
-                                Local HTTP/TCP · LAN helper
-                                {httpAvailable ? '' : ' unavailable'}
-                              </option>
-                            </select>
-                            <p>
-                              Browser-only works directly between iPhone and
-                              Pixel. HTTP/TCP requires both devices to open the
-                              same trusted local helper address.
-                            </p>
-                          </div>
                           {role === 'send' ? (
                             <>
                               <label
@@ -1308,49 +1226,47 @@ export default function SpeedGate() {
                                   </p>
                                 </div>
                               </div>
-                              {pairingMode === 'code' &&
-                                transferMode === 'webrtc' && (
-                                  <details className="lan-fallback">
-                                    <summary>Advanced network settings</summary>
-                                    <p className="hint" id="lan-help">
-                                      Connection details are collected
-                                      automatically. For advanced diagnosis
-                                      only, you can supply the sender’s local
-                                      IPv4 address before creating a code. Find
-                                      it in that device’s network settings for
-                                      its current Wi-Fi or wired connection.
-                                      This can help when local device discovery
-                                      fails; it cannot bypass a network that
-                                      blocks devices.
-                                    </p>
-                                    <label
-                                      className="pairing-label"
-                                      htmlFor="sender-ip"
-                                    >
-                                      Sender’s local IPv4 (optional)
-                                    </label>
-                                    <input
-                                      id="sender-ip"
-                                      className="lan-address"
-                                      type="text"
-                                      inputMode="decimal"
-                                      autoComplete="off"
-                                      spellCheck={false}
-                                      placeholder="192.168.1.20"
-                                      maxLength={15}
-                                      aria-describedby="lan-help"
-                                      value={senderAddress}
-                                      disabled={busy}
-                                      onChange={(event) =>
-                                        setSenderAddress(event.target.value)
-                                      }
-                                    />
-                                    <p className="hint">
-                                      Used only in this tab. No relay,
-                                      microphone, or camera access.
-                                    </p>
-                                  </details>
-                                )}
+                              {pairingMode === 'code' && (
+                                <details className="lan-fallback">
+                                  <summary>Advanced network settings</summary>
+                                  <p className="hint" id="lan-help">
+                                    Connection details are collected
+                                    automatically. For advanced diagnosis only,
+                                    you can supply the sender’s local IPv4
+                                    address before creating a code. Find it in
+                                    that device’s network settings for its
+                                    current Wi-Fi or wired connection. This can
+                                    help when local device discovery fails; it
+                                    cannot bypass a network that blocks devices.
+                                  </p>
+                                  <label
+                                    className="pairing-label"
+                                    htmlFor="sender-ip"
+                                  >
+                                    Sender’s local IPv4 (optional)
+                                  </label>
+                                  <input
+                                    id="sender-ip"
+                                    className="lan-address"
+                                    type="text"
+                                    inputMode="decimal"
+                                    autoComplete="off"
+                                    spellCheck={false}
+                                    placeholder="192.168.1.20"
+                                    maxLength={15}
+                                    aria-describedby="lan-help"
+                                    value={senderAddress}
+                                    disabled={busy}
+                                    onChange={(event) =>
+                                      setSenderAddress(event.target.value)
+                                    }
+                                  />
+                                  <p className="hint">
+                                    Used only in this tab. No relay, microphone,
+                                    or camera access.
+                                  </p>
+                                </details>
+                              )}
                               <button
                                 className="button primary"
                                 disabled={busy}
@@ -1375,7 +1291,6 @@ export default function SpeedGate() {
                               role={role}
                               moving={!!active}
                               paused={paused}
-                              http={transferMode === 'http'}
                             />
                           ) : role === 'receive' ? (
                             <>
@@ -1479,10 +1394,7 @@ export default function SpeedGate() {
                                     onClick={() =>
                                       void guarded(async () => {
                                         await navigator.clipboard.writeText(
-                                          pairingLink(
-                                            room.offer!,
-                                            transferMode,
-                                          ),
+                                          pairingLink(room.offer!),
                                         );
                                         setNotice(
                                           'Receiver link copied. Share it only with your sending device.',
@@ -1514,10 +1426,7 @@ export default function SpeedGate() {
                                     className="pairing-text"
                                     id="receiver-link"
                                     readOnly
-                                    value={pairingLink(
-                                      room.offer!,
-                                      transferMode,
-                                    )}
+                                    value={pairingLink(room.offer!)}
                                     onFocus={(e) => e.target.select()}
                                   />
                                 </>
@@ -1681,13 +1590,12 @@ export default function SpeedGate() {
                           </button>
                         </div>
                       )}
-                      {!room && transferMode === 'webrtc' && (
+                      {!room && (
                         <div className="pairing-options">
                           <button
                             className="text-button"
                             disabled={busy}
                             onClick={() => {
-                              transportChosen.current = true;
                               setPairingMode(
                                 pairingMode === 'code' ? 'manual' : 'code',
                               );
@@ -2152,12 +2060,12 @@ export default function SpeedGate() {
                                     <>
                                       {' '}
                                       For Photos, use Save to Photos folder and
-                                      choose or create DCIM/SpeedGate in
+                                      choose or create DCIM/PixelGate in
                                       internal storage. The whole received
                                       collection saves there with original
                                       filenames, without moving downloads.
                                       Future files save there automatically.
-                                      Enable SpeedGate in Photos device-folder
+                                      Enable PixelGate in Photos device-folder
                                       backup once.
                                     </>
                                   )}
@@ -2284,10 +2192,7 @@ export default function SpeedGate() {
                       </p>
                       <div>
                         <LockKeyhole size={14} />
-                        {transferMode === 'http' &&
-                        location.protocol !== 'https:'
-                          ? 'Local HTTP development'
-                          : 'Encrypted in transit'}
+                        Encrypted in transit
                       </div>
                       <div>
                         <Check size={14} />
@@ -2452,7 +2357,7 @@ export default function SpeedGate() {
           )}
           <footer className="page-footer">
             <span>
-              SpeedGate {version} <span className="footer-divider">/</span>{' '}
+              PixelGate {version} <span className="footer-divider">/</span>{' '}
               Original bytes. Verified copies.
             </span>
             <span>
@@ -2472,8 +2377,5 @@ export default function SpeedGate() {
   );
 }
 function historyReplace() {
-  const mode = new URLSearchParams(location.search).get('transport');
-  const query =
-    mode === 'webrtc' || mode === 'http' ? `?transport=${mode}` : '';
-  window.history.replaceState(null, '', location.pathname + query);
+  window.history.replaceState(null, '', location.pathname);
 }

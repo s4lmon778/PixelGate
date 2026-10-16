@@ -283,7 +283,7 @@ export async function prepareStaging(): Promise<StagingBackend> {
           new Error(
             error.name === 'QuotaExceededError'
               ? 'Browser storage is full. Free device space or save and clear a verified batch, then retry.'
-              : `Compatibility storage failed its write/read test. Try a regular (non-Private) browser tab, close other SpeedGate tabs, and reload. Allow website storage and check device space. Existing staged files have not been cleared. (${error.name}: ${error.message})`,
+              : `Compatibility storage failed its write/read test. Try a regular (non-Private) browser tab, close other PixelGate tabs, and reload. Allow website storage and check device space. Existing staged files have not been cleared. (${error.name}: ${error.message})`,
           ),
           { name: error.name },
         );

@@ -4,6 +4,3 @@ test-results/
 playwright-report/
 package-lock.json
 LICENSE
-
-# Preserve REA tool output as captured.
-docs/research/

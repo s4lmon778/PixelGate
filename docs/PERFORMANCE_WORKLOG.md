@@ -1,4 +1,4 @@
-# SpeedGate performance and cache work · October 11, 2026
+# PixelGate performance and cache work · October 11, 2026
 
 ## Requested outcome
 
@@ -1133,7 +1133,7 @@ showDirectoryPicker. The user explicitly chose browser-only native saving for
 Safari. An enabled folder action expands browser-specific saving guidance rather
 than leaving a disabled control. Mac Safari uses Settings → General → File
 download location → Ask for each download, then its native download/save dialog.
-This is a browser setting, not a writable-folder permission granted to SpeedGate.
+This is a browser setting, not a writable-folder permission granted to PixelGate.
 Apple documents this setting at
 https://support.apple.com/en-ie/guide/safari/ibrw1072/mac .
 Other unsupported browsers retain native sharing when available and their own
@@ -1387,23 +1387,3 @@ byte. A fresh actual Chromium 101 context verifies the published 0.3.35 footer,
 both roles and the unsupported-folder text disclosure at 360 px without
 overflow or runtime errors. The owned 8798/8799 test servers are closed;
 existing 8787 and active user tabs remain untouched.
-
-## Verified 0.4.0 publication · October 15, 2026
-
-Published SpeedGate **0.4.0** from source `9bb6c62520ed2eb1fd3badc2b98db0fbe84a32b0`
-through Pages commit `a7a7fc6a944b7e28e883f185cc50e7f3c7bfd02b`.
-[GitHub Pages deployment](https://github.com/s4lmon778/PixelGate/actions/runs/38843265581)
-succeeded. The [main app](https://s4lmon778.github.io/PixelGate/) reports 0.4.0;
-[the preserved 0.3.35 app](https://s4lmon778.github.io/PixelGate/releases/0.3.35/)
-retains source `b5bc41bd2535ce568bd81142e0ef9915f7bb1069`.
-All six prior root entries, including the complete asset tree, match the original
-published Git objects. Both public pages loaded their expected brand/version
-without JavaScript exceptions; fetched entry JS/CSS matched published bytes.
-The real Chromium peer-transfer, staged-byte readback, export-verification and
-reconnect check passed against each live URL (5.2 s for 0.4.0; 4.8 s for 0.3.35).
-These are correctness checks, not physical throughput measurements.
-
-The prepublication check passed TypeScript, ESLint, all 271 unit/integration
-cases, formatting and the production build. GitHub Pages retains the no-install
-WebRTC flow; HTTP/TCP requires the optional LAN helper. The user's approximately
-3 MB/s iPhone-to-Pixel baseline has no new physical comparison in this deployment.

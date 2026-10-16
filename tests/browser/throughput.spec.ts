@@ -9,19 +9,19 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
   browserName,
 }, testInfo) => {
   test.skip(
-    browserName !== 'chromium' && !process.env.SPEEDGATE_TEST_ALL_ENGINES,
+    browserName !== 'chromium' && !process.env.PIXELGATE_TEST_ALL_ENGINES,
     'Additional engines run in the explicit performance comparison.',
   );
   test.setTimeout(300000);
-  const baseline = process.env.SPEEDGATE_TEST_BASELINE_URL;
-  const slowLink = Boolean(process.env.SPEEDGATE_TEST_SLOW_LINK);
-  const adaptivePaths = Boolean(process.env.SPEEDGATE_TEST_ADAPTIVE_PATHS);
-  const mixedPeers = Boolean(process.env.SPEEDGATE_TEST_MIXED_PEERS);
+  const baseline = process.env.PIXELGATE_TEST_BASELINE_URL;
+  const slowLink = Boolean(process.env.PIXELGATE_TEST_SLOW_LINK);
+  const adaptivePaths = Boolean(process.env.PIXELGATE_TEST_ADAPTIVE_PATHS);
+  const mixedPeers = Boolean(process.env.PIXELGATE_TEST_MIXED_PEERS);
   const measurements: { mode: string; milliseconds: number; bytes: number }[] =
     [];
   const payload = Buffer.alloc(
     Number(
-      process.env.SPEEDGATE_TEST_MIB ||
+      process.env.PIXELGATE_TEST_MIB ||
         (adaptivePaths ? 16 : slowLink ? 4 : baseline ? 32 : 8),
     ) *
       1024 *
@@ -79,11 +79,11 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
               'slow-lane',
               'previous-release',
             ];
-  const selectedModes = process.env.SPEEDGATE_TEST_COMPARE_MODES
-    ? process.env.SPEEDGATE_TEST_COMPARE_MODES.split(',')
-    : process.env.SPEEDGATE_TEST_PATH_MODE
+  const selectedModes = process.env.PIXELGATE_TEST_COMPARE_MODES
+    ? process.env.PIXELGATE_TEST_COMPARE_MODES.split(',')
+    : process.env.PIXELGATE_TEST_PATH_MODE
       ? modes.filter((mode) =>
-          mode.includes(process.env.SPEEDGATE_TEST_PATH_MODE!),
+          mode.includes(process.env.PIXELGATE_TEST_PATH_MODE!),
         )
       : modes;
   expect(selectedModes.length).toBeGreaterThan(0);
@@ -462,9 +462,9 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
           {
             mode,
             faultBytes:
-              Number(process.env.SPEEDGATE_TEST_FAULT_MIB || 0) * 1024 * 1024,
+              Number(process.env.PIXELGATE_TEST_FAULT_MIB || 0) * 1024 * 1024,
             bufferReadMs: Number(
-              process.env.SPEEDGATE_TEST_BUFFER_READ_MS || 0,
+              process.env.PIXELGATE_TEST_BUFFER_READ_MS || 0,
             ),
           },
         );
@@ -636,18 +636,18 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
         if (mode === 'unavailable-lanes')
           expect(metrics.lanes['pixelgate-bulk-v1']).toBeUndefined();
         expect(metrics.milliseconds).toBeGreaterThan(0);
-        if (mixedPeers && process.env.SPEEDGATE_TEST_BASELINE_CONNECTIONS)
+        if (mixedPeers && process.env.PIXELGATE_TEST_BASELINE_CONNECTIONS)
           expect(transport.connections).toBe(
             mode === 'new-peers-local'
               ? MAX_BULK_LANES + 1
-              : Number(process.env.SPEEDGATE_TEST_BASELINE_CONNECTIONS),
+              : Number(process.env.PIXELGATE_TEST_BASELINE_CONNECTIONS),
           );
         if (mixedPeers)
           expect(metrics.maximumPayloadFrameBytes).toBe(
             mode === 'new-peers-local'
               ? 64 * 1024 - 8
               : Number(
-                  process.env.SPEEDGATE_TEST_BASELINE_FRAME_BYTES || 16 * 1024,
+                  process.env.PIXELGATE_TEST_BASELINE_FRAME_BYTES || 16 * 1024,
                 ),
           );
         const receiverMetrics = await receiver.evaluate(
@@ -660,7 +660,7 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
             mode === 'new-peers-local'
               ? 8 * 1024 * 1024
               : Number(
-                  process.env.SPEEDGATE_TEST_BASELINE_WINDOW_BYTES ||
+                  process.env.PIXELGATE_TEST_BASELINE_WINDOW_BYTES ||
                     4 * 1024 * 1024,
                 ),
           );
@@ -741,7 +741,7 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
             .click();
           const diagnosticFile = await downloading;
           expect(diagnosticFile.suggestedFilename()).toBe(
-            'SpeedGate-connection-send.json',
+            'PixelGate-connection-send.json',
           );
           expect(
             JSON.parse(await readFile((await diagnosticFile.path())!, 'utf8')),
@@ -802,7 +802,7 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
     contentType: 'application/json',
   });
   if (baseline) {
-    if (process.env.SPEEDGATE_TEST_COMPARE_MODES) {
+    if (process.env.PIXELGATE_TEST_COMPARE_MODES) {
       for (let index = 0; index < measurements.length; index += 2)
         if (measurements[index].mode.startsWith('baseline'))
           expect(measurements[index + 1].milliseconds).toBeLessThan(
@@ -846,7 +846,7 @@ test('parallel connections hide ACK latency, survive lane loss, and verify store
       );
     return;
   }
-  if (process.env.SPEEDGATE_TEST_COMPARE_MODES) return;
+  if (process.env.PIXELGATE_TEST_COMPARE_MODES) return;
   expect(measurements[1].milliseconds).toBeLessThan(
     measurements[0].milliseconds * 0.75,
   );

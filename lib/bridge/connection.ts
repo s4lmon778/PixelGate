@@ -88,7 +88,7 @@ export class Connection {
     ) {
       channel.close();
       this.events.error(
-        new Error('A reliable ordered SpeedGate channel is required.'),
+        new Error('A reliable ordered PixelGate channel is required.'),
       );
       return;
     }

@@ -3,15 +3,13 @@ import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
-  base: process.env.SPEEDGATE_BASE || process.env.PIXELGATE_BASE || './',
+  base: process.env.PIXELGATE_BASE || './',
   plugins: [
     react(),
     {
-      name: 'speedgate-signaling-policy',
+      name: 'pixelgate-signaling-policy',
       transformIndexHtml(html) {
-        const configured =
-          process.env.VITE_SPEEDGATE_SIGNAL_URL ||
-          process.env.VITE_PIXELGATE_SIGNAL_URL;
+        const configured = process.env.VITE_PIXELGATE_SIGNAL_URL;
         if (!configured) return html;
         const url = new URL(configured);
         if (

@@ -60,7 +60,7 @@ export async function testInternetDownload(
   let lastProgress = 0;
   async function read(size: number, measured: boolean) {
     const response = await fetch(
-      `https://speed.cloudflare.com/__down?bytes=${size}&speedgate=${crypto.randomUUID()}`,
+      `https://speed.cloudflare.com/__down?bytes=${size}&pixelgate=${crypto.randomUUID()}`,
       {
         signal: controller.signal,
         cache: 'no-store',

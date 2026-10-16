@@ -3,7 +3,7 @@ import type { BrowserContext } from '@playwright/test';
 // Optional localhost isolation. Keep real native ICE, SCTP and data channels,
 // while removing external STUN discovery from these same-host fixtures.
 export async function isolateHostIce(context: BrowserContext) {
-  if (process.env.SPEEDGATE_TEST_HOST_ONLY !== '1') return;
+  if (process.env.PIXELGATE_TEST_HOST_ONLY !== '1') return;
   await context.addInitScript(() => {
     const Native = window.RTCPeerConnection;
     window.RTCPeerConnection = new Proxy(Native, {

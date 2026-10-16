@@ -9,12 +9,12 @@ import {
 describe('local save options', () => {
   it('opens only the HTTPS app page in Chrome without pairing or query data', () => {
     const link = androidChromeLink(
-      'https://example.com/SpeedGate/?secret=private#code=123456',
+      'https://example.com/PixelGate/?secret=private#code=123456',
       'Android',
       '0.3.9',
     );
     expect(link).toBe(
-      'intent://example.com/SpeedGate/?v=0.3.9#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=https%3A%2F%2Fexample.com%2FSpeedGate%2F%3Fv%3D0.3.9;end',
+      'intent://example.com/PixelGate/?v=0.3.9#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=https%3A%2F%2Fexample.com%2FPixelGate%2F%3Fv%3D0.3.9;end',
     );
     expect(link).not.toContain('123456');
     expect(link).not.toContain('secret');

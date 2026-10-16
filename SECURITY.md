@@ -1,6 +1,6 @@
 # Security policy
 
-SpeedGate is experimental. The actively maintained version is the default branch.
+PixelGate is experimental. The actively maintained version is the default branch.
 
 ## Report a vulnerability
 
@@ -12,7 +12,7 @@ Users load the trusted app, share a temporary six-digit receiver code, and expli
 
 The PeerJS signaling service is part of the trust boundary for code pairing. It exchanges SDP, including network addresses, DTLS fingerprints, and ICE credentials, over TLS. A compromised broker can undermine peer identity. It sees connection metadata but receives no filenames, hashes, manifests, history, or media bytes. Do not publish active codes or links. The receiver must remain open. The copy/paste fallback exchanges these descriptions through a trusted channel without contacting PeerJS.
 
-WebRTC encrypts data in transit. SHA-256 verifies that stored bytes match the selected source; it does not establish that a sender, file, or source device is trustworthy. SpeedGate does not scan received files or authenticate people. A compromised app build, device, browser extension, hosting account, or signaling exchange can undermine the guarantees.
+WebRTC encrypts data in transit. SHA-256 verifies that stored bytes match the selected source; it does not establish that a sender, file, or source device is trustworthy. PixelGate does not scan received files or authenticate people. A compromised app build, device, browser extension, hosting account, or signaling exchange can undermine the guarantees.
 
 ## Storage and network
 
@@ -21,7 +21,3 @@ Files, manifests, hashes, and history remain local. The app’s static host rece
 Destination paths are validated before file access. Verification flags from remote manifests are ignored. The code-pairing gate validates reliable ordering, protocol metadata, and a nonce-bound approval before handing the channel to the transfer engine. Copy/paste descriptions accept data channels only, have bounded encoded/decompressed sizes, require a matching session/expiry, and reject extra fields. Local persisted records are not an authentication boundary.
 
 OPFS and the IndexedDB chunk fallback are local browser storage, not encrypted vaults. Their durability, eviction behavior, and quota depend on the browser and device. Compatibility storage preserves the same consent gate, receiver-owned checkpoints, independent stored-byte verification, and download restrictions. Export and independently verify important copies. Do not treat a browser history record, successful download initiation, or visibility in a photo library or file manager as proof of backup. Confirm backup in the app or service responsible for it.
-
-## Optional local HTTP/TCP mode
-
-The LAN helper terminates HTTPS and can see file bytes and manifests while forwarding them. It uses same-origin HTTP endpoints, role-specific random bearer tokens, receiver approval, expiring one-use codes, Host/Origin checks and bounded queues. It stores no file payload on disk. It must run on a trusted LAN with a certificate trusted by both browsers; it is not an Internet-facing relay. The browser-only WebRTC mode keeps its existing direct encryption boundary. See [HTTP transport trust model](docs/HTTP-TRANSPORT.md).

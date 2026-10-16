@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 
 // Record a fresh, empty browser profile: no rooms, personal files, or saved history.
 const root = fileURLToPath(new URL('..', import.meta.url));
-const frames = await mkdtemp(join(tmpdir(), 'speedgate-readme-'));
+const frames = await mkdtemp(join(tmpdir(), 'pixelgate-readme-'));
 let browser;
 try {
   browser = await chromium.launch();

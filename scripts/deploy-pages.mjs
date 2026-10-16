@@ -38,7 +38,7 @@ const version = JSON.parse(
 ).version;
 if (run(['git', 'status', '--porcelain', '--untracked-files=normal']))
   throw new Error('Commit source changes before publishing.');
-const temp = mkdtempSync(join(tmpdir(), 'speedgate-pages-'));
+const temp = mkdtempSync(join(tmpdir(), 'pixelgate-pages-'));
 try {
   run(['git', 'init', '-b', 'gh-pages'], temp);
   run(['git', 'config', 'user.name', author.name], temp);
@@ -90,7 +90,7 @@ try {
   run(['git', 'add', '.'], temp);
   if (run(['git', 'status', '--porcelain'], temp))
     run(
-      ['git', 'commit', '-m', `Deploy SpeedGate from ${source.slice(0, 7)}`],
+      ['git', 'commit', '-m', `Deploy PixelGate from ${source.slice(0, 7)}`],
       temp,
     );
   console.log(run(['git', 'push', 'origin', 'gh-pages'], temp));

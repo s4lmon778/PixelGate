@@ -135,7 +135,7 @@ describe('six-digit code pairing', () => {
       '001234',
       '001 234',
       '001-234',
-      'https://example.org/SpeedGate/#connect=001234',
+      'https://example.org/PixelGate/#connect=001234',
     ])
       expect(pairingCode(input)).toBe('001234');
     for (const input of [

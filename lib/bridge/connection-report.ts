@@ -1,6 +1,5 @@
 import type { RouteDiagnostics } from './route-diagnostics';
 import type { StripedChannel } from './striped-channel';
-import type { HttpChannel } from './http-channel';
 import type { Receiver, Sender } from './transfer';
 import type { InternetResult, browserNetwork } from './network-test';
 
@@ -10,9 +9,7 @@ export type ConnectionReport = RouteDiagnostics & {
   recordedAt: string;
   browser: string;
   storageMode: string;
-  transfer?:
-    | ReturnType<StripedChannel['snapshot']>
-    | ReturnType<HttpChannel['snapshot']>;
+  transfer?: ReturnType<StripedChannel['snapshot']>;
   receiving?: ReturnType<Receiver['snapshot']>;
   sending?: ReturnType<Sender['snapshot']>;
   routeStatsScope?: 'primary-connection';
@@ -74,7 +71,7 @@ export function downloadConnectionReport(report: ConnectionReport) {
   );
   const link = document.createElement('a');
   link.href = url;
-  link.download = `SpeedGate-connection-${report.role}.json`;
+  link.download = `PixelGate-connection-${report.role}.json`;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
