@@ -3,10 +3,10 @@
 ## Magic UI — Animated Beam
 
 The connection beam in `src/DeviceConnection.tsx` adapts the layered SVG path and
-transparent gradient pattern from Magic UI’s Animated Beam. PixelGate uses a
+transparent gradient pattern from Magic UI’s Animated Beam. SpeedGate uses a
 fixed SVG and CSS animation rather than the original Motion/ResizeObserver
 implementation. Green styling, transfer state and reduced-motion behavior are
-provided by PixelGate.
+provided by SpeedGate.
 
 Source: https://github.com/magicuidesign/magicui/blob/85f97fd27b053339af74ba9dd4ca428ee25989fb/apps/www/registry/magicui/animated-beam.tsx
 
