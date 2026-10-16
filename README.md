@@ -1,10 +1,11 @@
 <div align="center">
-  <img src="docs/assets/logo.svg" alt="PixelGate" width="80" height="80" />
-  <h1>PixelGate</h1>
+  <img src="docs/assets/logo.svg" alt="SpeedGate" width="80" height="80" />
+  <h1>SpeedGate</h1>
   <p><strong>Move files. Keep every byte.</strong></p>
   <p>Direct browser-to-browser transfers with resumable checkpoints and independent SHA-256 verification.</p>
   <p>
     <a href="https://s4lmon778.github.io/PixelGate/">Live app</a> ·
+    <a href="https://s4lmon778.github.io/PixelGate/releases/0.3.35/">Previous version (0.3.35)</a> ·
     <a href="#quick-start">Quick start</a> ·
     <a href="#engineering-decisions">Engineering decisions</a> ·
     <a href="docs/README.md">Documentation</a> ·
@@ -19,18 +20,33 @@
   </p>
 </div>
 
-PixelGate moves files between computers, phones, and tablets using their browsers. File bytes travel over a direct encrypted WebRTC data channel. The receiver closes and rereads each stored file before comparing its SHA-256 with the source. Filenames, manifests, hashes, file bytes, and transfer history remain on the participating devices.
+SpeedGate moves files between computers, phones, and tablets using their browsers. Browser-only mode sends file bytes over a direct encrypted WebRTC data channel; optional local-helper mode streams them through trusted HTTPS/TCP. The receiver closes and rereads each stored file before comparing its SHA-256 with the source. File history and receiving storage stay on the devices. In local-helper mode, the helper also sees bytes and metadata while forwarding them.
 
-The app is a static **TypeScript / React / Vite** build hosted on GitHub Pages. **PeerJS** exchanges connection metadata for six-digit pairing; it carries no file payloads. No native app, account, cloud media storage, or TURN relay is required.
+The browser-only app is a static **TypeScript / React / Vite** build hosted on GitHub Pages. **PeerJS** exchanges connection metadata for six-digit pairing; it carries no file payloads. Browser-only mode needs no native app, account, cloud media storage, or TURN relay.
 
-> **Status:** experimental. The current app is **0.3.35**. Automated checks exercise integrity and recovery; browser capabilities, available storage, and network policies still determine usability. Large-file and physical-device boundaries are documented below.
+> **Status:** experimental. The working version is **0.4.0**. Automated checks exercise integrity and recovery; browser capabilities, available storage, and network policies still determine usability. Large-file and physical-device boundaries are documented below.
 
 Android senders have **Choose photos & videos** for the media library and **Choose files** for documents. Direct **Save to Photos folder** appears only when the browser supports choosing a local folder; older Chrome uses verified downloads with Photos device-folder backup. Updating the browser can enable the folder option without changing the Android system.
 
 <div align="center">
-  <img src="docs/assets/controls-demo.gif" alt="PixelGate's screen-awake switch animates between sun and moon while the appearance menu switches between Light and Dark" width="960" />
+  <img src="docs/assets/controls-demo.gif" alt="SpeedGate's screen-awake switch animates between sun and moon while the appearance menu switches between Light and Dark" width="960" />
   <p><sub>Recorded from the app: the screen-awake preference and appearance controls.</sub></p>
 </div>
+
+## SpeedGate 0.4.0: browser-only and optional HTTP/TCP
+
+**The no-install iPhone → Pixel browser flow remains the default on static hosting.** SpeedGate also supports a LocalSend-inspired binary HTTP/TCP transport when both browsers open a temporary trusted LAN helper. A browser cannot host a TCP listener itself; the helper must run as a Node process on a PC/Mac or a provisioned Android environment. This is an additional mode, with a different trust boundary: the helper forwards and can see the bytes.
+
+```sh
+npm run build
+SPEEDGATE_TLS_KEY=/path/key.pem SPEEDGATE_TLS_CERT=/path/chain.pem npm run serve:lan
+```
+
+For a temporary distributable ZIP, run `npm run package:helper`; the extracted helper needs an existing Node runtime but no npm install. Both devices need to trust the certificate and open the same helper address. Start with two concurrent uploads; 1–4 are configurable. The existing original-byte handling, manifests, worker hashing, readback, duplicates, progress, saving, pause/cancel and receiver-owned resume checkpoints are shared between modes. No new dependency was added.
+
+[Setup, browser restrictions and data compatibility](docs/HTTP-TRANSPORT.md) · [REA and LocalSend research](docs/LOCALSEND-RESEARCH.md) · [Measured comparison and limits](docs/HTTP-BENCHMARKS.md)
+
+The remaining WebRTC deployment and pairing descriptions below describe **browser-only mode**. Existing GitHub/Pages URLs remain valid under their actual repository name. Existing storage/preference/wire identifiers are intentionally retained for compatibility. Historical measurement JSON retains its original provenance; current interface recordings and screenshots were refreshed for SpeedGate 0.4.0. GitHub Pages serves browser-only mode; HTTP/TCP requires the separate temporary LAN helper.
 
 ## Contents
 
@@ -46,13 +62,13 @@ Android senders have **Choose photos & videos** for the media library and **Choo
 ## Quick start
 
 <div align="center">
-  <img src="docs/assets/quick-start.gif" alt="Six-step PixelGate walkthrough: create a receiver code, connect the sender, approve, send files, select and save inline, optionally check final bytes in History, and clear cached files" width="960" />
+  <img src="docs/assets/quick-start.gif" alt="Six-step SpeedGate walkthrough: create a receiver code, connect the sender, approve, send files, select and save inline, optionally check final bytes in History, and clear cached files" width="960" />
   <p><sub>A real synthetic-file transfer, with step captions and click highlights. Playback is edited for instruction.</sub></p>
 </div>
 
 [Watch or download the 29-second video](docs/assets/quick-start.mp4) · [Recording details](docs/assets/README.md#quick-start-walkthrough)
 
-1. Open **[PixelGate](https://s4lmon778.github.io/PixelGate/)** on both devices, using a trusted network that permits connections between them.
+1. Open **[SpeedGate](https://s4lmon778.github.io/PixelGate/)** on both devices, using a trusted network that permits connections between them.
 2. On the destination device, choose **Receive files**, optionally choose a destination folder, and click **Create a connection**.
 3. On the sender, enter the receiver's **six-digit code** or scan its QR code, then click **Connect**.
 4. On the receiver, **Approve sender** for your intended device.
@@ -61,20 +77,20 @@ Android senders have **Choose photos & videos** for the media library and **Choo
 
 Codes expire after ten minutes and accept one sender. A code is a temporary lookup, not identity authentication. Same-network-name Wi-Fi can still block local connections; use a permitted network or hotspot if necessary.
 
-For large collections, receive a batch, save it, and choose **Clear verified staging** before the next batch. It deletes PixelGate’s cached file bytes from both storage backends, removes cleared files from the receiving list, and releases prepared download references in open tabs. Receipts remain available only in History. For downloads or app saves, confirm the save finished and the files open before clearing; optional independent saved-copy checks remain in History. Saved originals, unfinished transfers, and reports are kept. **Clear history** is a separate action that preserves staging and resume data.
+For large collections, receive a batch, save it, and choose **Clear verified staging** before the next batch. It deletes SpeedGate’s cached file bytes from both storage backends, removes cleared files from the receiving list, and releases prepared download references in open tabs. Receipts remain available only in History. For downloads or app saves, confirm the save finished and the files open before clearing; optional independent saved-copy checks remain in History. Saved originals, unfinished transfers, and reports are kept. **Clear history** is a separate action that preserves staging and resume data.
 
-On browsers without writable-folder access, **Choose where downloads are saved** is a text disclosure beneath the saving buttons. Mac Safari uses its native download flow; enable **Safari → Settings → General → File download location → Ask for each download** to choose a destination for downloads. PixelGate cannot enable that browser setting for you.
+On browsers without writable-folder access, **Choose where downloads are saved** is a text disclosure beneath the saving buttons. Mac Safari uses its native download flow; enable **Safari → Settings → General → File download location → Ask for each download** to choose a destination for downloads. SpeedGate cannot enable that browser setting for you.
 
 See the [usage guide](docs/USAGE.md) for saving modes and storage behavior, or [troubleshooting](docs/TROUBLESHOOTING.md) for network and browser issues.
 
 <details>
 <summary><strong>Interface previews — desktop and mobile</strong></summary>
 
-Screenshots show the 0.3.13 interface with empty queues, including paired saving controls and expandable help.
+Screenshots show the 0.4.0 interface with empty queues, including paired saving controls and expandable help.
 
-![PixelGate desktop interface](docs/assets/desktop.png)
+![SpeedGate desktop interface](docs/assets/desktop.png)
 
-<img src="docs/assets/mobile.png" alt="PixelGate mobile receiving and saving controls" width="390" />
+<img src="docs/assets/mobile.png" alt="SpeedGate mobile receiving and saving controls" width="390" />
 
 </details>
 
@@ -172,7 +188,7 @@ flowchart TD
 
 OPFS and manifest metadata are separate persistence systems. Their ordering supports refresh/reconnect recovery; it does not establish OS power-loss durability. File identity includes both content hash and relative path, and retained verified copies must pass readback before they can be skipped.
 
-For the original Pixel / Pixel XL, keep originals local and let Google Photos on that phone back up the device folder in Original quality. [Google documents the model-specific storage benefit](https://support.google.com/pixelphone/answer/6220791?co=GENIE.Platform%3DAndroid&hl=en). Album organization and Free up space happen in Photos; PixelGate does not replace that device backup with a cloud API upload.
+For the original Pixel / Pixel XL, keep originals local and let Google Photos on that phone back up the device folder in Original quality. [Google documents the model-specific storage benefit](https://support.google.com/pixelphone/answer/6220791?co=GENIE.Platform%3DAndroid&hl=en). Album organization and Free up space happen in Photos; SpeedGate does not replace that device backup with a cloud API upload.
 
 Native sharing uses a fresh user tap after file preparation so hashing does not consume transient activation. History clearing affects only the presentation log, preserving recovery records and staged bytes.
 
@@ -195,17 +211,17 @@ Browser tests include byte-exact large transfers/downloads through OPFS and comp
 - Receiving must pass a local write/read preflight. Folder access and native share targets depend on the browser and device; downloads remain the fallback.
 - Browsers must stay open. Wake lock can prevent automatic screen sleep where supported, but cannot guarantee background execution or survive manual locking and OS suspension.
 - Guest, campus, hotel, or workplace networks may block direct connections even when both devices use the same Wi-Fi name. No relay is available to bypass that restriction.
-- Browser quotas are estimates, and temporary sessions can discard local data. Real files over 4 GB, 10,000-file sessions, and 100 GB reliability require further hardware validation.
+- Browser quotas are estimates, and temporary sessions can discard local data. Mac HTTP transfer/download byte comparison passed at 5 GiB + 23 bytes. Physical-device transfers over 4 GB, 10,000-file sessions, and 100 GB reliability still require hardware validation.
 - Picker-supplied bytes are the source of truth. Original Photos resources, complete Live Photo pairing, iCloud-original retrieval, native media scanning, and filesystem timestamp restoration are outside this version.
-- PixelGate cannot select an arbitrary photo album or verify external backup. It never reports Google Photos backup success or deletes source media.
+- SpeedGate cannot select an arbitrary photo album or verify external backup. It never reports Google Photos backup success or deletes source media.
 
 ## Development
 
 Requires **Node.js 22.13+** and npm.
 
 ```sh
-git clone https://github.com/s4lmon778/PixelGate.git
-cd PixelGate
+git clone https://github.com/s4lmon778/PixelGate.git SpeedGate
+cd SpeedGate
 npm ci
 npm run dev
 ```
@@ -233,7 +249,7 @@ docs/assets/         Current interface screenshots and project artwork
 .github/             Issue forms and pull request template
 ```
 
-Build output, dependencies, browser reports, and environment files are ignored. Legacy internal `pixelbridge` storage identifiers remain unchanged to preserve compatibility; the public app is PixelGate.
+Build output, dependencies, browser reports, and environment files are ignored. Legacy internal `pixelbridge` and `pixelgate` storage, preference and WebRTC identifiers remain unchanged to preserve user data and peer compatibility; the public app is SpeedGate.
 
 ## Deployment
 
@@ -244,9 +260,9 @@ The app can run on any HTTPS static host. For GitHub Pages:
 3. Run `npm run deploy:pages`.
 4. Select **Settings → Pages → Deploy from a branch → gh-pages → /(root)**.
 
-The publisher preserves deployment history and writes the app version/source commit to `build.json`. Pushing `main` alone does not publish the site. Relative asset paths support project subpaths such as `/PixelGate/`.
+The publisher preserves deployment history and writes the app version/source commit to `build.json`. Pushing `main` alone does not publish the site. Relative asset paths support project subpaths such as `/SpeedGate/`.
 
-Default pairing uses PeerJS's public signaling service without an API key; shared-service availability and limits remain external dependencies. A TLS-enabled PeerServer can be selected with `VITE_PIXELGATE_SIGNAL_URL`. No application database, media backend, analytics, or TURN service is deployed.
+Default pairing uses PeerJS's public signaling service without an API key; shared-service availability and limits remain external dependencies. A TLS-enabled PeerServer can be selected with `VITE_SPEEDGATE_SIGNAL_URL`. No application database, media backend, analytics, or TURN service is deployed.
 
 Moving to another origin does not migrate browser files, history, or permissions. See [Deployment](docs/DEPLOYMENT.md) for custom signaling, hosting constraints, and verification steps, and [Security](SECURITY.md) for the trust model.
 

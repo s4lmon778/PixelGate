@@ -1,0 +1,2311 @@
+{
+  "recordedAt": "2026-10-15T21:40:14.919Z",
+  "environment": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M4",
+    "logicalCPUs": 10,
+    "node": "v22.22.2"
+  },
+  "tls": true,
+  "tlsTrust": "Self-signed test certificate accepted only by isolated Playwright contexts; TLS encryption remains active.",
+  "scope": "Single Mac, real Chromium with a fresh persistent receiver profile per trial, loopback HTTP(S) versus original WebRTC. Includes source hashing, storage and verification. Browser RSS is sum of process RSS and may double-count shared pages; 250 ms samples may miss short peaks. CPU from ps cumulative time, includes browser children, may miss processes that exit between samples. Bridge/harness metrics include Playwright orchestration and ps sampling. No claim about physical Wi-Fi, iOS or Pixel throughput.",
+  "baselineRevision": "cb5a570",
+  "repetitions": 3,
+  "mib": 128,
+  "results": [
+    {
+      "variant": "webrtc",
+      "dataset": "large-file",
+      "trial": 1,
+      "files": 1,
+      "bytes": 134217839,
+      "milliseconds": 3362.0660410000005,
+      "endToEndMBps": 39.92123812061668,
+      "browserCPUSeconds": 11.84,
+      "browserCPUPercent": 352.16440889657105,
+      "browserBaselineRSSBytes": 912801792,
+      "browserPeakRSSBytes": 1066024960,
+      "browserPeakRSSIncreaseBytes": 153223168,
+      "bridgeAndHarnessCPUSeconds": 0.078693,
+      "bridgeAndHarnessPeakRSSBytes": 160972800,
+      "receiverStoredHashesMatched": true,
+      "report": {
+        "version": "0.3.35",
+        "role": "send",
+        "recordedAt": "2026-10-15T21:39:02.983Z",
+        "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.7390.37 Safari/537.36",
+        "storageMode": "opfs",
+        "elapsedSeconds": 4,
+        "signaling": "stable",
+        "ice": "connected",
+        "gathering": "complete",
+        "connection": "connected",
+        "channel": "open",
+        "localDescription": true,
+        "remoteDescription": true,
+        "localCandidates": {
+          "host": 2,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "remoteCandidates": {
+          "host": 2,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "localMdns": 0,
+        "remoteMdns": 0,
+        "lanCandidatesAdded": 0,
+        "statsReads": 2,
+        "statsErrors": 0,
+        "candidatePairs": {
+          "succeeded": 2
+        },
+        "stunErrors": [],
+        "selectedRoute": {
+          "localType": "host",
+          "remoteType": "host",
+          "protocol": "udp",
+          "roundTripMs": 60,
+          "sentBytesPerSecond": 3924319,
+          "receivedBytesPerSecond": 145049
+        },
+        "transfer": {
+          "connections": 14,
+          "mode": "parallel",
+          "selectiveReceipts": true,
+          "reorderedBytes": 0,
+          "deliveredBytes": 0,
+          "deliveryIdleMs": 0,
+          "activePayloadConnections": 14,
+          "payloadConnectionLimit": 14,
+          "unreceivedBytes": 0,
+          "oldestUnreceivedMs": 0,
+          "receiptDelayMs": 43,
+          "queuedDelayMs": 71,
+          "replayedPackets": 0,
+          "pacingBurstBytes": 524288,
+          "pacingDelayMs": 0,
+          "sendBufferBytes": 4128768,
+          "sendFrameBytes": 65528,
+          "deprioritizedConnections": 0,
+          "scheduling": "balanced",
+          "paths": [
+            {
+              "path": 1,
+              "receivedBytes": 9487448,
+              "deliveryBytesPerSecond": 3872319,
+              "minimumReceiptDelayMs": 1,
+              "samples": 23,
+              "receiptDelayMs": 61,
+              "queuedDelayMs": 59
+            },
+            {
+              "path": 2,
+              "receivedBytes": 9356784,
+              "deliveryBytesPerSecond": 3762570,
+              "minimumReceiptDelayMs": 1,
+              "samples": 23,
+              "receiptDelayMs": 68,
+              "queuedDelayMs": 67
+            },
+            {
+              "path": 3,
+              "receivedBytes": 9552848,
+              "deliveryBytesPerSecond": 3928460,
+              "minimumReceiptDelayMs": 1,
+              "samples": 22,
+              "receiptDelayMs": 68,
+              "queuedDelayMs": 67
+            },
+            {
+              "path": 4,
+              "receivedBytes": 10340096,
+              "deliveryBytesPerSecond": 3853325,
+              "minimumReceiptDelayMs": 1,
+              "samples": 23,
+              "receiptDelayMs": 63,
+              "queuedDelayMs": 62
+            },
+            {
+              "path": 5,
+              "receivedBytes": 9274856,
+              "deliveryBytesPerSecond": 3896394,
+              "minimumReceiptDelayMs": 1,
+              "samples": 21,
+              "receiptDelayMs": 72,
+              "queuedDelayMs": 71
+            },
+            {
+              "path": 6,
+              "receivedBytes": 9732911,
+              "deliveryBytesPerSecond": 4074612,
+              "minimumReceiptDelayMs": 1,
+              "samples": 22,
+              "receiptDelayMs": 64,
+              "queuedDelayMs": 62
+            },
+            {
+              "path": 7,
+              "receivedBytes": 9536592,
+              "deliveryBytesPerSecond": 3752436,
+              "minimumReceiptDelayMs": 1,
+              "samples": 22,
+              "receiptDelayMs": 72,
+              "queuedDelayMs": 71
+            },
+            {
+              "path": 8,
+              "receivedBytes": 9929672,
+              "deliveryBytesPerSecond": 4033002,
+              "minimumReceiptDelayMs": 3,
+              "samples": 23,
+              "receiptDelayMs": 65,
+              "queuedDelayMs": 62
+            },
+            {
+              "path": 9,
+              "receivedBytes": 9471464,
+              "deliveryBytesPerSecond": 3723438,
+              "minimumReceiptDelayMs": 3,
+              "samples": 22,
+              "receiptDelayMs": 70,
+              "queuedDelayMs": 67
+            },
+            {
+              "path": 10,
+              "receivedBytes": 9667120,
+              "deliveryBytesPerSecond": 3988754,
+              "minimumReceiptDelayMs": 3,
+              "samples": 22,
+              "receiptDelayMs": 69,
+              "queuedDelayMs": 66
+            },
+            {
+              "path": 11,
+              "receivedBytes": 9274448,
+              "deliveryBytesPerSecond": 3763242,
+              "minimumReceiptDelayMs": 2,
+              "samples": 22,
+              "receiptDelayMs": 69,
+              "queuedDelayMs": 67
+            },
+            {
+              "path": 12,
+              "receivedBytes": 9406336,
+              "deliveryBytesPerSecond": 3832837,
+              "minimumReceiptDelayMs": 2,
+              "samples": 22,
+              "receiptDelayMs": 69,
+              "queuedDelayMs": 67
+            },
+            {
+              "path": 13,
+              "receivedBytes": 9537072,
+              "deliveryBytesPerSecond": 3669794,
+              "minimumReceiptDelayMs": 2,
+              "samples": 22,
+              "receiptDelayMs": 68,
+              "queuedDelayMs": 66
+            },
+            {
+              "path": 14,
+              "receivedBytes": 9667800,
+              "deliveryBytesPerSecond": 4027324,
+              "minimumReceiptDelayMs": 3,
+              "samples": 21,
+              "receiptDelayMs": 65,
+              "queuedDelayMs": 63
+            }
+          ],
+          "measurement": "sender-receipts",
+          "frameBytes": 65528
+        },
+        "sending": {
+          "stage": "idle",
+          "stageElapsedMs": 3,
+          "paused": false,
+          "batch": {
+            "phase": "verified",
+            "requestedFiles": 1,
+            "requestedBytes": 134217839,
+            "payloadBytesSent": 134217839,
+            "resumedBytes": 0,
+            "skippedBytes": 0,
+            "verifiedFiles": 1,
+            "skippedFiles": 0,
+            "wallElapsedMs": 3329
+          },
+          "stageTimes": {
+            "idle": 0,
+            "waiting-for-handshake": 16,
+            "preparing-source": 366,
+            "preparing-connections": 0,
+            "waiting-for-ready": 9,
+            "reading-source": 3,
+            "sending": 137,
+            "yielding-to-browser": 180,
+            "network-backpressure": 2099,
+            "waiting-for-ack": 150,
+            "waiting-for-result": 367
+          },
+          "sourceReads": {
+            "calls": 129,
+            "bytes": 134217839,
+            "lastMs": 1,
+            "averageMs": 2,
+            "maximumMs": 7,
+            "waitedMs": 3,
+            "maximumWaitMs": 1
+          }
+        },
+        "network": {
+          "connection": {
+            "online": true,
+            "estimatedDownlinkMbps": 10,
+            "saveData": false
+          }
+        },
+        "routeStatsScope": "primary-connection"
+      },
+      "samplesObserved": true
+    },
+    {
+      "variant": "http",
+      "dataset": "large-file",
+      "trial": 1,
+      "files": 1,
+      "bytes": 134217839,
+      "milliseconds": 3341.216958000001,
+      "endToEndMBps": 40.170345322424275,
+      "browserCPUSeconds": 5.1899999999999995,
+      "browserCPUPercent": 155.3326247663561,
+      "browserBaselineRSSBytes": 876478464,
+      "browserPeakRSSBytes": 1229717504,
+      "browserPeakRSSIncreaseBytes": 353239040,
+      "bridgeAndHarnessCPUSeconds": 1.704384,
+      "bridgeAndHarnessPeakRSSBytes": 328302592,
+      "receiverStoredHashesMatched": true,
+      "report": {
+        "version": "0.4.0",
+        "role": "send",
+        "recordedAt": "2026-10-15T21:39:09.245Z",
+        "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.7390.37 Safari/537.36",
+        "storageMode": "opfs",
+        "transport": "http-tcp",
+        "elapsedSeconds": 0,
+        "signaling": "local-http",
+        "ice": "not-applicable",
+        "gathering": "not-applicable",
+        "connection": "connected",
+        "channel": "open",
+        "localDescription": false,
+        "remoteDescription": false,
+        "localCandidates": {
+          "host": 0,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "remoteCandidates": {
+          "host": 0,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "localMdns": 0,
+        "remoteMdns": 0,
+        "lanCandidatesAdded": 0,
+        "statsReads": 0,
+        "statsErrors": 0,
+        "candidatePairs": {},
+        "stunErrors": [],
+        "selectedRoute": {
+          "localType": "browser",
+          "remoteType": "local-helper",
+          "protocol": "https/tcp"
+        },
+        "transfer": {
+          "transport": "http-tcp",
+          "mode": "http-stream",
+          "connections": 2,
+          "reorderedBytes": 0,
+          "deliveredBytes": 0,
+          "uploadedBytes": 134217839,
+          "deliveryIdleMs": 0,
+          "frameBytes": 1048576,
+          "sendBufferBytes": 2097152,
+          "queuedBytes": 851,
+          "parallelRequests": 2,
+          "elapsedMs": 4871,
+          "measurement": "http-post-completion",
+          "linkTest": {
+            "supported": true,
+            "running": false,
+            "status": "Not tested"
+          }
+        },
+        "sending": {
+          "stage": "idle",
+          "stageElapsedMs": 2,
+          "paused": false,
+          "batch": {
+            "phase": "verified",
+            "requestedFiles": 1,
+            "requestedBytes": 134217839,
+            "payloadBytesSent": 134217839,
+            "resumedBytes": 0,
+            "skippedBytes": 0,
+            "verifiedFiles": 1,
+            "skippedFiles": 0,
+            "wallElapsedMs": 3307
+          },
+          "stageTimes": {
+            "idle": 0,
+            "waiting-for-handshake": 16,
+            "preparing-source": 340,
+            "preparing-connections": 1,
+            "waiting-for-ready": 9,
+            "reading-source": 124,
+            "sending": 660,
+            "yielding-to-browser": 1751,
+            "waiting-for-ack": 12,
+            "waiting-for-result": 394
+          },
+          "sourceReads": {
+            "calls": 129,
+            "bytes": 134217839,
+            "lastMs": 19,
+            "averageMs": 20,
+            "maximumMs": 23,
+            "waitedMs": 123,
+            "maximumWaitMs": 3
+          }
+        },
+        "network": {
+          "connection": {
+            "online": true,
+            "estimatedDownlinkMbps": 10,
+            "saveData": false
+          }
+        },
+        "routeStatsScope": "primary-connection"
+      },
+      "samplesObserved": true
+    },
+    {
+      "variant": "http",
+      "dataset": "large-file",
+      "trial": 2,
+      "files": 1,
+      "bytes": 134217839,
+      "milliseconds": 3377.876333,
+      "endToEndMBps": 39.734385089461476,
+      "browserCPUSeconds": 5.25,
+      "browserCPUPercent": 155.4230967164303,
+      "browserBaselineRSSBytes": 875020288,
+      "browserPeakRSSBytes": 1221427200,
+      "browserPeakRSSIncreaseBytes": 346406912,
+      "bridgeAndHarnessCPUSeconds": 2.077746,
+      "bridgeAndHarnessPeakRSSBytes": 332824576,
+      "receiverStoredHashesMatched": true,
+      "report": {
+        "version": "0.4.0",
+        "role": "send",
+        "recordedAt": "2026-10-15T21:39:16.582Z",
+        "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.7390.37 Safari/537.36",
+        "storageMode": "opfs",
+        "transport": "http-tcp",
+        "elapsedSeconds": 0,
+        "signaling": "local-http",
+        "ice": "not-applicable",
+        "gathering": "not-applicable",
+        "connection": "connected",
+        "channel": "open",
+        "localDescription": false,
+        "remoteDescription": false,
+        "localCandidates": {
+          "host": 0,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "remoteCandidates": {
+          "host": 0,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "localMdns": 0,
+        "remoteMdns": 0,
+        "lanCandidatesAdded": 0,
+        "statsReads": 0,
+        "statsErrors": 0,
+        "candidatePairs": {},
+        "stunErrors": [],
+        "selectedRoute": {
+          "localType": "browser",
+          "remoteType": "local-helper",
+          "protocol": "https/tcp"
+        },
+        "transfer": {
+          "transport": "http-tcp",
+          "mode": "http-stream",
+          "connections": 2,
+          "reorderedBytes": 0,
+          "deliveredBytes": 0,
+          "uploadedBytes": 134217839,
+          "deliveryIdleMs": 0,
+          "frameBytes": 1048576,
+          "sendBufferBytes": 2097152,
+          "queuedBytes": 852,
+          "parallelRequests": 2,
+          "elapsedMs": 5052,
+          "measurement": "http-post-completion",
+          "linkTest": {
+            "supported": true,
+            "running": false,
+            "status": "Not tested"
+          }
+        },
+        "sending": {
+          "stage": "idle",
+          "stageElapsedMs": 2,
+          "paused": false,
+          "batch": {
+            "phase": "verified",
+            "requestedFiles": 1,
+            "requestedBytes": 134217839,
+            "payloadBytesSent": 134217839,
+            "resumedBytes": 0,
+            "skippedBytes": 0,
+            "verifiedFiles": 1,
+            "skippedFiles": 0,
+            "wallElapsedMs": 3344
+          },
+          "stageTimes": {
+            "idle": 0,
+            "waiting-for-handshake": 16,
+            "preparing-source": 376,
+            "preparing-connections": 0,
+            "waiting-for-ready": 10,
+            "reading-source": 130,
+            "sending": 672,
+            "yielding-to-browser": 1757,
+            "waiting-for-ack": 10,
+            "waiting-for-result": 372
+          },
+          "sourceReads": {
+            "calls": 129,
+            "bytes": 134217839,
+            "lastMs": 20,
+            "averageMs": 20,
+            "maximumMs": 27,
+            "waitedMs": 130,
+            "maximumWaitMs": 3
+          }
+        },
+        "network": {
+          "connection": {
+            "online": true,
+            "estimatedDownlinkMbps": 10,
+            "saveData": false
+          }
+        },
+        "routeStatsScope": "primary-connection"
+      },
+      "samplesObserved": true
+    },
+    {
+      "variant": "webrtc",
+      "dataset": "large-file",
+      "trial": 2,
+      "files": 1,
+      "bytes": 134217839,
+      "milliseconds": 3461.7127089999994,
+      "endToEndMBps": 38.77209066224681,
+      "browserCPUSeconds": 12.36,
+      "browserCPUPercent": 357.0486934939927,
+      "browserBaselineRSSBytes": 928628736,
+      "browserPeakRSSBytes": 1136295936,
+      "browserPeakRSSIncreaseBytes": 207667200,
+      "bridgeAndHarnessCPUSeconds": 0.057271,
+      "bridgeAndHarnessPeakRSSBytes": 309673984,
+      "receiverStoredHashesMatched": true,
+      "report": {
+        "version": "0.3.35",
+        "role": "send",
+        "recordedAt": "2026-10-15T21:39:22.394Z",
+        "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.7390.37 Safari/537.36",
+        "storageMode": "opfs",
+        "elapsedSeconds": 4,
+        "signaling": "stable",
+        "ice": "connected",
+        "gathering": "complete",
+        "connection": "connected",
+        "channel": "open",
+        "localDescription": true,
+        "remoteDescription": true,
+        "localCandidates": {
+          "host": 2,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "remoteCandidates": {
+          "host": 2,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "localMdns": 0,
+        "remoteMdns": 0,
+        "lanCandidatesAdded": 0,
+        "statsReads": 2,
+        "statsErrors": 0,
+        "candidatePairs": {
+          "succeeded": 1,
+          "in-progress": 1
+        },
+        "stunErrors": [],
+        "selectedRoute": {
+          "localType": "host",
+          "remoteType": "host",
+          "protocol": "udp",
+          "roundTripMs": 70,
+          "sentBytesPerSecond": 3902778,
+          "receivedBytesPerSecond": 142904
+        },
+        "transfer": {
+          "connections": 14,
+          "mode": "parallel",
+          "selectiveReceipts": true,
+          "reorderedBytes": 0,
+          "deliveredBytes": 0,
+          "deliveryIdleMs": 0,
+          "activePayloadConnections": 14,
+          "payloadConnectionLimit": 14,
+          "unreceivedBytes": 0,
+          "oldestUnreceivedMs": 0,
+          "receiptDelayMs": 47,
+          "queuedDelayMs": 80,
+          "replayedPackets": 0,
+          "pacingBurstBytes": 524288,
+          "pacingDelayMs": 0,
+          "sendBufferBytes": 4128768,
+          "sendFrameBytes": 65528,
+          "deprioritizedConnections": 0,
+          "scheduling": "balanced",
+          "paths": [
+            {
+              "path": 1,
+              "receivedBytes": 9815400,
+              "deliveryBytesPerSecond": 3877262,
+              "minimumReceiptDelayMs": 1,
+              "samples": 22,
+              "receiptDelayMs": 67,
+              "queuedDelayMs": 65
+            },
+            {
+              "path": 2,
+              "receivedBytes": 9487584,
+              "deliveryBytesPerSecond": 3737152,
+              "minimumReceiptDelayMs": 1,
+              "samples": 23,
+              "receiptDelayMs": 70,
+              "queuedDelayMs": 68
+            },
+            {
+              "path": 3,
+              "receivedBytes": 9487992,
+              "deliveryBytesPerSecond": 3734296,
+              "minimumReceiptDelayMs": 2,
+              "samples": 23,
+              "receiptDelayMs": 75,
+              "queuedDelayMs": 73
+            },
+            {
+              "path": 4,
+              "receivedBytes": 10011328,
+              "deliveryBytesPerSecond": 3882826,
+              "minimumReceiptDelayMs": 2,
+              "samples": 24,
+              "receiptDelayMs": 68,
+              "queuedDelayMs": 66
+            },
+            {
+              "path": 5,
+              "receivedBytes": 9078231,
+              "deliveryBytesPerSecond": 3548812,
+              "minimumReceiptDelayMs": 2,
+              "samples": 23,
+              "receiptDelayMs": 69,
+              "queuedDelayMs": 67
+            },
+            {
+              "path": 6,
+              "receivedBytes": 10125872,
+              "deliveryBytesPerSecond": 3671183,
+              "minimumReceiptDelayMs": 2,
+              "samples": 23,
+              "receiptDelayMs": 74,
+              "queuedDelayMs": 73
+            },
+            {
+              "path": 7,
+              "receivedBytes": 9274720,
+              "deliveryBytesPerSecond": 3458628,
+              "minimumReceiptDelayMs": 2,
+              "samples": 23,
+              "receiptDelayMs": 75,
+              "queuedDelayMs": 73
+            },
+            {
+              "path": 8,
+              "receivedBytes": 9799144,
+              "deliveryBytesPerSecond": 3784346,
+              "minimumReceiptDelayMs": 3,
+              "samples": 23,
+              "receiptDelayMs": 70,
+              "queuedDelayMs": 67
+            },
+            {
+              "path": 9,
+              "receivedBytes": 9471328,
+              "deliveryBytesPerSecond": 3691958,
+              "minimumReceiptDelayMs": 3,
+              "samples": 24,
+              "receiptDelayMs": 81,
+              "queuedDelayMs": 78
+            },
+            {
+              "path": 10,
+              "receivedBytes": 9732792,
+              "deliveryBytesPerSecond": 3895381,
+              "minimumReceiptDelayMs": 3,
+              "samples": 23,
+              "receiptDelayMs": 81,
+              "queuedDelayMs": 79
+            },
+            {
+              "path": 11,
+              "receivedBytes": 9602400,
+              "deliveryBytesPerSecond": 3672138,
+              "minimumReceiptDelayMs": 1,
+              "samples": 23,
+              "receiptDelayMs": 81,
+              "queuedDelayMs": 80
+            },
+            {
+              "path": 12,
+              "receivedBytes": 9471736,
+              "deliveryBytesPerSecond": 3703382,
+              "minimumReceiptDelayMs": 1,
+              "samples": 23,
+              "receiptDelayMs": 71,
+              "queuedDelayMs": 70
+            },
+            {
+              "path": 13,
+              "receivedBytes": 9536664,
+              "deliveryBytesPerSecond": 3702823,
+              "minimumReceiptDelayMs": 1,
+              "samples": 23,
+              "receiptDelayMs": 76,
+              "queuedDelayMs": 75
+            },
+            {
+              "path": 14,
+              "receivedBytes": 9340256,
+              "deliveryBytesPerSecond": 3646438,
+              "minimumReceiptDelayMs": 1,
+              "samples": 23,
+              "receiptDelayMs": 74,
+              "queuedDelayMs": 72
+            }
+          ],
+          "measurement": "sender-receipts",
+          "frameBytes": 65528
+        },
+        "sending": {
+          "stage": "idle",
+          "stageElapsedMs": 3,
+          "paused": false,
+          "batch": {
+            "phase": "verified",
+            "requestedFiles": 1,
+            "requestedBytes": 134217839,
+            "payloadBytesSent": 134217839,
+            "resumedBytes": 0,
+            "skippedBytes": 0,
+            "verifiedFiles": 1,
+            "skippedFiles": 0,
+            "wallElapsedMs": 3423
+          },
+          "stageTimes": {
+            "idle": 0,
+            "waiting-for-handshake": 16,
+            "preparing-source": 351,
+            "preparing-connections": 0,
+            "waiting-for-ready": 9,
+            "reading-source": 1,
+            "sending": 151,
+            "yielding-to-browser": 194,
+            "network-backpressure": 2237,
+            "waiting-for-ack": 85,
+            "waiting-for-result": 377
+          },
+          "sourceReads": {
+            "calls": 129,
+            "bytes": 134217839,
+            "lastMs": 2,
+            "averageMs": 2,
+            "maximumMs": 6,
+            "waitedMs": 1,
+            "maximumWaitMs": 1
+          }
+        },
+        "network": {
+          "connection": {
+            "online": true,
+            "estimatedDownlinkMbps": 9.5,
+            "saveData": false
+          }
+        },
+        "routeStatsScope": "primary-connection"
+      },
+      "samplesObserved": true
+    },
+    {
+      "variant": "webrtc",
+      "dataset": "large-file",
+      "trial": 3,
+      "files": 1,
+      "bytes": 134217839,
+      "milliseconds": 3597.7225419999995,
+      "endToEndMBps": 37.306334058042,
+      "browserCPUSeconds": 12.719999999999999,
+      "browserCPUPercent": 353.5570031181132,
+      "browserBaselineRSSBytes": 931069952,
+      "browserPeakRSSBytes": 1126678528,
+      "browserPeakRSSIncreaseBytes": 195608576,
+      "bridgeAndHarnessCPUSeconds": 0.058051,
+      "bridgeAndHarnessPeakRSSBytes": 310067200,
+      "receiverStoredHashesMatched": true,
+      "report": {
+        "version": "0.3.35",
+        "role": "send",
+        "recordedAt": "2026-10-15T21:39:28.421Z",
+        "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.7390.37 Safari/537.36",
+        "storageMode": "opfs",
+        "elapsedSeconds": 4,
+        "signaling": "stable",
+        "ice": "connected",
+        "gathering": "complete",
+        "connection": "connected",
+        "channel": "open",
+        "localDescription": true,
+        "remoteDescription": true,
+        "localCandidates": {
+          "host": 2,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "remoteCandidates": {
+          "host": 2,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "localMdns": 0,
+        "remoteMdns": 0,
+        "lanCandidatesAdded": 0,
+        "statsReads": 2,
+        "statsErrors": 0,
+        "candidatePairs": {
+          "succeeded": 2
+        },
+        "stunErrors": [],
+        "selectedRoute": {
+          "localType": "host",
+          "remoteType": "host",
+          "protocol": "udp",
+          "roundTripMs": 51,
+          "sentBytesPerSecond": 3637389,
+          "receivedBytesPerSecond": 134881
+        },
+        "transfer": {
+          "connections": 14,
+          "mode": "parallel",
+          "selectiveReceipts": true,
+          "reorderedBytes": 0,
+          "deliveredBytes": 0,
+          "deliveryIdleMs": 0,
+          "activePayloadConnections": 14,
+          "payloadConnectionLimit": 14,
+          "unreceivedBytes": 0,
+          "oldestUnreceivedMs": 0,
+          "receiptDelayMs": 48,
+          "queuedDelayMs": 85,
+          "replayedPackets": 0,
+          "pacingBurstBytes": 524288,
+          "pacingDelayMs": 0,
+          "sendBufferBytes": 4128768,
+          "sendFrameBytes": 65528,
+          "deprioritizedConnections": 0,
+          "scheduling": "balanced",
+          "paths": [
+            {
+              "path": 1,
+              "receivedBytes": 9553256,
+              "deliveryBytesPerSecond": 3654367,
+              "minimumReceiptDelayMs": 1,
+              "samples": 23,
+              "receiptDelayMs": 76,
+              "queuedDelayMs": 75
+            },
+            {
+              "path": 2,
+              "receivedBytes": 9815944,
+              "deliveryBytesPerSecond": 3674358,
+              "minimumReceiptDelayMs": 1,
+              "samples": 24,
+              "receiptDelayMs": 70,
+              "queuedDelayMs": 68
+            },
+            {
+              "path": 3,
+              "receivedBytes": 9487856,
+              "deliveryBytesPerSecond": 3617003,
+              "minimumReceiptDelayMs": 1,
+              "samples": 24,
+              "receiptDelayMs": 71,
+              "queuedDelayMs": 69
+            },
+            {
+              "path": 4,
+              "receivedBytes": 9618231,
+              "deliveryBytesPerSecond": 3350647,
+              "minimumReceiptDelayMs": 1,
+              "samples": 24,
+              "receiptDelayMs": 70,
+              "queuedDelayMs": 68
+            },
+            {
+              "path": 5,
+              "receivedBytes": 9471192,
+              "deliveryBytesPerSecond": 3663883,
+              "minimumReceiptDelayMs": 2,
+              "samples": 24,
+              "receiptDelayMs": 81,
+              "queuedDelayMs": 80
+            },
+            {
+              "path": 6,
+              "receivedBytes": 9537000,
+              "deliveryBytesPerSecond": 3623543,
+              "minimumReceiptDelayMs": 2,
+              "samples": 24,
+              "receiptDelayMs": 81,
+              "queuedDelayMs": 80
+            },
+            {
+              "path": 7,
+              "receivedBytes": 9733472,
+              "deliveryBytesPerSecond": 3574473,
+              "minimumReceiptDelayMs": 2,
+              "samples": 24,
+              "receiptDelayMs": 74,
+              "queuedDelayMs": 73
+            },
+            {
+              "path": 8,
+              "receivedBytes": 10060472,
+              "deliveryBytesPerSecond": 3665531,
+              "minimumReceiptDelayMs": 2,
+              "samples": 24,
+              "receiptDelayMs": 77,
+              "queuedDelayMs": 75
+            },
+            {
+              "path": 9,
+              "receivedBytes": 9470648,
+              "deliveryBytesPerSecond": 3472411,
+              "minimumReceiptDelayMs": 2,
+              "samples": 23,
+              "receiptDelayMs": 76,
+              "queuedDelayMs": 75
+            },
+            {
+              "path": 10,
+              "receivedBytes": 9536456,
+              "deliveryBytesPerSecond": 3405461,
+              "minimumReceiptDelayMs": 2,
+              "samples": 23,
+              "receiptDelayMs": 86,
+              "queuedDelayMs": 85
+            },
+            {
+              "path": 11,
+              "receivedBytes": 9143648,
+              "deliveryBytesPerSecond": 3674931,
+              "minimumReceiptDelayMs": 1,
+              "samples": 24,
+              "receiptDelayMs": 75,
+              "queuedDelayMs": 74
+            },
+            {
+              "path": 12,
+              "receivedBytes": 9602536,
+              "deliveryBytesPerSecond": 3474421,
+              "minimumReceiptDelayMs": 1,
+              "samples": 24,
+              "receiptDelayMs": 76,
+              "queuedDelayMs": 75
+            },
+            {
+              "path": 13,
+              "receivedBytes": 9471264,
+              "deliveryBytesPerSecond": 3712085,
+              "minimumReceiptDelayMs": 1,
+              "samples": 24,
+              "receiptDelayMs": 80,
+              "queuedDelayMs": 79
+            },
+            {
+              "path": 14,
+              "receivedBytes": 9733472,
+              "deliveryBytesPerSecond": 3616784,
+              "minimumReceiptDelayMs": 2,
+              "samples": 24,
+              "receiptDelayMs": 82,
+              "queuedDelayMs": 80
+            }
+          ],
+          "measurement": "sender-receipts",
+          "frameBytes": 65528
+        },
+        "sending": {
+          "stage": "idle",
+          "stageElapsedMs": 2,
+          "paused": false,
+          "batch": {
+            "phase": "verified",
+            "requestedFiles": 1,
+            "requestedBytes": 134217839,
+            "payloadBytesSent": 134217839,
+            "resumedBytes": 0,
+            "skippedBytes": 0,
+            "verifiedFiles": 1,
+            "skippedFiles": 0,
+            "wallElapsedMs": 3551
+          },
+          "stageTimes": {
+            "idle": 0,
+            "waiting-for-handshake": 16,
+            "preparing-source": 355,
+            "preparing-connections": 0,
+            "waiting-for-ready": 17,
+            "reading-source": 1,
+            "sending": 152,
+            "yielding-to-browser": 182,
+            "network-backpressure": 2276,
+            "waiting-for-ack": 158,
+            "waiting-for-result": 392
+          },
+          "sourceReads": {
+            "calls": 129,
+            "bytes": 134217839,
+            "lastMs": 2,
+            "averageMs": 2,
+            "maximumMs": 4,
+            "waitedMs": 1,
+            "maximumWaitMs": 1
+          }
+        },
+        "network": {
+          "connection": {
+            "online": true,
+            "estimatedDownlinkMbps": 10,
+            "saveData": false
+          }
+        },
+        "routeStatsScope": "primary-connection"
+      },
+      "samplesObserved": true
+    },
+    {
+      "variant": "http",
+      "dataset": "large-file",
+      "trial": 3,
+      "files": 1,
+      "bytes": 134217839,
+      "milliseconds": 3418.1305829999983,
+      "endToEndMBps": 39.26644571963682,
+      "browserCPUSeconds": 5.39,
+      "browserCPUPercent": 157.6885338087156,
+      "browserBaselineRSSBytes": 875724800,
+      "browserPeakRSSBytes": 1264484352,
+      "browserPeakRSSIncreaseBytes": 388759552,
+      "bridgeAndHarnessCPUSeconds": 1.869613,
+      "bridgeAndHarnessPeakRSSBytes": 351289344,
+      "receiverStoredHashesMatched": true,
+      "report": {
+        "version": "0.4.0",
+        "role": "send",
+        "recordedAt": "2026-10-15T21:39:34.858Z",
+        "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.7390.37 Safari/537.36",
+        "storageMode": "opfs",
+        "transport": "http-tcp",
+        "elapsedSeconds": 0,
+        "signaling": "local-http",
+        "ice": "not-applicable",
+        "gathering": "not-applicable",
+        "connection": "connected",
+        "channel": "open",
+        "localDescription": false,
+        "remoteDescription": false,
+        "localCandidates": {
+          "host": 0,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "remoteCandidates": {
+          "host": 0,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "localMdns": 0,
+        "remoteMdns": 0,
+        "lanCandidatesAdded": 0,
+        "statsReads": 0,
+        "statsErrors": 0,
+        "candidatePairs": {},
+        "stunErrors": [],
+        "selectedRoute": {
+          "localType": "browser",
+          "remoteType": "local-helper",
+          "protocol": "https/tcp"
+        },
+        "transfer": {
+          "transport": "http-tcp",
+          "mode": "http-stream",
+          "connections": 2,
+          "reorderedBytes": 0,
+          "deliveredBytes": 0,
+          "uploadedBytes": 134217839,
+          "deliveryIdleMs": 0,
+          "frameBytes": 1048576,
+          "sendBufferBytes": 2097152,
+          "queuedBytes": 852,
+          "parallelRequests": 2,
+          "elapsedMs": 4970,
+          "measurement": "http-post-completion",
+          "linkTest": {
+            "supported": true,
+            "running": false,
+            "status": "Not tested"
+          }
+        },
+        "sending": {
+          "stage": "idle",
+          "stageElapsedMs": 2,
+          "paused": false,
+          "batch": {
+            "phase": "verified",
+            "requestedFiles": 1,
+            "requestedBytes": 134217839,
+            "payloadBytesSent": 134217839,
+            "resumedBytes": 0,
+            "skippedBytes": 0,
+            "verifiedFiles": 1,
+            "skippedFiles": 0,
+            "wallElapsedMs": 3372
+          },
+          "stageTimes": {
+            "idle": 0,
+            "waiting-for-handshake": 17,
+            "preparing-source": 364,
+            "preparing-connections": 0,
+            "waiting-for-ready": 11,
+            "reading-source": 129,
+            "sending": 676,
+            "yielding-to-browser": 1753,
+            "waiting-for-ack": 10,
+            "waiting-for-result": 412
+          },
+          "sourceReads": {
+            "calls": 129,
+            "bytes": 134217839,
+            "lastMs": 20,
+            "averageMs": 20,
+            "maximumMs": 23,
+            "waitedMs": 128,
+            "maximumWaitMs": 4
+          }
+        },
+        "network": {
+          "connection": {
+            "online": true,
+            "estimatedDownlinkMbps": 9.8,
+            "saveData": false
+          }
+        },
+        "routeStatsScope": "primary-connection"
+      },
+      "samplesObserved": true
+    },
+    {
+      "variant": "webrtc",
+      "dataset": "photo-batch",
+      "trial": 1,
+      "files": 32,
+      "bytes": 134217728,
+      "milliseconds": 4351.362708000001,
+      "endToEndMBps": 30.844987422730835,
+      "browserCPUSeconds": 12.63,
+      "browserCPUPercent": 290.2539008476514,
+      "browserBaselineRSSBytes": 926531584,
+      "browserPeakRSSBytes": 1213726720,
+      "browserPeakRSSIncreaseBytes": 287195136,
+      "bridgeAndHarnessCPUSeconds": 0.062062,
+      "bridgeAndHarnessPeakRSSBytes": 302972928,
+      "receiverStoredHashesMatched": true,
+      "report": {
+        "version": "0.3.35",
+        "role": "send",
+        "recordedAt": "2026-10-15T21:39:42.047Z",
+        "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.7390.37 Safari/537.36",
+        "storageMode": "opfs",
+        "elapsedSeconds": 6,
+        "signaling": "stable",
+        "ice": "connected",
+        "gathering": "complete",
+        "connection": "connected",
+        "channel": "open",
+        "localDescription": true,
+        "remoteDescription": true,
+        "localCandidates": {
+          "host": 2,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "remoteCandidates": {
+          "host": 2,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "localMdns": 0,
+        "remoteMdns": 0,
+        "lanCandidatesAdded": 0,
+        "statsReads": 3,
+        "statsErrors": 0,
+        "candidatePairs": {
+          "succeeded": 2
+        },
+        "stunErrors": [],
+        "selectedRoute": {
+          "localType": "host",
+          "remoteType": "host",
+          "protocol": "udp",
+          "roundTripMs": 30,
+          "sentBytesPerSecond": 2398441,
+          "receivedBytesPerSecond": 99137
+        },
+        "transfer": {
+          "connections": 14,
+          "mode": "parallel",
+          "selectiveReceipts": true,
+          "reorderedBytes": 0,
+          "deliveredBytes": 0,
+          "deliveryIdleMs": 0,
+          "activePayloadConnections": 14,
+          "payloadConnectionLimit": 14,
+          "unreceivedBytes": 0,
+          "oldestUnreceivedMs": 0,
+          "receiptDelayMs": 46,
+          "queuedDelayMs": 67,
+          "replayedPackets": 0,
+          "pacingBurstBytes": 524288,
+          "pacingDelayMs": 0,
+          "sendBufferBytes": 4128768,
+          "sendFrameBytes": 65528,
+          "deprioritizedConnections": 0,
+          "scheduling": "balanced",
+          "paths": [
+            {
+              "path": 1,
+              "receivedBytes": 9373920,
+              "deliveryBytesPerSecond": 2707796,
+              "minimumReceiptDelayMs": 1,
+              "samples": 32,
+              "receiptDelayMs": 52,
+              "queuedDelayMs": 51
+            },
+            {
+              "path": 2,
+              "receivedBytes": 9634296,
+              "deliveryBytesPerSecond": 2879549,
+              "minimumReceiptDelayMs": 1,
+              "samples": 31,
+              "receiptDelayMs": 52,
+              "queuedDelayMs": 51
+            },
+            {
+              "path": 3,
+              "receivedBytes": 9242848,
+              "deliveryBytesPerSecond": 2687328,
+              "minimumReceiptDelayMs": 1,
+              "samples": 32,
+              "receiptDelayMs": 57,
+              "queuedDelayMs": 56
+            },
+            {
+              "path": 4,
+              "receivedBytes": 9830768,
+              "deliveryBytesPerSecond": 2773353,
+              "minimumReceiptDelayMs": 1,
+              "samples": 32,
+              "receiptDelayMs": 64,
+              "queuedDelayMs": 63
+            },
+            {
+              "path": 5,
+              "receivedBytes": 9357528,
+              "deliveryBytesPerSecond": 2756263,
+              "minimumReceiptDelayMs": 1,
+              "samples": 32,
+              "receiptDelayMs": 59,
+              "queuedDelayMs": 57
+            },
+            {
+              "path": 6,
+              "receivedBytes": 9879640,
+              "deliveryBytesPerSecond": 2835362,
+              "minimumReceiptDelayMs": 1,
+              "samples": 32,
+              "receiptDelayMs": 61,
+              "queuedDelayMs": 60
+            },
+            {
+              "path": 7,
+              "receivedBytes": 9357528,
+              "deliveryBytesPerSecond": 2755830,
+              "minimumReceiptDelayMs": 1,
+              "samples": 32,
+              "receiptDelayMs": 58,
+              "queuedDelayMs": 57
+            },
+            {
+              "path": 8,
+              "receivedBytes": 9945312,
+              "deliveryBytesPerSecond": 2832563,
+              "minimumReceiptDelayMs": 2,
+              "samples": 31,
+              "receiptDelayMs": 66,
+              "queuedDelayMs": 64
+            },
+            {
+              "path": 9,
+              "receivedBytes": 9243392,
+              "deliveryBytesPerSecond": 2561317,
+              "minimumReceiptDelayMs": 2,
+              "samples": 30,
+              "receiptDelayMs": 65,
+              "queuedDelayMs": 63
+            },
+            {
+              "path": 10,
+              "receivedBytes": 10027104,
+              "deliveryBytesPerSecond": 2795883,
+              "minimumReceiptDelayMs": 2,
+              "samples": 30,
+              "receiptDelayMs": 67,
+              "queuedDelayMs": 65
+            },
+            {
+              "path": 11,
+              "receivedBytes": 9423200,
+              "deliveryBytesPerSecond": 2698463,
+              "minimumReceiptDelayMs": 2,
+              "samples": 32,
+              "receiptDelayMs": 62,
+              "queuedDelayMs": 61
+            },
+            {
+              "path": 12,
+              "receivedBytes": 10010712,
+              "deliveryBytesPerSecond": 2876482,
+              "minimumReceiptDelayMs": 2,
+              "samples": 31,
+              "receiptDelayMs": 69,
+              "queuedDelayMs": 67
+            },
+            {
+              "path": 13,
+              "receivedBytes": 9095728,
+              "deliveryBytesPerSecond": 2704153,
+              "minimumReceiptDelayMs": 2,
+              "samples": 33,
+              "receiptDelayMs": 65,
+              "queuedDelayMs": 63
+            },
+            {
+              "path": 14,
+              "receivedBytes": 9814104,
+              "deliveryBytesPerSecond": 2922613,
+              "minimumReceiptDelayMs": 2,
+              "samples": 32,
+              "receiptDelayMs": 67,
+              "queuedDelayMs": 65
+            }
+          ],
+          "measurement": "sender-receipts",
+          "frameBytes": 65528
+        },
+        "sending": {
+          "stage": "idle",
+          "stageElapsedMs": 270,
+          "paused": false,
+          "batch": {
+            "phase": "verified",
+            "requestedFiles": 32,
+            "requestedBytes": 134217728,
+            "payloadBytesSent": 134217728,
+            "resumedBytes": 0,
+            "skippedBytes": 0,
+            "verifiedFiles": 32,
+            "skippedFiles": 0,
+            "wallElapsedMs": 4309
+          },
+          "stageTimes": {
+            "idle": 0,
+            "waiting-for-handshake": 16,
+            "preparing-source": 19,
+            "preparing-connections": 1,
+            "waiting-for-ready": 202,
+            "reading-source": 58,
+            "sending": 89,
+            "yielding-to-browser": 66,
+            "network-backpressure": 484,
+            "waiting-for-ack": 2828,
+            "waiting-for-result": 543
+          },
+          "sourceReads": {
+            "calls": 128,
+            "bytes": 134217728,
+            "lastMs": 1,
+            "averageMs": 1,
+            "maximumMs": 4,
+            "waitedMs": 58,
+            "maximumWaitMs": 3
+          }
+        },
+        "network": {
+          "connection": {
+            "online": true,
+            "estimatedDownlinkMbps": 10,
+            "saveData": false
+          }
+        },
+        "routeStatsScope": "primary-connection"
+      },
+      "samplesObserved": true
+    },
+    {
+      "variant": "http",
+      "dataset": "photo-batch",
+      "trial": 1,
+      "files": 32,
+      "bytes": 134217728,
+      "milliseconds": 3631.921709000002,
+      "endToEndMBps": 36.95501686267211,
+      "browserCPUSeconds": 6.3,
+      "browserCPUPercent": 173.46188890549118,
+      "browserBaselineRSSBytes": 876150784,
+      "browserPeakRSSBytes": 1328332800,
+      "browserPeakRSSIncreaseBytes": 452182016,
+      "bridgeAndHarnessCPUSeconds": 1.860518,
+      "bridgeAndHarnessPeakRSSBytes": 329662464,
+      "receiverStoredHashesMatched": true,
+      "report": {
+        "version": "0.4.0",
+        "role": "send",
+        "recordedAt": "2026-10-15T21:39:48.491Z",
+        "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.7390.37 Safari/537.36",
+        "storageMode": "opfs",
+        "transport": "http-tcp",
+        "elapsedSeconds": 0,
+        "signaling": "local-http",
+        "ice": "not-applicable",
+        "gathering": "not-applicable",
+        "connection": "connected",
+        "channel": "open",
+        "localDescription": false,
+        "remoteDescription": false,
+        "localCandidates": {
+          "host": 0,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "remoteCandidates": {
+          "host": 0,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "localMdns": 0,
+        "remoteMdns": 0,
+        "lanCandidatesAdded": 0,
+        "statsReads": 0,
+        "statsErrors": 0,
+        "candidatePairs": {},
+        "stunErrors": [],
+        "selectedRoute": {
+          "localType": "browser",
+          "remoteType": "local-helper",
+          "protocol": "https/tcp"
+        },
+        "transfer": {
+          "transport": "http-tcp",
+          "mode": "http-stream",
+          "connections": 2,
+          "reorderedBytes": 0,
+          "deliveredBytes": 0,
+          "uploadedBytes": 134217728,
+          "deliveryIdleMs": 0,
+          "frameBytes": 1048576,
+          "sendBufferBytes": 2097152,
+          "queuedBytes": 854,
+          "parallelRequests": 2,
+          "elapsedMs": 5269,
+          "measurement": "http-post-completion",
+          "linkTest": {
+            "supported": true,
+            "running": false,
+            "status": "Not tested"
+          }
+        },
+        "sending": {
+          "stage": "idle",
+          "stageElapsedMs": 3,
+          "paused": false,
+          "batch": {
+            "phase": "verified",
+            "requestedFiles": 32,
+            "requestedBytes": 134217728,
+            "payloadBytesSent": 134217728,
+            "resumedBytes": 0,
+            "skippedBytes": 0,
+            "verifiedFiles": 32,
+            "skippedFiles": 0,
+            "wallElapsedMs": 3588
+          },
+          "stageTimes": {
+            "idle": 0,
+            "waiting-for-handshake": 16,
+            "preparing-source": 21,
+            "preparing-connections": 5,
+            "waiting-for-ready": 245,
+            "reading-source": 153,
+            "sending": 655,
+            "yielding-to-browser": 1727,
+            "waiting-for-ack": 27,
+            "waiting-for-result": 737
+          },
+          "sourceReads": {
+            "calls": 128,
+            "bytes": 134217728,
+            "lastMs": 20,
+            "averageMs": 15,
+            "maximumMs": 23,
+            "waitedMs": 153,
+            "maximumWaitMs": 3
+          }
+        },
+        "network": {
+          "connection": {
+            "online": true,
+            "estimatedDownlinkMbps": 10,
+            "saveData": false
+          }
+        },
+        "routeStatsScope": "primary-connection"
+      },
+      "samplesObserved": true
+    },
+    {
+      "variant": "http",
+      "dataset": "photo-batch",
+      "trial": 2,
+      "files": 32,
+      "bytes": 134217728,
+      "milliseconds": 3664.050959,
+      "endToEndMBps": 36.63096651817063,
+      "browserCPUSeconds": 6.449999999999999,
+      "browserCPUPercent": 176.03466960951727,
+      "browserBaselineRSSBytes": 878149632,
+      "browserPeakRSSBytes": 1303642112,
+      "browserPeakRSSIncreaseBytes": 425492480,
+      "bridgeAndHarnessCPUSeconds": 2.121725,
+      "bridgeAndHarnessPeakRSSBytes": 324403200,
+      "receiverStoredHashesMatched": true,
+      "report": {
+        "version": "0.4.0",
+        "role": "send",
+        "recordedAt": "2026-10-15T21:39:55.155Z",
+        "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.7390.37 Safari/537.36",
+        "storageMode": "opfs",
+        "transport": "http-tcp",
+        "elapsedSeconds": 0,
+        "signaling": "local-http",
+        "ice": "not-applicable",
+        "gathering": "not-applicable",
+        "connection": "connected",
+        "channel": "open",
+        "localDescription": false,
+        "remoteDescription": false,
+        "localCandidates": {
+          "host": 0,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "remoteCandidates": {
+          "host": 0,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "localMdns": 0,
+        "remoteMdns": 0,
+        "lanCandidatesAdded": 0,
+        "statsReads": 0,
+        "statsErrors": 0,
+        "candidatePairs": {},
+        "stunErrors": [],
+        "selectedRoute": {
+          "localType": "browser",
+          "remoteType": "local-helper",
+          "protocol": "https/tcp"
+        },
+        "transfer": {
+          "transport": "http-tcp",
+          "mode": "http-stream",
+          "connections": 2,
+          "reorderedBytes": 0,
+          "deliveredBytes": 0,
+          "uploadedBytes": 134217728,
+          "deliveryIdleMs": 0,
+          "frameBytes": 1048576,
+          "sendBufferBytes": 2097152,
+          "queuedBytes": 854,
+          "parallelRequests": 2,
+          "elapsedMs": 5234,
+          "measurement": "http-post-completion",
+          "linkTest": {
+            "supported": true,
+            "running": false,
+            "status": "Not tested"
+          }
+        },
+        "sending": {
+          "stage": "idle",
+          "stageElapsedMs": 3,
+          "paused": false,
+          "batch": {
+            "phase": "verified",
+            "requestedFiles": 32,
+            "requestedBytes": 134217728,
+            "payloadBytesSent": 134217728,
+            "resumedBytes": 0,
+            "skippedBytes": 0,
+            "verifiedFiles": 32,
+            "skippedFiles": 0,
+            "wallElapsedMs": 3619
+          },
+          "stageTimes": {
+            "idle": 0,
+            "waiting-for-handshake": 16,
+            "preparing-source": 19,
+            "preparing-connections": 6,
+            "waiting-for-ready": 252,
+            "reading-source": 163,
+            "sending": 659,
+            "yielding-to-browser": 1769,
+            "waiting-for-ack": 34,
+            "waiting-for-result": 701
+          },
+          "sourceReads": {
+            "calls": 128,
+            "bytes": 134217728,
+            "lastMs": 21,
+            "averageMs": 15,
+            "maximumMs": 23,
+            "waitedMs": 163,
+            "maximumWaitMs": 3
+          }
+        },
+        "network": {
+          "connection": {
+            "online": true,
+            "estimatedDownlinkMbps": 10,
+            "saveData": false
+          }
+        },
+        "routeStatsScope": "primary-connection"
+      },
+      "samplesObserved": true
+    },
+    {
+      "variant": "webrtc",
+      "dataset": "photo-batch",
+      "trial": 2,
+      "files": 32,
+      "bytes": 134217728,
+      "milliseconds": 3689.789792000003,
+      "endToEndMBps": 36.375440219115845,
+      "browserCPUSeconds": 12.15,
+      "browserCPUPercent": 329.2870511578452,
+      "browserBaselineRSSBytes": 925663232,
+      "browserPeakRSSBytes": 1137917952,
+      "browserPeakRSSIncreaseBytes": 212254720,
+      "bridgeAndHarnessCPUSeconds": 0.052175,
+      "bridgeAndHarnessPeakRSSBytes": 274432000,
+      "receiverStoredHashesMatched": true,
+      "report": {
+        "version": "0.3.35",
+        "role": "send",
+        "recordedAt": "2026-10-15T21:40:01.576Z",
+        "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.7390.37 Safari/537.36",
+        "storageMode": "opfs",
+        "elapsedSeconds": 4,
+        "signaling": "stable",
+        "ice": "connected",
+        "gathering": "complete",
+        "connection": "connected",
+        "channel": "open",
+        "localDescription": true,
+        "remoteDescription": true,
+        "localCandidates": {
+          "host": 2,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "remoteCandidates": {
+          "host": 2,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "localMdns": 0,
+        "remoteMdns": 0,
+        "lanCandidatesAdded": 0,
+        "statsReads": 2,
+        "statsErrors": 0,
+        "candidatePairs": {
+          "succeeded": 2
+        },
+        "stunErrors": [],
+        "selectedRoute": {
+          "localType": "host",
+          "remoteType": "host",
+          "protocol": "udp",
+          "roundTripMs": 0,
+          "sentBytesPerSecond": 2892457,
+          "receivedBytesPerSecond": 116710
+        },
+        "transfer": {
+          "connections": 14,
+          "mode": "parallel",
+          "selectiveReceipts": true,
+          "reorderedBytes": 0,
+          "deliveredBytes": 0,
+          "deliveryIdleMs": 0,
+          "activePayloadConnections": 14,
+          "payloadConnectionLimit": 14,
+          "unreceivedBytes": 0,
+          "oldestUnreceivedMs": 0,
+          "receiptDelayMs": 48,
+          "queuedDelayMs": 69,
+          "replayedPackets": 0,
+          "pacingBurstBytes": 524288,
+          "pacingDelayMs": 0,
+          "sendBufferBytes": 4128768,
+          "sendFrameBytes": 65528,
+          "deprioritizedConnections": 0,
+          "scheduling": "balanced",
+          "paths": [
+            {
+              "path": 1,
+              "receivedBytes": 9242576,
+              "deliveryBytesPerSecond": 2367280,
+              "minimumReceiptDelayMs": 1,
+              "samples": 32,
+              "receiptDelayMs": 57,
+              "queuedDelayMs": 55
+            },
+            {
+              "path": 2,
+              "receivedBytes": 9634160,
+              "deliveryBytesPerSecond": 2545906,
+              "minimumReceiptDelayMs": 1,
+              "samples": 31,
+              "receiptDelayMs": 53,
+              "queuedDelayMs": 52
+            },
+            {
+              "path": 3,
+              "receivedBytes": 9243392,
+              "deliveryBytesPerSecond": 2336575,
+              "minimumReceiptDelayMs": 1,
+              "samples": 32,
+              "receiptDelayMs": 54,
+              "queuedDelayMs": 53
+            },
+            {
+              "path": 4,
+              "receivedBytes": 9830632,
+              "deliveryBytesPerSecond": 2380001,
+              "minimumReceiptDelayMs": 1,
+              "samples": 31,
+              "receiptDelayMs": 59,
+              "queuedDelayMs": 58
+            },
+            {
+              "path": 5,
+              "receivedBytes": 9226592,
+              "deliveryBytesPerSecond": 2311963,
+              "minimumReceiptDelayMs": 2,
+              "samples": 32,
+              "receiptDelayMs": 59,
+              "queuedDelayMs": 57
+            },
+            {
+              "path": 6,
+              "receivedBytes": 9814104,
+              "deliveryBytesPerSecond": 2403299,
+              "minimumReceiptDelayMs": 2,
+              "samples": 32,
+              "receiptDelayMs": 60,
+              "queuedDelayMs": 59
+            },
+            {
+              "path": 7,
+              "receivedBytes": 9357664,
+              "deliveryBytesPerSecond": 2452940,
+              "minimumReceiptDelayMs": 2,
+              "samples": 32,
+              "receiptDelayMs": 59,
+              "queuedDelayMs": 57
+            },
+            {
+              "path": 8,
+              "receivedBytes": 9814240,
+              "deliveryBytesPerSecond": 2543178,
+              "minimumReceiptDelayMs": 2,
+              "samples": 31,
+              "receiptDelayMs": 68,
+              "queuedDelayMs": 66
+            },
+            {
+              "path": 9,
+              "receivedBytes": 9488736,
+              "deliveryBytesPerSecond": 2437289,
+              "minimumReceiptDelayMs": 1,
+              "samples": 30,
+              "receiptDelayMs": 69,
+              "queuedDelayMs": 68
+            },
+            {
+              "path": 10,
+              "receivedBytes": 10076248,
+              "deliveryBytesPerSecond": 2594217,
+              "minimumReceiptDelayMs": 1,
+              "samples": 31,
+              "receiptDelayMs": 68,
+              "queuedDelayMs": 67
+            },
+            {
+              "path": 11,
+              "receivedBytes": 9554136,
+              "deliveryBytesPerSecond": 2446047,
+              "minimumReceiptDelayMs": 1,
+              "samples": 32,
+              "receiptDelayMs": 64,
+              "queuedDelayMs": 63
+            },
+            {
+              "path": 12,
+              "receivedBytes": 10011120,
+              "deliveryBytesPerSecond": 2645857,
+              "minimumReceiptDelayMs": 1,
+              "samples": 30,
+              "receiptDelayMs": 70,
+              "queuedDelayMs": 69
+            },
+            {
+              "path": 13,
+              "receivedBytes": 9046448,
+              "deliveryBytesPerSecond": 2306384,
+              "minimumReceiptDelayMs": 1,
+              "samples": 31,
+              "receiptDelayMs": 66,
+              "queuedDelayMs": 65
+            },
+            {
+              "path": 14,
+              "receivedBytes": 9896032,
+              "deliveryBytesPerSecond": 2556112,
+              "minimumReceiptDelayMs": 1,
+              "samples": 31,
+              "receiptDelayMs": 70,
+              "queuedDelayMs": 68
+            }
+          ],
+          "measurement": "sender-receipts",
+          "frameBytes": 65528
+        },
+        "sending": {
+          "stage": "idle",
+          "stageElapsedMs": 5,
+          "paused": false,
+          "batch": {
+            "phase": "verified",
+            "requestedFiles": 32,
+            "requestedBytes": 134217728,
+            "payloadBytesSent": 134217728,
+            "resumedBytes": 0,
+            "skippedBytes": 0,
+            "verifiedFiles": 32,
+            "skippedFiles": 0,
+            "wallElapsedMs": 3654
+          },
+          "stageTimes": {
+            "idle": 0,
+            "waiting-for-handshake": 16,
+            "preparing-source": 19,
+            "preparing-connections": 1,
+            "waiting-for-ready": 210,
+            "reading-source": 69,
+            "sending": 85,
+            "yielding-to-browser": 65,
+            "network-backpressure": 467,
+            "waiting-for-ack": 2190,
+            "waiting-for-result": 531
+          },
+          "sourceReads": {
+            "calls": 128,
+            "bytes": 134217728,
+            "lastMs": 1,
+            "averageMs": 1,
+            "maximumMs": 6,
+            "waitedMs": 68,
+            "maximumWaitMs": 5
+          }
+        },
+        "network": {
+          "connection": {
+            "online": true,
+            "estimatedDownlinkMbps": 10,
+            "saveData": false
+          }
+        },
+        "routeStatsScope": "primary-connection"
+      },
+      "samplesObserved": true
+    },
+    {
+      "variant": "webrtc",
+      "dataset": "photo-batch",
+      "trial": 3,
+      "files": 32,
+      "bytes": 134217728,
+      "milliseconds": 3689.757083000004,
+      "endToEndMBps": 36.37576268052654,
+      "browserCPUSeconds": 12.23,
+      "browserCPUPercent": 331.4581346383985,
+      "browserBaselineRSSBytes": 936083456,
+      "browserPeakRSSBytes": 1206059008,
+      "browserPeakRSSIncreaseBytes": 269975552,
+      "bridgeAndHarnessCPUSeconds": 0.054788,
+      "bridgeAndHarnessPeakRSSBytes": 174325760,
+      "receiverStoredHashesMatched": true,
+      "report": {
+        "version": "0.3.35",
+        "role": "send",
+        "recordedAt": "2026-10-15T21:40:07.820Z",
+        "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.7390.37 Safari/537.36",
+        "storageMode": "opfs",
+        "elapsedSeconds": 4,
+        "signaling": "stable",
+        "ice": "connected",
+        "gathering": "complete",
+        "connection": "connected",
+        "channel": "open",
+        "localDescription": true,
+        "remoteDescription": true,
+        "localCandidates": {
+          "host": 2,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "remoteCandidates": {
+          "host": 2,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "localMdns": 0,
+        "remoteMdns": 0,
+        "lanCandidatesAdded": 0,
+        "statsReads": 2,
+        "statsErrors": 0,
+        "candidatePairs": {
+          "succeeded": 2
+        },
+        "stunErrors": [],
+        "selectedRoute": {
+          "localType": "host",
+          "remoteType": "host",
+          "protocol": "udp",
+          "roundTripMs": 0,
+          "sentBytesPerSecond": 2788076,
+          "receivedBytesPerSecond": 111398
+        },
+        "transfer": {
+          "connections": 14,
+          "mode": "parallel",
+          "selectiveReceipts": true,
+          "reorderedBytes": 0,
+          "deliveredBytes": 0,
+          "deliveryIdleMs": 0,
+          "activePayloadConnections": 14,
+          "payloadConnectionLimit": 14,
+          "unreceivedBytes": 0,
+          "oldestUnreceivedMs": 0,
+          "receiptDelayMs": 43,
+          "queuedDelayMs": 64,
+          "replayedPackets": 0,
+          "pacingBurstBytes": 524288,
+          "pacingDelayMs": 0,
+          "sendBufferBytes": 4128768,
+          "sendFrameBytes": 65528,
+          "deprioritizedConnections": 0,
+          "scheduling": "balanced",
+          "paths": [
+            {
+              "path": 1,
+              "receivedBytes": 9423000,
+              "deliveryBytesPerSecond": 2707927,
+              "minimumReceiptDelayMs": 1,
+              "samples": 31,
+              "receiptDelayMs": 57,
+              "queuedDelayMs": 56
+            },
+            {
+              "path": 2,
+              "receivedBytes": 9814312,
+              "deliveryBytesPerSecond": 2867162,
+              "minimumReceiptDelayMs": 1,
+              "samples": 31,
+              "receiptDelayMs": 64,
+              "queuedDelayMs": 63
+            },
+            {
+              "path": 3,
+              "receivedBytes": 9029920,
+              "deliveryBytesPerSecond": 2557626,
+              "minimumReceiptDelayMs": 1,
+              "samples": 31,
+              "receiptDelayMs": 62,
+              "queuedDelayMs": 61
+            },
+            {
+              "path": 4,
+              "receivedBytes": 9879712,
+              "deliveryBytesPerSecond": 2865106,
+              "minimumReceiptDelayMs": 1,
+              "samples": 32,
+              "receiptDelayMs": 65,
+              "queuedDelayMs": 64
+            },
+            {
+              "path": 5,
+              "receivedBytes": 9210408,
+              "deliveryBytesPerSecond": 2500319,
+              "minimumReceiptDelayMs": 1,
+              "samples": 31,
+              "receiptDelayMs": 49,
+              "queuedDelayMs": 47
+            },
+            {
+              "path": 6,
+              "receivedBytes": 9797784,
+              "deliveryBytesPerSecond": 2894329,
+              "minimumReceiptDelayMs": 1,
+              "samples": 31,
+              "receiptDelayMs": 48,
+              "queuedDelayMs": 47
+            },
+            {
+              "path": 7,
+              "receivedBytes": 9210136,
+              "deliveryBytesPerSecond": 2579206,
+              "minimumReceiptDelayMs": 1,
+              "samples": 31,
+              "receiptDelayMs": 52,
+              "queuedDelayMs": 50
+            },
+            {
+              "path": 8,
+              "receivedBytes": 9797784,
+              "deliveryBytesPerSecond": 2681752,
+              "minimumReceiptDelayMs": 3,
+              "samples": 31,
+              "receiptDelayMs": 54,
+              "queuedDelayMs": 51
+            },
+            {
+              "path": 9,
+              "receivedBytes": 9472280,
+              "deliveryBytesPerSecond": 2722633,
+              "minimumReceiptDelayMs": 2,
+              "samples": 31,
+              "receiptDelayMs": 54,
+              "queuedDelayMs": 52
+            },
+            {
+              "path": 10,
+              "receivedBytes": 9994528,
+              "deliveryBytesPerSecond": 2775024,
+              "minimumReceiptDelayMs": 2,
+              "samples": 31,
+              "receiptDelayMs": 61,
+              "queuedDelayMs": 59
+            },
+            {
+              "path": 11,
+              "receivedBytes": 9341208,
+              "deliveryBytesPerSecond": 2728705,
+              "minimumReceiptDelayMs": 1,
+              "samples": 31,
+              "receiptDelayMs": 52,
+              "queuedDelayMs": 51
+            },
+            {
+              "path": 12,
+              "receivedBytes": 9928856,
+              "deliveryBytesPerSecond": 2813959,
+              "minimumReceiptDelayMs": 1,
+              "samples": 31,
+              "receiptDelayMs": 59,
+              "queuedDelayMs": 58
+            },
+            {
+              "path": 13,
+              "receivedBytes": 9406408,
+              "deliveryBytesPerSecond": 2674860,
+              "minimumReceiptDelayMs": 1,
+              "samples": 31,
+              "receiptDelayMs": 59,
+              "queuedDelayMs": 58
+            },
+            {
+              "path": 14,
+              "receivedBytes": 9928992,
+              "deliveryBytesPerSecond": 2829853,
+              "minimumReceiptDelayMs": 3,
+              "samples": 31,
+              "receiptDelayMs": 61,
+              "queuedDelayMs": 58
+            }
+          ],
+          "measurement": "sender-receipts",
+          "frameBytes": 65528
+        },
+        "sending": {
+          "stage": "idle",
+          "stageElapsedMs": 6,
+          "paused": false,
+          "batch": {
+            "phase": "verified",
+            "requestedFiles": 32,
+            "requestedBytes": 134217728,
+            "payloadBytesSent": 134217728,
+            "resumedBytes": 0,
+            "skippedBytes": 0,
+            "verifiedFiles": 32,
+            "skippedFiles": 0,
+            "wallElapsedMs": 3664
+          },
+          "stageTimes": {
+            "idle": 0,
+            "waiting-for-handshake": 16,
+            "preparing-source": 20,
+            "preparing-connections": 1,
+            "waiting-for-ready": 206,
+            "reading-source": 64,
+            "sending": 87,
+            "yielding-to-browser": 74,
+            "network-backpressure": 471,
+            "waiting-for-ack": 2195,
+            "waiting-for-result": 529
+          },
+          "sourceReads": {
+            "calls": 128,
+            "bytes": 134217728,
+            "lastMs": 1,
+            "averageMs": 1,
+            "maximumMs": 4,
+            "waitedMs": 64,
+            "maximumWaitMs": 2
+          }
+        },
+        "network": {
+          "connection": {
+            "online": true,
+            "estimatedDownlinkMbps": 9.3,
+            "saveData": false
+          }
+        },
+        "routeStatsScope": "primary-connection"
+      },
+      "samplesObserved": true
+    },
+    {
+      "variant": "http",
+      "dataset": "photo-batch",
+      "trial": 3,
+      "files": 32,
+      "bytes": 134217728,
+      "milliseconds": 3666.612500000003,
+      "endToEndMBps": 36.60537567032237,
+      "browserCPUSeconds": 6.38,
+      "browserCPUPercent": 174.00257049251852,
+      "browserBaselineRSSBytes": 875134976,
+      "browserPeakRSSBytes": 1347436544,
+      "browserPeakRSSIncreaseBytes": 472301568,
+      "bridgeAndHarnessCPUSeconds": 2.070114,
+      "bridgeAndHarnessPeakRSSBytes": 288505856,
+      "receiverStoredHashesMatched": true,
+      "report": {
+        "version": "0.4.0",
+        "role": "send",
+        "recordedAt": "2026-10-15T21:40:14.459Z",
+        "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.7390.37 Safari/537.36",
+        "storageMode": "opfs",
+        "transport": "http-tcp",
+        "elapsedSeconds": 0,
+        "signaling": "local-http",
+        "ice": "not-applicable",
+        "gathering": "not-applicable",
+        "connection": "connected",
+        "channel": "open",
+        "localDescription": false,
+        "remoteDescription": false,
+        "localCandidates": {
+          "host": 0,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "remoteCandidates": {
+          "host": 0,
+          "srflx": 0,
+          "prflx": 0,
+          "relay": 0
+        },
+        "localMdns": 0,
+        "remoteMdns": 0,
+        "lanCandidatesAdded": 0,
+        "statsReads": 0,
+        "statsErrors": 0,
+        "candidatePairs": {},
+        "stunErrors": [],
+        "selectedRoute": {
+          "localType": "browser",
+          "remoteType": "local-helper",
+          "protocol": "https/tcp"
+        },
+        "transfer": {
+          "transport": "http-tcp",
+          "mode": "http-stream",
+          "connections": 2,
+          "reorderedBytes": 0,
+          "deliveredBytes": 0,
+          "uploadedBytes": 134217728,
+          "deliveryIdleMs": 0,
+          "frameBytes": 1048576,
+          "sendBufferBytes": 2097152,
+          "queuedBytes": 854,
+          "parallelRequests": 2,
+          "elapsedMs": 5220,
+          "measurement": "http-post-completion",
+          "linkTest": {
+            "supported": true,
+            "running": false,
+            "status": "Not tested"
+          }
+        },
+        "sending": {
+          "stage": "idle",
+          "stageElapsedMs": 3,
+          "paused": false,
+          "batch": {
+            "phase": "verified",
+            "requestedFiles": 32,
+            "requestedBytes": 134217728,
+            "payloadBytesSent": 134217728,
+            "resumedBytes": 0,
+            "skippedBytes": 0,
+            "verifiedFiles": 32,
+            "skippedFiles": 0,
+            "wallElapsedMs": 3623
+          },
+          "stageTimes": {
+            "idle": 0,
+            "waiting-for-handshake": 16,
+            "preparing-source": 19,
+            "preparing-connections": 5,
+            "waiting-for-ready": 249,
+            "reading-source": 161,
+            "sending": 655,
+            "yielding-to-browser": 1758,
+            "waiting-for-ack": 36,
+            "waiting-for-result": 723
+          },
+          "sourceReads": {
+            "calls": 128,
+            "bytes": 134217728,
+            "lastMs": 21,
+            "averageMs": 15,
+            "maximumMs": 23,
+            "waitedMs": 161,
+            "maximumWaitMs": 3
+          }
+        },
+        "network": {
+          "connection": {
+            "online": true,
+            "estimatedDownlinkMbps": 10,
+            "saveData": false
+          }
+        },
+        "routeStatsScope": "primary-connection"
+      },
+      "samplesObserved": true
+    }
+  ]
+}

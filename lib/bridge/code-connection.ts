@@ -36,7 +36,9 @@ export function newPairingCode() {
 
 function peerOptions(): PeerOptions {
   const url = new URL(
-    import.meta.env.VITE_PIXELGATE_SIGNAL_URL || 'https://0.peerjs.com',
+    import.meta.env.VITE_SPEEDGATE_SIGNAL_URL ||
+      import.meta.env.VITE_PIXELGATE_SIGNAL_URL ||
+      'https://0.peerjs.com',
   );
   if (
     url.protocol !== 'https:' &&

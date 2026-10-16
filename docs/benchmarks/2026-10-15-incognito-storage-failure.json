@@ -1,0 +1,32 @@
+{
+  "recordedAt": "2026-10-15T21:38:04.936Z",
+  "environment": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M4",
+    "logicalCPUs": 10,
+    "node": "v22.22.2"
+  },
+  "tls": true,
+  "tlsTrust": "Self-signed test certificate accepted only by isolated Playwright contexts; TLS encryption remains active.",
+  "scope": "Single Mac, real Chromium, loopback HTTP(S) versus original WebRTC. Includes source hashing, storage and verification. Browser RSS is sum of process RSS and may double-count shared pages; 250 ms samples may miss short peaks. CPU from ps cumulative time, includes browser children, may miss processes that exit between samples. Bridge/harness metrics include Playwright orchestration and ps sampling. No claim about physical Wi-Fi, iOS or Pixel throughput.",
+  "baselineRevision": "cb5a570",
+  "repetitions": 3,
+  "mib": 128,
+  "results": [
+    {
+      "variant": "webrtc",
+      "dataset": "large-file",
+      "trial": 1,
+      "failure": "page.waitForFunction: Timeout 180000ms exceeded.",
+      "sender": [],
+      "receiver": [
+        "Browser storage rejected this checkpoint. Save and clear verified files, or retry in a regular browser tab."
+      ],
+      "nodeCPU": {
+        "user": 3034683,
+        "system": 1729849
+      }
+    }
+  ]
+}

@@ -26,7 +26,7 @@ describe('serverless pairing envelopes', () => {
     const token = encodePair(signal);
     expect(
       decodePair(
-        `https://example.org/PixelGate/#connect=${token}`,
+        `https://example.org/SpeedGate/#connect=${token}`,
         'offer',
         now,
       ),

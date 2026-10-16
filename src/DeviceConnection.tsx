@@ -21,12 +21,14 @@ export function DeviceConnection({
   role,
   moving,
   paused,
+  http = false,
 }: {
   local: DeviceKind;
   peer?: DeviceKind;
   role: 'send' | 'receive';
   moving: boolean;
   paused: boolean;
+  http?: boolean;
 }) {
   const sender = role === 'send' ? local : peer;
   const receiver = role === 'receive' ? local : peer;
@@ -42,7 +44,7 @@ export function DeviceConnection({
         title={
           kind
             ? undefined
-            : 'Device type unavailable. Reopen PixelGate on both devices to update this visual.'
+            : 'Device type unavailable. Reopen SpeedGate on both devices to update this visual.'
         }
       >
         <span className="connection-device-icon">
@@ -66,7 +68,11 @@ export function DeviceConnection({
     >
       <p className="connected-note">
         <LockKeyhole size={14} aria-hidden="true" />
-        Encrypted connection established
+        {http
+          ? location.protocol === 'https:'
+            ? 'HTTPS connection through local helper'
+            : 'HTTP connection · local development'
+          : 'Encrypted connection established'}
       </p>
       <div className={`connection-flow${moving && !paused ? ' moving' : ''}`}>
         {endpoint(sender, 'send')}

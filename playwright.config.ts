@@ -4,10 +4,10 @@ export default defineConfig({
   timeout: 120000,
   workers: 1,
   use: {
-    baseURL: process.env.PIXELGATE_TEST_URL || 'http://127.0.0.1:8787',
+    baseURL: process.env.SPEEDGATE_TEST_URL || 'http://127.0.0.1:8787',
     headless: true,
   },
-  webServer: process.env.PIXELGATE_TEST_URL
+  webServer: process.env.SPEEDGATE_TEST_URL
     ? undefined
     : {
         command: 'npm start',
@@ -20,7 +20,7 @@ export default defineConfig({
       use: {
         browserName: 'chromium',
         launchOptions: {
-          executablePath: process.env.PIXELGATE_TEST_CHROMIUM_EXECUTABLE,
+          executablePath: process.env.SPEEDGATE_TEST_CHROMIUM_EXECUTABLE,
           args: ['--disable-features=WebRtcHideLocalIpsWithMdns'],
         },
       },

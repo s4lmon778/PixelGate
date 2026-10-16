@@ -1,0 +1,25 @@
+{
+  "recordedAt": "2026-10-16T02:36:52.017Z",
+  "unitIntegrationTests": 271,
+  "unitIntegrationFiles": 26,
+  "checks": ["TypeScript", "ESLint", "production build"],
+  "chromiumBroadRun": {
+    "startTime": "2026-10-16T02:26:50.024Z",
+    "duration": 242438.809,
+    "expected": 37,
+    "skipped": 2,
+    "unexpected": 1,
+    "flaky": 0
+  },
+  "chromiumBroadRunNote": "One automatic WebRTC pairing timeout; exact scenario subsequently passed twice on isolated rerun. Two skips intentional. WebRTC throughput modes selected: pipeline-local, closed-lane, lost-packet.",
+  "latestHttpCrossBrowserRerun": {
+    "startTime": "2026-10-16T02:36:52.017Z",
+    "duration": 51008.219,
+    "expected": 9,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "latestHttpCrossBrowserCoverage": "OPFS and IndexedDB originals/metadata/duplicates and diagnostic/control/source-status/download scenario; Chromium, Firefox, WebKit senders into Chromium. Earlier resume/corruption scenarios and 400 MiB/5 GiB results are recorded separately.",
+  "hardwareClaim": false
+}

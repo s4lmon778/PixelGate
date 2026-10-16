@@ -360,6 +360,23 @@ h1 {
   font-weight: 550;
   margin-bottom: 8px;
 }
+
+.transport-choice {
+  min-width: 0;
+}
+.transport-choice select {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 9px;
+  font-size: 0.875rem;
+}
 .code-input-row {
   display: flex;
   gap: 12px;

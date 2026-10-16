@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import type { StripedChannel } from '@/lib/bridge/striped-channel';
+import { HttpChannel } from '@/lib/bridge/http-channel';
 import type { LinkTestSnapshot } from '@/lib/bridge/peer-link-test';
 import {
   browserNetwork,
@@ -18,7 +19,7 @@ export function NetworkDiagnostics({
   measured,
   busyChanged,
 }: {
-  transport?: StripedChannel;
+  transport?: StripedChannel | HttpChannel;
   disabled: boolean;
   fileBusy: boolean;
   internet?: InternetResult;
@@ -140,7 +141,9 @@ export function NetworkDiagnostics({
       </div>
       {transport?.canLimitPayload && (
         <label className="hint">
-          Payload connection limit (this connection){' '}
+          {transport instanceof HttpChannel
+            ? 'Parallel HTTP uploads'
+            : 'Payload connection limit (this connection)'}{' '}
           <select
             aria-label="Payload connection limit"
             value={limit}
@@ -162,9 +165,22 @@ export function NetworkDiagnostics({
               }
             }}
           >
-            <option value="auto">Automatic · up to 14</option>
-            <option value="7">Up to 7</option>
-            <option value="5">Up to 5</option>
+            {transport instanceof HttpChannel ? (
+              <>
+                <option value="auto">Default · 2 HTTP requests</option>
+                {[1, 2, 3, 4].map((count) => (
+                  <option key={count} value={count}>
+                    {count} HTTP request{count > 1 ? 's' : ''}
+                  </option>
+                ))}
+              </>
+            ) : (
+              <>
+                <option value="auto">Automatic · up to 14</option>
+                <option value="7">Up to 7</option>
+                <option value="5">Up to 5</option>
+              </>
+            )}
           </select>
         </label>
       )}
@@ -183,7 +199,8 @@ export function NetworkDiagnostics({
         <p className="hint" data-testid="peer-speed-result">
           Last peer link, without storage:{' '}
           <strong>{rate(snapshot.result.bytesPerSecond)}</strong> ·{' '}
-          {snapshot.result.connections} connections ·{' '}
+          {snapshot.result.connections}{' '}
+          {transport instanceof HttpChannel ? 'HTTP stream' : 'connections'} ·{' '}
           {new Date(snapshot.result.measuredAt).toLocaleString()}
           {snapshot.result.milliseconds < 250 ? ' · short sample' : ''}
         </p>
@@ -197,10 +214,10 @@ export function NetworkDiagnostics({
         </p>
       )}
       <p className="hint">
-        Internet speed includes the ISP and test server. Peer speed includes
-        WebRTC and browser processing. Neither measures the Wi-Fi radio’s
-        maximum speed or proves the cause of a slowdown. No files or reports are
-        uploaded.
+        Internet speed includes the ISP and test server. Peer speed includes the
+        selected transport and browser processing. Neither measures the Wi-Fi
+        radio’s maximum speed or proves the cause of a slowdown. No files or
+        reports are uploaded.
       </p>
       <p className="hint" role="status">
         {busy && peer?.running ? peer.status : status || snapshot?.status}

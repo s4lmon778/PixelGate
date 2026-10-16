@@ -1,4 +1,4 @@
-# PixelGate documentation
+# SpeedGate documentation
 
 | Guide                                   | What it covers                                                                         |
 | --------------------------------------- | -------------------------------------------------------------------------------------- |
@@ -13,3 +13,7 @@
 Current screenshots, a recorded controls demo, and a connection diagram live in `assets/`. Their provenance and reproduction steps are in [the asset guide](assets/README.md). Screenshots and the demo use empty queues and contain no personal transfer data. Historical technical results remain in the validation record.
 
 [Project overview](../README.md) · [Contributing](../CONTRIBUTING.md) · [Security](../SECURITY.md)
+
+- [Local HTTP/TCP mode and temporary helper](HTTP-TRANSPORT.md)
+- [LocalSend reverse-engineering evidence](LOCALSEND-RESEARCH.md)
+- [HTTP versus original WebRTC benchmarks](HTTP-BENCHMARKS.md)

@@ -1,6 +1,8 @@
 # Deployment
 
-PixelGate is a static React/Vite app. It needs HTTPS and worker support; it has no application database or media backend. Six-digit pairing uses PeerJS’s shared signaling service by default. GitHub Pages hosts the public reference deployment.
+> SpeedGate 0.4.0 adds an optional local HTTP/TCP mode. See [HTTP setup, architecture and compatibility](HTTP-TRANSPORT.md), [LocalSend/REA research](LOCALSEND-RESEARCH.md) and [measurements](HTTP-BENCHMARKS.md). Existing WebRTC-specific details below apply to browser-only mode.
+
+SpeedGate is a static React/Vite app. It needs HTTPS and worker support; it has no application database or media backend. Six-digit pairing uses PeerJS’s shared signaling service by default. GitHub Pages hosts the public reference deployment.
 
 ## GitHub Pages
 
@@ -25,7 +27,7 @@ GitHub Pages branch deployments use GitHub’s managed deployment workflow. This
 
 ## Other static hosts
 
-Run `npm run build` and upload the contents of `dist/`. The app uses relative asset paths by default, so `/PixelGate/` and other project subpaths work. You may set `PIXELGATE_BASE=/your-path/` during a build if an explicit base is needed.
+Run `npm run build` and upload the contents of `dist/`. The app uses relative asset paths by default, so `/SpeedGate/` and other project subpaths work. You may set `SPEEDGATE_BASE=/your-path/` during a build if an explicit base is needed.
 
 Do not route media through the host or add a public upload endpoint. Keep the Content Security Policy and bundled workers. When adding response headers, permit same-origin workers and WebAssembly (`wasm-unsafe-eval`), and retain `Referrer-Policy: no-referrer`.
 
@@ -36,7 +38,7 @@ The default build uses [PeerJS’s public signaling service](https://peerjs.com/
 To use your own TLS-enabled PeerServer, keep its default `peerjs` key, disable peer discovery, and build with its HTTPS base URL:
 
 ```sh
-VITE_PIXELGATE_SIGNAL_URL=https://pairing.example.org npm run build
+VITE_SPEEDGATE_SIGNAL_URL=https://pairing.example.org npm run build
 ```
 
 The build adds the configured HTTPS/WSS origin to the Content Security Policy. Use the same environment variable when running `npm run deploy:pages`. If the server is mounted on a path, include that path in the URL. Restrict server request sizes, concurrent connections, and request rates; do not enable ID discovery or log connection payloads. Local HTTP is allowed only for localhost development.

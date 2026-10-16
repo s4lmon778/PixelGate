@@ -16,5 +16,5 @@
     },
     "types": ["node", "vite/client"]
   },
-  "include": ["src", "lib", "tests", "*.ts"]
+  "include": ["src", "lib", "server", "tests", "*.ts"]
 }

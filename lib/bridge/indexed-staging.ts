@@ -19,7 +19,7 @@ function db() {
     request.onblocked = () => {
       blocked = true;
       opening = undefined;
-      reject(new Error('Close older PixelGate tabs to open local storage.'));
+      reject(new Error('Close older SpeedGate tabs to open local storage.'));
     };
     request.onerror = () => {
       opening = undefined;

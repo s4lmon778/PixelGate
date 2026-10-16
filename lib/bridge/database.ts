@@ -35,7 +35,7 @@ function db() {
     r.onblocked = () =>
       reject(
         new Error(
-          'Close older PixelGate tabs and reload to upgrade local storage.',
+          'Close older SpeedGate tabs and reload to upgrade local storage.',
         ),
       );
     r.onsuccess = () => {

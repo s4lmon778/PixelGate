@@ -6,6 +6,7 @@ export type CandidateCounts = {
   relay: number;
 };
 export interface RouteDiagnostics {
+  transport?: 'http-tcp';
   elapsedSeconds: number;
   signaling: string;
   ice: string;

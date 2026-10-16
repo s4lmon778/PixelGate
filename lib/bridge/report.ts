@@ -20,7 +20,7 @@ export function report(records: RecordFile[], format: 'json' | 'csv' | 'txt') {
   if (format === 'json')
     return JSON.stringify(
       {
-        product: 'PixelGate',
+        product: 'SpeedGate',
         version: 1,
         exportedAt: new Date().toISOString(),
         files: rows,
@@ -54,7 +54,7 @@ export function report(records: RecordFile[], format: 'json' | 'csv' | 'txt') {
     ].join('\r\n');
   }
   return (
-    `PixelGate Transfer Report\n${new Date().toISOString()}\n\n${records.filter(isVerified).length} / ${records.length} copies verified\nVerification scope is listed per file. Downloaded copies and app saves require a separate readback check.\n\n` +
+    `SpeedGate Transfer Report\n${new Date().toISOString()}\n\n${records.filter(isVerified).length} / ${records.length} copies verified\nVerification scope is listed per file. Downloaded copies and app saves require a separate readback check.\n\n` +
     rows
       .map(
         (r) =>
@@ -74,7 +74,7 @@ export function downloadReport(
   );
   const a = document.createElement('a');
   a.href = url;
-  a.download = `PixelGate-${new Date().toISOString().slice(0, 10)}.${format}`;
+  a.download = `SpeedGate-${new Date().toISOString().slice(0, 10)}.${format}`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }

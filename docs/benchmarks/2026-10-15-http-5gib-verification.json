@@ -1,0 +1,20 @@
+{
+  "recordedAt": "2026-10-16T02:32:44.355Z",
+  "scope": "Single Mac, Chromium sender and regular-profile Chromium receiver, loopback HTTP. No iPhone/Pixel claim.",
+  "command": "SPEEDGATE_HTTP_LARGE_MIB=5120 npx playwright test tests/browser/http-transfer.spec.ts --project=chromium --grep \"large original\"",
+  "sourceBytes": 5368709143,
+  "checks": [
+    "source SHA-256 equals independently reread receiver receipt",
+    "source modification timestamp retained in manifest",
+    "download size equals original",
+    "every downloaded byte compared with original using bounded Node buffers"
+  ],
+  "result": {
+    "startTime": "2026-10-16T02:32:44.355Z",
+    "duration": 114413.627,
+    "expected": 1,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

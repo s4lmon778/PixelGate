@@ -11,7 +11,7 @@ import { spawnSync } from 'node:child_process';
 // Real transfer in fresh profiles and an isolated local broker. Nothing is staged
 // in a user's browser, and the displayed demo code is never publicly registered.
 const root = fileURLToPath(new URL('..', import.meta.url));
-const scratch = await mkdtemp(join(tmpdir(), 'pixelgate-quick-start-'));
+const scratch = await mkdtemp(join(tmpdir(), 'speedgate-quick-start-'));
 const sockets = new Set();
 const signals = [];
 let broker, browser;
@@ -112,7 +112,7 @@ try {
     1,
     'Receiver',
     'Create a receiver code',
-    'Open PixelGate on both devices. Choose Receive files on the destination.',
+    'Open SpeedGate on both devices. Choose Receive files on the destination.',
     receiver.locator('.pairing-start'),
     button(receiver, 'Create a connection'),
   );
@@ -165,10 +165,10 @@ try {
   await expect(receiver.getByText('Connected', { exact: true })).toBeVisible();
 
   const sample = {
-    name: 'PixelGate-demo.txt',
+    name: 'SpeedGate-demo.txt',
     mimeType: 'text/plain',
     buffer: Buffer.from(
-      'PixelGate quick-start demo — unchanged bytes.\n'.repeat(3000),
+      'SpeedGate quick-start demo — unchanged bytes.\n'.repeat(3000),
     ),
   };
   const sourceHash = createHash('sha256').update(sample.buffer).digest('hex');
@@ -336,7 +336,7 @@ try {
       });
       ctx.globalAlpha = 1;
       ctx.font = 'bold 15px Arial';
-      ctx.fillText('PIXELGATE · QUICK START', 58, 37);
+      ctx.fillText('SPEEDGATE · QUICK START', 58, 37);
       ctx.fillStyle = s.role === 'Receiver' ? '#e8f5ed' : '#e7f1ff';
       ctx.beginPath();
       ctx.roundRect(790, 17, 146, 34, 17);

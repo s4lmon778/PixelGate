@@ -1,4 +1,4 @@
-# PixelGate performance and cache work · October 11, 2026
+# SpeedGate performance and cache work · October 11, 2026
 
 ## Requested outcome
 
@@ -1133,7 +1133,7 @@ showDirectoryPicker. The user explicitly chose browser-only native saving for
 Safari. An enabled folder action expands browser-specific saving guidance rather
 than leaving a disabled control. Mac Safari uses Settings → General → File
 download location → Ask for each download, then its native download/save dialog.
-This is a browser setting, not a writable-folder permission granted to PixelGate.
+This is a browser setting, not a writable-folder permission granted to SpeedGate.
 Apple documents this setting at
 https://support.apple.com/en-ie/guide/safari/ibrw1072/mac .
 Other unsupported browsers retain native sharing when available and their own

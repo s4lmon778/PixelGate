@@ -1,4 +1,4 @@
-# Contributing to PixelGate
+# Contributing to SpeedGate
 
 Thank you for helping improve reliable, verifiable file transfers.
 
