@@ -3,10 +3,10 @@
 ## Magic UI — Animated Beam
 
 The connection beam in `src/DeviceConnection.tsx` adapts the layered SVG path and
-transparent gradient pattern from Magic UI’s Animated Beam. SpeedGate uses a
+transparent gradient pattern from Magic UI’s Animated Beam. PixelGate uses a
 fixed SVG and CSS animation rather than the original Motion/ResizeObserver
 implementation. Green styling, transfer state and reduced-motion behavior are
-provided by SpeedGate.
+provided by PixelGate.
 
 Source: https://github.com/magicuidesign/magicui/blob/85f97fd27b053339af74ba9dd4ca428ee25989fb/apps/www/registry/magicui/animated-beam.tsx
 
@@ -31,12 +31,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-LocalSend architectural research
--------------------------------
-The optional SpeedGate HTTP/TCP transport was independently implemented after
-studying the LocalSend protocol and source. No LocalSend code, binary or assets
-are bundled. LocalSend source is Apache-2.0 licensed.
-https://github.com/localsend/localsend
-https://github.com/localsend/protocol
-See docs/LOCALSEND-RESEARCH.md for pinned revisions, evidence and limitations.
