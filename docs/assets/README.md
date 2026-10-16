@@ -3,12 +3,12 @@
 | Asset                                 | Purpose                                                                   | Source                                                         |
 | ------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | `logo.svg`                            | Project mark                                                              | Local SVG artwork                                              |
-| `controls-demo.gif`                   | Screen-awake preference animation and Light/Dark selection                | Recorded from PixelGate 0.3.13 in a fresh Chromium profile     |
+| `controls-demo.gif`                   | Screen-awake preference animation and Light/Dark selection                | Recorded from SpeedGate 0.3.36 in a fresh Chromium profile     |
 | `quick-start.gif` / `quick-start.mp4` | Six-step pairing, transfer, saving, verification, and cleanup walkthrough | Actual synthetic-file transfer between fresh Chromium profiles |
 | `transfer-flow.svg`                   | Direct WebRTC payload route and separate PeerJS signaling                 | Local SVG diagram, based on the architecture reference         |
 | `desktop.png`                         | Desktop Send interface                                                    | Production preview with an empty queue                         |
-| `mobile.png`                          | Mobile receiving/saving controls                                          | Production preview at 390 pixels in WebKit                     |
-| `awake-switch.png`                    | Screen-awake control close-up                                             | Production preview at 390 pixels in WebKit                     |
+| `mobile.png`                          | Mobile receiving/saving controls                                          | Production preview at 390 pixels in Chromium 101               |
+| `awake-switch.png`                    | Screen-awake control close-up                                             | Production preview at 390 pixels in Chromium 101               |
 
 The controls GIF demonstrates interface controls. It opens no pairing room and records no media transfer, device wake-lock measurement, or throughput benchmark. Its status remains “Ready” because no connection is active. All assets are stored in this repository.
 
@@ -31,7 +31,7 @@ The script opens a fresh profile against the localhost production preview, recor
 
 ## Quick-start walkthrough
 
-The 27-second walkthrough shows six steps: create a receiver code, connect the sender, approve, choose and send files, select and save inline, optionally verify the saved copy in History, then clear the file cache. It uses genuine PixelGate 0.3.21 interface captures, stationary framing at a consistent scale, click highlights, and explicit Sender/Receiver labels. There are no zooms or pans within shots. The GIF is 960 × 640 at 10 fps; the MP4 is 20 fps at the same size.
+The 27-second walkthrough shows six steps: create a receiver code, connect the sender, approve, choose and send files, select and save inline, optionally verify the saved copy in History, then clear the file cache. It uses genuine SpeedGate 0.3.36 interface captures, stationary framing at a consistent scale, click highlights, and explicit Sender/Receiver labels. There are no zooms or pans within shots. The GIF is 960 × 640 at 10 fps; the MP4 is 20 fps at the same size.
 
 The recording performs an actual direct WebRTC transfer of a generated 144,000-byte text file between two fresh Chromium profiles. It independently compares the downloaded file's Node SHA-256 with the source, reselects that downloaded file for the app's exported-copy verification, and clears eligible staging. It also checks that captured signaling contains neither the fixture filename nor its hash.
 
@@ -48,3 +48,5 @@ node scripts/record-quick-start.mjs
 The script asserts the workflow before rendering either format, then closes the browser, terminates the isolated broker, and removes temporary frames and downloaded fixtures. FFmpeg must be on `PATH`.
 
 [Project overview](../../README.md) · [Architecture](../ARCHITECTURE.md)
+
+The refreshed mobile captures use a fixed Pixel user agent and the compatibility-storage fixture in actual Chromium 101. They illustrate the current UI, not a physical Pixel screenshot.

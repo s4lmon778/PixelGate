@@ -62,6 +62,23 @@ type Payload = string | ArrayBuffer | Uint8Array<ArrayBuffer>;
 /** Independent SCTP connections; restore the existing engine's ordered stream. */
 export class StripedChannel extends EventTarget implements TransferChannel {
   readonly linkTest: PeerLinkTest;
+  // Start phones with the five-connection budget from the recorded 0.3.28 run.
+  // Keep the full protocol bound so explicit seven/fourteen-path tests still work.
+  private readonly localPhone = deviceKind() === 'phone';
+  private peerPhone = false;
+  private offering = Promise.resolve();
+  get defaultPayloadConnections() {
+    return this.localPhone || this.peerPhone ? 5 : MAX_LANES + 1;
+  }
+  get maximumPayloadConnections() {
+    return (this.negotiated ? this.laneCount : MAX_LANES) + 1;
+  }
+  private get targetLanes() {
+    return Math.min(
+      this.laneCount,
+      (this.payloadLimit ?? this.defaultPayloadConnections) - 1,
+    );
+  }
   private payloadLimit?: number;
   private fileActive = false;
   get hasActiveFile() {
@@ -73,7 +90,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
   setPayloadLimit(limit?: number) {
     if (!this.canLimitPayload)
       throw new Error('Change the connection limit on the sending device.');
-    if (limit !== undefined && ![5, 7].includes(limit))
+    if (limit !== undefined && ![5, 7, 14].includes(limit))
       throw new Error('Invalid payload connection limit.');
     if (
       this.fileActive ||
@@ -84,6 +101,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
         'Finish the transfer or speed test before changing the connection limit.',
       );
     this.payloadLimit = limit;
+    if (this.negotiated) void this.offerLanes();
     this.dispatchEvent(new Event('linktestchange'));
   }
   onmessage: RTCDataChannel['onmessage'] = null;
@@ -260,7 +278,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     // can underfill each one. Keep the wider pool for nearby routes.
     const delay = this.scheduler.minimumReceiptDelay(paths);
     const limit = Math.min(
-      this.payloadLimit ?? MAX_LANES + 1,
+      this.payloadLimit ?? this.defaultPayloadConnections,
       delay !== undefined && delay > 80 ? 7 : MAX_LANES + 1,
     );
     return paths.slice(0, limit);
@@ -307,7 +325,8 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       activePayloadConnections: this.payloadCandidates().filter(
         (channel) => channel.readyState === 'open',
       ).length,
-      payloadConnectionLimit: this.payloadLimit ?? MAX_LANES + 1,
+      payloadConnectionLimit:
+        this.payloadLimit ?? this.defaultPayloadConnections,
       unreceivedBytes: this.pendingBytes,
       oldestUnreceivedMs: Math.round(
         Math.max(
@@ -386,7 +405,8 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     }
   }
   async prepare() {
-    if (!this.negotiated || this.openLanes().length === this.laneCount) return;
+    if (this.negotiated && this.role === 'send') void this.offerLanes();
+    if (!this.negotiated || this.openLanes().length >= this.targetLanes) return;
     await new Promise<void>((resolve) => {
       const finish = () => {
         clearTimeout(timer);
@@ -396,7 +416,7 @@ export class StripedChannel extends EventTarget implements TransferChannel {
       };
       const changed = () => {
         if (
-          this.openLanes().length === this.laneCount ||
+          this.openLanes().length >= this.targetLanes ||
           this.stopped ||
           [...this.lanes.values()].some((lane) => lane.failed)
         )
@@ -769,6 +789,8 @@ export class StripedChannel extends EventTarget implements TransferChannel {
         if (data.length > 32000) throw new Error('Transfer control too large.');
         const value = JSON.parse(data);
         if (value.type === 'hello') {
+          if (value.version === VERSION)
+            this.peerPhone = peerDevice(value.deviceKind) === 'phone';
           this.linkTest.supported =
             value.version === VERSION && value.peerLinkTest === 1;
           this.dispatchEvent(new Event('linktestchange'));
@@ -1001,13 +1023,15 @@ export class StripedChannel extends EventTarget implements TransferChannel {
     );
     channel.addEventListener('close', () => this.failLane(lane));
   }
-  private async offerLanes() {
-    // Serialize native offer creation so a larger pool does not flood the
-    // primary connection with simultaneous setup work. ICE can still overlap.
-    for (let index = 0; index < this.laneCount; index++) {
-      if (this.stopped || this.readyState !== 'open') return;
-      await this.offer(index);
-    }
+  private offerLanes() {
+    // Serialize setup, including optional expansion requested between files.
+    this.offering = this.offering.then(async () => {
+      for (let index = 0; index < this.targetLanes; index++) {
+        if (this.stopped || this.readyState !== 'open') return;
+        if (!this.lanes.has(index)) await this.offer(index);
+      }
+    });
+    return this.offering;
   }
   private async offer(index: number) {
     let lane: Lane | undefined;

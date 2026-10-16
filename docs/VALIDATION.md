@@ -1,5 +1,34 @@
 # Validation record
 
+## SpeedGate 0.3.36 · October 16, 2026
+
+Current saving, screen-awake, history, diagnostics, original-byte handling,
+metadata, duplicates, SHA-256 readback and resumable checkpoint features remain.
+The phone default returns to five actual connections; seven/fourteen remain
+explicit idle-time controls and computers keep the wider pool. Existing data
+keys and wire identifiers stay unchanged. No HTTP/helper mode is present.
+
+- TypeScript, ESLint, production build and **265 unit/integration cases** pass.
+  New cases cover phone/computer budgets, wider-pool expansion, rotating ties
+  and bounded preparation even when native offer creation never settles.
+- **70 comparison copies** verify their stored bytes. A final bounded-setup
+  sanity copy also verifies with five connections. The physical 0.3.28 reference,
+  matched medians, negative experiments and hardware limits are documented in
+  [transfer performance](TRANSFER-PERFORMANCE.md) and its numeric record.
+- The full modern Chromium suite covers 35 cases, with two capability-specific
+  skips. Eight targeted Firefox/WebKit checks and five actual Chromium 101
+  checks pass, including phone five/seven/fourteen controls, actual transfers,
+  independent downloads, 400 MiB IndexedDB storage, 125-file saving and source
+  pause/readback. The final full Chromium run passes 32 cases with two intentional skips and one automatic-pairing timeout before the transfer connection opens. That exact automatic case passes twice on isolated rerun. All 33 runnable cases have passing final-source runs; the intermittent pairing failure is retained as a reliability limit.
+- The generated [code graph](CODEGRAPH.md) stays local and adds no app dependency.
+  Current UI assets are regenerated for the SpeedGate brand. Historical compiled
+  releases and measurement records retain their original bytes and provenance.
+
+These checks do not establish new physical iPhone/Pixel throughput. Browser
+engine tests with phone user agents are not phone hardware certification.
+
+Historical entries below retain their original names, paths and measurement provenance.
+
 ## Cache presentation, device visual, and pause diagnostics · 0.3.24
 
 - Cleared copies leave the receiving list immediately and after reload; History

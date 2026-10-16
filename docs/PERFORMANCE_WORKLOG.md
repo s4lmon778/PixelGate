@@ -1,4 +1,4 @@
-# PixelGate performance and cache work · October 11, 2026
+# SpeedGate performance and cache work · October 11, 2026
 
 ## Requested outcome
 
@@ -375,7 +375,7 @@ commit **e38b6d673d9126fcaceb2b4e82b7c800b69da867** reports built with no error.
 Live HTML and all four assets match the tested build byte for byte. An isolated
 360-pixel live browser renders File cache: 0 B, no receiving rows, no overflow
 and no page errors. The exact prior 0.3.23 build is preserved at
-`https://s4lmon778.github.io/PixelGate/releases/0.3.23/`. Final reviewed-build
+`https://s4lmon778.github.io/SpeedGate/releases/0.3.23/`. Final reviewed-build
 checks pass another four cases, including the sending wait-stage report.
 
 The first loss comparison above used the earlier local candidate. It must not
@@ -1387,3 +1387,38 @@ byte. A fresh actual Chromium 101 context verifies the published 0.3.35 footer,
 both roles and the unsupported-folder text disclosure at 360 px without
 overflow or runtime errors. The owned 8798/8799 test servers are closed;
 existing 8787 and active user tabs remain untouched.
+
+## October 16 · SpeedGate 0.3.36 browser-only transfer profile
+
+Recovered the strongest earlier physical record: both phones on 0.3.28, roughly
+5 MB/s on screen and a 5.2 MB/s peak; 421,259,466 bytes in 92,092 ms from Send to
+Verified is 4.57 decimal MB/s. Existing history above retains its original names
+and temporary paths so the working-session evidence stays traceable.
+
+The current UI and all saving, history, diagnostics, wake, duplicate, integrity,
+metadata and resume features remain. Phone pairs start with five actual native
+connections, while explicit seven/fourteen controls can expand that same session.
+Computers keep the wider pool. Sender preparation remains bounded at 500 ms,
+even if native offer creation never settles. Per-frame scheduling now avoids
+temporary arrays while preserving the original ordering and scoring policy.
+
+Three alternating five-connection pairs per condition compare preserved 0.3.28
+with the current profile. Median throughput improves 6.14% on the clean shared
+6 MiB/s model, 1.70% in the Chromium 101 / delayed-strict-IDB model, and 3.11%
+with seeded one-percent loss. All 24 final copies verify, including the separate
+400 MiB controls. The fourteen-connection 0.3.35 reference remains faster in some
+desktop-engine models; the wider option is retained. These results do not prove
+new physical iPhone/Pixel throughput or a universally fastest setting.
+
+An eight-ms / sixteen-receipt experiment is rejected: it slows the long-route
+and sustained-file controls despite helping some loss trials. Original receipt
+and replay timing, window bounds and durable ACK semantics remain unchanged.
+The numeric record retains 70 completed native comparison copies plus a final
+bounded-preparation sanity copy. Scheduler-kernel time halves in a separate
+Node/V8 check, with 20,000 exact equivalent decisions; that is not a phone CPU
+or whole-file speed claim. [Detailed evidence](TRANSFER-PERFORMANCE.md).
+
+CodeGraph 1.6.2 builds the local structural index, without an app dependency or
+agent-global configuration change. Current documentation and interface branding
+are SpeedGate; legacy storage/protocol names and historical release bytes remain
+for compatibility and provenance. Publication and final checks are recorded next.

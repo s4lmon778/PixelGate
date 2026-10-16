@@ -77,7 +77,7 @@ type BrowserFolderWindow = Window & {
 };
 const errorText = (e: unknown) =>
   e instanceof Error ? e.message : 'Something went wrong. Try again.';
-export default function PixelGate() {
+export default function SpeedGate() {
   const [view, setView] = useState<'transfer' | 'history' | 'guide'>(
     'transfer',
   );
@@ -410,7 +410,7 @@ export default function PixelGate() {
   async function preflight() {
     if (!isSecureContext || !window.RTCPeerConnection)
       throw new Error(
-        'Open PixelGate over HTTPS in a browser with WebRTC support.',
+        'Open SpeedGate over HTTPS in a browser with WebRTC support.',
       );
     setStorageMode(await prepareStaging());
     void navigator.storage?.persist?.().catch(() => {});
@@ -693,7 +693,7 @@ export default function PixelGate() {
     const pending = candidates.some((r) => r.scope === 'browser');
     if (
       !confirm(
-        `Clear ${candidates.length} cached copies (${formatBytes(candidates.reduce((n, r) => n + r.size, 0))}) from PixelGate? ` +
+        `Clear ${candidates.length} cached copies (${formatBytes(candidates.reduce((n, r) => n + r.size, 0))}) from SpeedGate? ` +
           (pending
             ? 'Confirm their downloads or app saves have finished and you can open the saved files. Their saved bytes have not been independently verified. '
             : '') +
@@ -862,7 +862,7 @@ export default function PixelGate() {
         <button
           className="brand"
           onClick={() => setView('transfer')}
-          aria-label="PixelGate home"
+          aria-label="SpeedGate home"
         >
           <span className="brand-symbol">
             <i />
@@ -870,7 +870,7 @@ export default function PixelGate() {
             <i />
             <i />
           </span>
-          PixelGate
+          SpeedGate
         </button>
         <div className="workspace-label">YOUR WORKSPACE</div>
         <nav aria-label="Main navigation">
@@ -981,7 +981,7 @@ export default function PixelGate() {
                 <h2>From one browser to another</h2>
                 <ol>
                   <li>
-                    Open PixelGate on both devices. No account or installation
+                    Open SpeedGate on both devices. No account or installation
                     is required.
                   </li>
                   <li>
@@ -1013,7 +1013,7 @@ export default function PixelGate() {
               <section className="panel">
                 <h2>What “verified” means</h2>
                 <p>
-                  PixelGate hashes the source file, writes its untouched bytes,
+                  SpeedGate hashes the source file, writes its untouched bytes,
                   then rereads the stored copy and compares SHA-256 hashes.
                 </p>
                 <p>
@@ -1022,11 +1022,11 @@ export default function PixelGate() {
                 </p>
                 <p>
                   <strong>Destination / exported copy verified:</strong>{' '}
-                  PixelGate reread the actual saved file and confirmed its hash.
+                  SpeedGate reread the actual saved file and confirmed its hash.
                 </p>
                 <p>
                   Downloads and files handed to another app stay pending until
-                  checked. PixelGate does not verify backups made by other apps
+                  checked. SpeedGate does not verify backups made by other apps
                   or services.
                 </p>
               </section>
@@ -1036,7 +1036,7 @@ export default function PixelGate() {
                   Guest, campus, hotel, and workplace Wi-Fi may allow internet
                   access while blocking local discovery or connections between
                   devices. Use the same exact network on both devices; matching
-                  network names alone do not guarantee a direct route. PixelGate
+                  network names alone do not guarantee a direct route. SpeedGate
                   cannot change network access rules.
                 </p>
                 <p>
@@ -1048,7 +1048,7 @@ export default function PixelGate() {
                 <p>
                   For example, Apple Photos originals, paired Live Photos, and
                   iCloud-original retrieval are not guaranteed by a browser
-                  picker. PixelGate preserves the bytes it receives from the
+                  picker. SpeedGate preserves the bytes it receives from the
                   picker without further conversion.
                 </p>
                 <p>
@@ -1073,7 +1073,7 @@ export default function PixelGate() {
                   transfer.
                 </p>
                 <p>
-                  File cache counts the copies currently stored by PixelGate and
+                  File cache counts the copies currently stored by SpeedGate and
                   updates after cleanup. Cleared files leave the receiving list;
                   their receipts remain in History. The browser allowance
                   estimate can lag after deletion and varies by profile and
@@ -2060,12 +2060,12 @@ export default function PixelGate() {
                                     <>
                                       {' '}
                                       For Photos, use Save to Photos folder and
-                                      choose or create DCIM/PixelGate in
+                                      choose or create DCIM/SpeedGate in
                                       internal storage. The whole received
                                       collection saves there with original
                                       filenames, without moving downloads.
                                       Future files save there automatically.
-                                      Enable PixelGate in Photos device-folder
+                                      Enable SpeedGate in Photos device-folder
                                       backup once.
                                     </>
                                   )}
@@ -2357,12 +2357,12 @@ export default function PixelGate() {
           )}
           <footer className="page-footer">
             <span>
-              PixelGate {version} <span className="footer-divider">/</span>{' '}
+              SpeedGate {version} <span className="footer-divider">/</span>{' '}
               Original bytes. Verified copies.
             </span>
             <span>
               <a
-                href="https://github.com/s4lmon778/PixelGate"
+                href="https://github.com/s4lmon778/SpeedGate"
                 target="_blank"
                 rel="noreferrer"
               >

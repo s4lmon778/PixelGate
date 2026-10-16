@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="410" viewBox="0 0 1200 410" role="img" aria-labelledby="title desc">
-  <title id="title">PixelGate connection and transfer architecture</title>
+  <title id="title">SpeedGate connection and transfer architecture</title>
   <desc id="desc">Sender and receiver exchange connection metadata through PeerJS. After receiver approval, encrypted file bytes travel directly between devices, with hashing and storage local to each browser.</desc>
   <defs>
     <marker id="blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#0878ec"/></marker>

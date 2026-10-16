@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 
 // Record a fresh, empty browser profile: no rooms, personal files, or saved history.
 const root = fileURLToPath(new URL('..', import.meta.url));
-const frames = await mkdtemp(join(tmpdir(), 'pixelgate-readme-'));
+const frames = await mkdtemp(join(tmpdir(), 'speedgate-readme-'));
 let browser;
 try {
   browser = await chromium.launch();
@@ -15,7 +15,7 @@ try {
     viewport: { width: 1280, height: 900 },
     colorScheme: 'light',
   });
-  await page.goto('http://127.0.0.1:8787/');
+  await page.goto(process.env.SPEEDGATE_DEMO_URL || 'http://127.0.0.1:8787/');
   const awake = page.getByRole('switch', { name: 'Keep screen awake' });
   await expect(awake).toBeVisible();
   const card = await page.locator('.awake-card').boundingBox();

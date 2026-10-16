@@ -1,6 +1,6 @@
 # Engineering decisions
 
-Design rationale, implementation entry points, and regression evidence for PixelGate. For a runtime reference, see [Architecture](ARCHITECTURE.md).
+Design rationale, implementation entry points, and regression evidence for SpeedGate. For a runtime reference, see [Architecture](ARCHITECTURE.md).
 
 ## 1. Bound the transfer pipeline and apply backpressure
 
@@ -23,7 +23,7 @@ The transport borrows the sequence-and-reassembly pattern used by [Multipath TCP
 
 Healthy pacing uses [MessageChannel tasks](https://developer.mozilla.org/en-US/docs/Web/API/MessageChannel) to service browser work without a fixed timer delay between bursts. Ports are created lazily and closed after each file attempt. Delivery credit stays bounded; receipt delay shrinks it on congested paths and restarts warmup.
 
-Synchronous send bursts sample browser buffers once, keep conservative per-lane counters as bytes are sent, and stop at adaptive credit or eight milliseconds of send work. The next browser task refreshes the sample. This follows the batch accounting in the [WebRTC project's data-transfer sample](https://github.com/webrtc/samples/blob/gh-pages/src/content/datachannel/datatransfer/js/main.js). The [webrtc-rs performance investigation](https://github.com/webrtc-rs/webrtc-rs.github.io/blob/master/blog/2026/07/18/from-13-mbps-to-beating-pion.md) also motivates reducing scheduler work and copying per byte, although its native socket/reactor changes cannot be applied through a browser API. PixelGate removes the receive-side header copy and transfers complete checkpoint buffers to the worker instead of cloning them. A fresh accumulator replaces each detached buffer.
+Synchronous send bursts sample browser buffers once, keep conservative per-lane counters as bytes are sent, and stop at adaptive credit or eight milliseconds of send work. The next browser task refreshes the sample. This follows the batch accounting in the [WebRTC project's data-transfer sample](https://github.com/webrtc/samples/blob/gh-pages/src/content/datachannel/datatransfer/js/main.js). The [webrtc-rs performance investigation](https://github.com/webrtc-rs/webrtc-rs.github.io/blob/master/blog/2026/07/18/from-13-mbps-to-beating-pion.md) also motivates reducing scheduler work and copying per byte, although its native socket/reactor changes cannot be applied through a browser API. SpeedGate removes the receive-side header copy and transfers complete checkpoint buffers to the worker instead of cloning them. A fresh accumulator replaces each detached buffer.
 
 Transport acknowledgments release retransmission buffers only. Durable ACKs still follow write/flush and manifest commit, and complete-file readback still decides verification. After a failed checkpoint, queued payload is discarded until the next ordered manifest, without repeating the same error for every in-flight frame. A metadata failure retains the previous committed offset even if its byte tail reached storage; resume truncates that tail.
 

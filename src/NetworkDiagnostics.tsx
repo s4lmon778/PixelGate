@@ -162,8 +162,25 @@ export function NetworkDiagnostics({
               }
             }}
           >
-            <option value="auto">Automatic · up to 14</option>
-            <option value="7">Up to 7</option>
+            <option value="auto">
+              Automatic · up to{' '}
+              {Math.min(
+                transport.defaultPayloadConnections,
+                transport.maximumPayloadConnections,
+              )}
+            </option>
+            <option
+              value="14"
+              disabled={transport.maximumPayloadConnections < 14}
+            >
+              Up to 14
+            </option>
+            <option
+              value="7"
+              disabled={transport.maximumPayloadConnections < 7}
+            >
+              Up to 7
+            </option>
             <option value="5">Up to 5</option>
           </select>
         </label>

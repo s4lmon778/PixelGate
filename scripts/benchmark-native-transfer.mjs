@@ -8,23 +8,55 @@ import { chromium, webkit, expect } from '@playwright/test';
 
 // Synthetic bytes in isolated contexts; this is a native UDP latency model,
 // not a physical iPhone/Pixel Wi-Fi benchmark.
-const lossPermille = Number(process.env.PIXELGATE_NATIVE_LOSS_PERMILLE || 0);
+const lossPermille = Number(
+  process.env.SPEEDGATE_NATIVE_LOSS_PERMILLE ||
+    process.env.PIXELGATE_NATIVE_LOSS_PERMILLE ||
+    0,
+);
 if (!Number.isInteger(lossPermille) || lossPermille < 0 || lossPermille > 100)
   throw new Error('Loss must be 0–100 per mille.');
-const lossSeed = Number(process.env.PIXELGATE_NATIVE_LOSS_SEED || 7);
+const lossSeed = Number(
+  process.env.SPEEDGATE_NATIVE_LOSS_SEED ||
+    process.env.PIXELGATE_NATIVE_LOSS_SEED ||
+    7,
+);
 if (!Number.isInteger(lossSeed) || lossSeed < 0 || lossSeed > 0xffffffff)
   throw new Error('Invalid loss seed.');
 let randomState = lossSeed >>> 0;
-const sourceCPU = Number(process.env.PIXELGATE_NATIVE_SOURCE_CPU || 1);
-const receiverCPU = Number(process.env.PIXELGATE_NATIVE_RECEIVER_CPU || 1);
+const sourceCPU = Number(
+  process.env.SPEEDGATE_NATIVE_SOURCE_CPU ||
+    process.env.PIXELGATE_NATIVE_SOURCE_CPU ||
+    1,
+);
+const receiverCPU = Number(
+  process.env.SPEEDGATE_NATIVE_RECEIVER_CPU ||
+    process.env.PIXELGATE_NATIVE_RECEIVER_CPU ||
+    1,
+);
 if (!Number.isInteger(receiverCPU) || receiverCPU < 1 || receiverCPU > 20)
   throw new Error('Invalid receiver CPU model.');
 if (!Number.isInteger(sourceCPU) || sourceCPU < 1 || sourceCPU > 20)
   throw new Error('Source CPU model must be an integer from 1 to 20.');
-const latency = Number(process.env.PIXELGATE_NATIVE_ONE_WAY_MS || 0);
-const slowPathCount = Number(process.env.PIXELGATE_NATIVE_SLOW_PATHS || 0);
-const slowPathStart = Number(process.env.PIXELGATE_NATIVE_SLOW_PATH_START || 1);
-const slowPathMs = Number(process.env.PIXELGATE_NATIVE_SLOW_PATH_MS || 0);
+const latency = Number(
+  process.env.SPEEDGATE_NATIVE_ONE_WAY_MS ||
+    process.env.PIXELGATE_NATIVE_ONE_WAY_MS ||
+    0,
+);
+const slowPathCount = Number(
+  process.env.SPEEDGATE_NATIVE_SLOW_PATHS ||
+    process.env.PIXELGATE_NATIVE_SLOW_PATHS ||
+    0,
+);
+const slowPathStart = Number(
+  process.env.SPEEDGATE_NATIVE_SLOW_PATH_START ||
+    process.env.PIXELGATE_NATIVE_SLOW_PATH_START ||
+    1,
+);
+const slowPathMs = Number(
+  process.env.SPEEDGATE_NATIVE_SLOW_PATH_MS ||
+    process.env.PIXELGATE_NATIVE_SLOW_PATH_MS ||
+    0,
+);
 if (
   !Number.isInteger(slowPathCount) ||
   slowPathCount < 0 ||
@@ -38,7 +70,9 @@ if (
 )
   throw new Error('Invalid asymmetric-path delay.');
 const linkBytesPerSecond = Number(
-  process.env.PIXELGATE_NATIVE_LINK_BYTES_PER_SECOND || 0,
+  process.env.SPEEDGATE_NATIVE_LINK_BYTES_PER_SECOND ||
+    process.env.PIXELGATE_NATIVE_LINK_BYTES_PER_SECOND ||
+    0,
 );
 if (
   !Number.isSafeInteger(linkBytesPerSecond) ||
@@ -49,33 +83,59 @@ if (
 )
   throw new Error('Shared link must be zero or 1 MiB/s–1 GiB/s.');
 let transmissionAt = 0;
-const variant = process.env.PIXELGATE_NATIVE_LABEL || 'candidate';
+const variant =
+  process.env.SPEEDGATE_NATIVE_LABEL ||
+  process.env.PIXELGATE_NATIVE_LABEL ||
+  'candidate';
+const phone = process.env.SPEEDGATE_NATIVE_PHONE === '1';
 const receiverEngine =
-  process.env.PIXELGATE_NATIVE_RECEIVER_ENGINE || 'chromium';
+  process.env.SPEEDGATE_NATIVE_RECEIVER_ENGINE ||
+  process.env.PIXELGATE_NATIVE_RECEIVER_ENGINE ||
+  'chromium';
 if (receiverEngine === 'webkit' && receiverCPU > 1)
   throw new Error('Receiver CPU model requires Chromium.');
 if (!['chromium', 'webkit'].includes(receiverEngine))
   throw new Error('Receiver engine must be chromium or webkit.');
 if (
   receiverEngine === 'webkit' &&
-  process.env.PIXELGATE_NATIVE_RECEIVER_EXECUTABLE
+  (process.env.SPEEDGATE_NATIVE_RECEIVER_EXECUTABLE ||
+    process.env.PIXELGATE_NATIVE_RECEIVER_EXECUTABLE)
 )
   throw new Error('Custom receiver executable is supported only for Chromium.');
-const storageDelay = Number(process.env.PIXELGATE_NATIVE_STORAGE_DELAY_MS || 0);
+const storageDelay = Number(
+  process.env.SPEEDGATE_NATIVE_STORAGE_DELAY_MS ||
+    process.env.PIXELGATE_NATIVE_STORAGE_DELAY_MS ||
+    0,
+);
 const sourceDelay = Number(
-  process.env.PIXELGATE_NATIVE_SOURCE_READ_DELAY_MS || 0,
+  process.env.SPEEDGATE_NATIVE_SOURCE_READ_DELAY_MS ||
+    process.env.PIXELGATE_NATIVE_SOURCE_READ_DELAY_MS ||
+    0,
 );
 if (!Number.isInteger(sourceDelay) || sourceDelay < 0 || sourceDelay > 1000)
   throw new Error('Invalid source delay');
-const trial = process.env.PIXELGATE_NATIVE_TRIAL || '1';
-const direct = process.env.PIXELGATE_NATIVE_DIRECT === '1';
+const trial =
+  process.env.SPEEDGATE_NATIVE_TRIAL ||
+  process.env.PIXELGATE_NATIVE_TRIAL ||
+  '1';
+const direct =
+  (process.env.SPEEDGATE_NATIVE_DIRECT ||
+    process.env.PIXELGATE_NATIVE_DIRECT) === '1';
 if (direct && (latency || slowPathMs || lossPermille || linkBytesPerSecond))
   throw new Error(
     'Direct mode bypasses proxy latency, loss and link capacity; set all to zero.',
   );
 const bytes =
-  Number(process.env.PIXELGATE_NATIVE_MIB || 32) * 1024 * 1024 + 111;
-const url = process.env.PIXELGATE_NATIVE_URL || 'http://127.0.0.1:8787/';
+  Number(
+    process.env.SPEEDGATE_NATIVE_MIB || process.env.PIXELGATE_NATIVE_MIB || 32,
+  ) *
+    1024 *
+    1024 +
+  111;
+const url =
+  process.env.SPEEDGATE_NATIVE_URL ||
+  process.env.PIXELGATE_NATIVE_URL ||
+  'http://127.0.0.1:8787/';
 const parsedURL = new URL(url);
 if (
   parsedURL.protocol !== 'http:' ||
@@ -98,7 +158,7 @@ if (
   storageDelay > 1000
 )
   throw new Error('Invalid benchmark bounds: 1–512 MiB and 0–1000 ms delays.');
-const root = await mkdtemp(join(tmpdir(), 'pixelgate-native-transfer-'));
+const root = await mkdtemp(join(tmpdir(), 'speedgate-native-transfer-'));
 const payload = Buffer.alloc(bytes, 0x7b);
 for (let offset = 0; offset + 4 < bytes; offset += 16384)
   payload.writeUInt32BE(offset / 16384, offset);
@@ -191,10 +251,25 @@ const receivingBrowser =
 const receiving = receivingBrowser
   ? await receivingBrowser.newContext()
   : await chromium.launchPersistentContext(join(root, 'receiver-profile'), {
-      executablePath: process.env.PIXELGATE_NATIVE_RECEIVER_EXECUTABLE,
+      executablePath:
+        process.env.SPEEDGATE_NATIVE_RECEIVER_EXECUTABLE ||
+        process.env.PIXELGATE_NATIVE_RECEIVER_EXECUTABLE,
       args: ['--disable-features=WebRtcHideLocalIpsWithMdns'],
+      ...(phone
+        ? {
+            userAgent:
+              'Mozilla/5.0 (Linux; Android 9; Pixel XL) AppleWebKit/537.36 Chrome/101.0.0.0 Mobile Safari/537.36',
+          }
+        : {}),
     });
-const sending = await sendingBrowser.newContext();
+const sending = await sendingBrowser.newContext(
+  phone
+    ? {
+        userAgent:
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
+      }
+    : {},
+);
 for (const page of receiving.pages()) await page.close();
 try {
   if (storageDelay > 0) {
@@ -423,13 +498,24 @@ try {
   await expect(sender.getByText('Connected', { exact: true })).toBeVisible({
     timeout: 45000,
   });
-  if (process.env.PIXELGATE_NATIVE_PAYLOAD_LIMIT) {
-    if (!['5', '7'].includes(process.env.PIXELGATE_NATIVE_PAYLOAD_LIMIT))
+  if (
+    process.env.SPEEDGATE_NATIVE_PAYLOAD_LIMIT ||
+    process.env.PIXELGATE_NATIVE_PAYLOAD_LIMIT
+  ) {
+    if (
+      !['5', '7', '14'].includes(
+        process.env.SPEEDGATE_NATIVE_PAYLOAD_LIMIT ||
+          process.env.PIXELGATE_NATIVE_PAYLOAD_LIMIT,
+      )
+    )
       throw new Error('Invalid payload limit model.');
     await sender.getByText('Connection diagnostics', { exact: true }).click();
     await sender
       .getByLabel('Payload connection limit', { exact: true })
-      .selectOption(process.env.PIXELGATE_NATIVE_PAYLOAD_LIMIT);
+      .selectOption(
+        process.env.SPEEDGATE_NATIVE_PAYLOAD_LIMIT ||
+          process.env.PIXELGATE_NATIVE_PAYLOAD_LIMIT,
+      );
   }
   await sender
     .getByLabel('Choose files', { exact: true })
@@ -517,6 +603,7 @@ try {
   const result = {
     variant,
     receiverEngine,
+    phone,
     latency,
     slowPathCount,
     slowPathStart,
@@ -546,7 +633,9 @@ try {
   if (!direct) expect(result.stats.bytes).toBeGreaterThanOrEqual(bytes);
   else expect(result.stats.bytes).toBe(0);
   const resultPath =
-    process.env.PIXELGATE_NATIVE_RESULT || join(root, 'result.json');
+    process.env.SPEEDGATE_NATIVE_RESULT ||
+    process.env.PIXELGATE_NATIVE_RESULT ||
+    join(root, 'result.json');
   await writeFile(resultPath, JSON.stringify(result, null, 2) + '\n');
   console.log('Benchmark record: ' + resultPath);
   console.log(
@@ -606,9 +695,13 @@ try {
       .evaluate(() => window.nativeMetrics)
       .catch(() => null),
   };
-  if (process.env.PIXELGATE_NATIVE_RESULT)
+  if (
+    process.env.SPEEDGATE_NATIVE_RESULT ||
+    process.env.PIXELGATE_NATIVE_RESULT
+  )
     await writeFile(
-      process.env.PIXELGATE_NATIVE_RESULT + '.failure.json',
+      (process.env.SPEEDGATE_NATIVE_RESULT ||
+        process.env.PIXELGATE_NATIVE_RESULT) + '.failure.json',
       JSON.stringify(failure, null, 2) + '\n',
     );
   console.log(JSON.stringify(failure));

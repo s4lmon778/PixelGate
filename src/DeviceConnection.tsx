@@ -42,7 +42,7 @@ export function DeviceConnection({
         title={
           kind
             ? undefined
-            : 'Device type unavailable. Reopen PixelGate on both devices to update this visual.'
+            : 'Device type unavailable. Reopen SpeedGate on both devices to update this visual.'
         }
       >
         <span className="connection-device-icon">

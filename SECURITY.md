@@ -1,6 +1,6 @@
 # Security policy
 
-PixelGate is experimental. The actively maintained version is the default branch.
+SpeedGate is experimental. The actively maintained version is the default branch.
 
 ## Report a vulnerability
 
@@ -12,7 +12,7 @@ Users load the trusted app, share a temporary six-digit receiver code, and expli
 
 The PeerJS signaling service is part of the trust boundary for code pairing. It exchanges SDP, including network addresses, DTLS fingerprints, and ICE credentials, over TLS. A compromised broker can undermine peer identity. It sees connection metadata but receives no filenames, hashes, manifests, history, or media bytes. Do not publish active codes or links. The receiver must remain open. The copy/paste fallback exchanges these descriptions through a trusted channel without contacting PeerJS.
 
-WebRTC encrypts data in transit. SHA-256 verifies that stored bytes match the selected source; it does not establish that a sender, file, or source device is trustworthy. PixelGate does not scan received files or authenticate people. A compromised app build, device, browser extension, hosting account, or signaling exchange can undermine the guarantees.
+WebRTC encrypts data in transit. SHA-256 verifies that stored bytes match the selected source; it does not establish that a sender, file, or source device is trustworthy. SpeedGate does not scan received files or authenticate people. A compromised app build, device, browser extension, hosting account, or signaling exchange can undermine the guarantees.
 
 ## Storage and network
 

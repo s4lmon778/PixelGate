@@ -123,37 +123,55 @@ export class PathScheduler<T> {
     now: number,
     bytes = FRAME_BYTES,
   ) {
-    const rotated = paths.map((_, i) => paths[(i + this.turn) % paths.length]);
-    this.turn++;
+    // This runs for every file frame. Walk the rotating order without creating
+    // temporary path/rate arrays or re-reading the winning path's queue.
+    const count = paths.length;
+    if (!count) throw new Error('No transfer paths available.');
+    const start = this.turn++ % count;
     this.decisions++;
-    const learned = paths.every((path) => {
+    let learned = true;
+    let maximum = 0;
+    let minimum = Infinity;
+    for (const path of paths) {
       const observation = this.observations.get(path);
-      return observation && observation.samples >= 2 && observation.rate > 0;
-    });
-    const rates = paths.map((path) => this.observations.get(path)?.rate ?? 0);
-    const maximum = Math.max(...rates);
-    const minimum = Math.min(...rates);
+      const rate = observation?.rate ?? 0;
+      learned &&= !!observation && observation.samples >= 2 && rate > 0;
+      maximum = Math.max(maximum, rate);
+      minimum = Math.min(minimum, rate);
+    }
     // Equal/noisy paths keep the original least-outstanding rotating scheduler.
     this.adaptive = learned && maximum > minimum * 2;
-    if (!this.adaptive)
-      return rotated.reduce((best, path) =>
-        queued(path) < queued(best) ? path : best,
-      );
+    let best = paths[start];
+    if (!this.adaptive) {
+      let smallest = queued(best);
+      for (let index = 1; index < count; index++) {
+        const path = paths[(start + index) % count];
+        const size = queued(path);
+        if (size < smallest) {
+          best = path;
+          smallest = size;
+        }
+      }
+      return best;
+    }
 
-    // A small deterministic probe budget lets an idle/previously slow path
-    // prove that it recovered. Never add a probe behind a queued packet.
+    // Preserve the same deterministic idle-path probe budget and rotating ties.
     if (this.decisions % 20 === 0) {
-      const stale = rotated.filter((path) => {
+      let stale: T | undefined;
+      let earliest = Infinity;
+      for (let index = 0; index < count; index++) {
+        const path = paths[(start + index) % count];
         const observation = this.observations.get(path)!;
-        return !queued(path) && now - observation.lastSent >= 500;
-      });
-      if (stale.length)
-        return stale.reduce((best, path) =>
-          this.observations.get(path)!.lastSent <
-          this.observations.get(best)!.lastSent
-            ? path
-            : best,
-        );
+        if (
+          !queued(path) &&
+          now - observation.lastSent >= 500 &&
+          observation.lastSent < earliest
+        ) {
+          stale = path;
+          earliest = observation.lastSent;
+        }
+      }
+      if (stale !== undefined) return stale;
     }
     const arrival = (path: T) => {
       const observation = this.observations.get(path)!;
@@ -161,9 +179,16 @@ export class PathScheduler<T> {
       const rate = Math.max(maximum / 16, observation.rate);
       return observation.minimumDelay + ((queued(path) + bytes) * 1000) / rate;
     };
-    return rotated.reduce((best, path) =>
-      arrival(path) < arrival(best) * 0.95 ? path : best,
-    );
+    let soonest = arrival(best);
+    for (let index = 1; index < count; index++) {
+      const path = paths[(start + index) % count];
+      const time = arrival(path);
+      if (time < soonest * 0.95) {
+        best = path;
+        soonest = time;
+      }
+    }
+    return best;
   }
 
   snapshot(paths: T[]) {

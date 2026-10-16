@@ -71,7 +71,7 @@ export function downloadConnectionReport(report: ConnectionReport) {
   );
   const link = document.createElement('a');
   link.href = url;
-  link.download = `PixelGate-connection-${report.role}.json`;
+  link.download = `SpeedGate-connection-${report.role}.json`;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }

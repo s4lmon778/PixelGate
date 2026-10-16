@@ -1,6 +1,6 @@
 # Deployment
 
-PixelGate is a static React/Vite app. It needs HTTPS and worker support; it has no application database or media backend. Six-digit pairing uses PeerJS’s shared signaling service by default. GitHub Pages hosts the public reference deployment.
+SpeedGate is a static React/Vite app. It needs HTTPS and worker support; it has no application database or media backend. Six-digit pairing uses PeerJS’s shared signaling service by default. GitHub Pages hosts the public reference deployment.
 
 ## GitHub Pages
 
@@ -25,7 +25,7 @@ GitHub Pages branch deployments use GitHub’s managed deployment workflow. This
 
 ## Other static hosts
 
-Run `npm run build` and upload the contents of `dist/`. The app uses relative asset paths by default, so `/PixelGate/` and other project subpaths work. You may set `PIXELGATE_BASE=/your-path/` during a build if an explicit base is needed.
+Run `npm run build` and upload the contents of `dist/`. The app uses relative asset paths by default, so `/SpeedGate/` and other project subpaths work. You may set `SPEEDGATE_BASE=/your-path/` during a build if an explicit base is needed.
 
 Do not route media through the host or add a public upload endpoint. Keep the Content Security Policy and bundled workers. When adding response headers, permit same-origin workers and WebAssembly (`wasm-unsafe-eval`), and retain `Referrer-Policy: no-referrer`.
 
@@ -36,7 +36,7 @@ The default build uses [PeerJS’s public signaling service](https://peerjs.com/
 To use your own TLS-enabled PeerServer, keep its default `peerjs` key, disable peer discovery, and build with its HTTPS base URL:
 
 ```sh
-VITE_PIXELGATE_SIGNAL_URL=https://pairing.example.org npm run build
+VITE_SPEEDGATE_SIGNAL_URL=https://pairing.example.org npm run build
 ```
 
 The build adds the configured HTTPS/WSS origin to the Content Security Policy. Use the same environment variable when running `npm run deploy:pages`. If the server is mounted on a path, include that path in the URL. Restrict server request sizes, concurrent connections, and request rates; do not enable ID discovery or log connection payloads. Local HTTP is allowed only for localhost development.
@@ -54,3 +54,17 @@ Browser storage belongs to an origin. Moving from Sites, localhost, or another d
 ## Cost and capacity
 
 Public repositories can use GitHub Pages on GitHub Free, subject to GitHub’s service limits. File transfer volume is direct between devices, rather than website hosting traffic. Static asset requests still count toward hosting usage. The receiver’s disk space and browser quota determine storage capacity, not GitHub Pages’ website-size limit. Consult [GitHub Pages limits](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits) for current terms.
+
+## Rebrand compatibility
+
+The active repository and Pages path are `s4lmon778/SpeedGate`. Application assets
+use relative URLs so the current build and preserved releases work under this
+path. Existing persisted storage keys and WebRTC pairing/channel identifiers
+remain stable to preserve user data and interoperability with older tabs.
+Legacy `PIXELGATE_*` base/signaling and test/benchmark variables remain accepted
+where the new `SPEEDGATE_*` entry points were introduced. Historical release
+bytes and numeric measurement records are preserved, including their old names.
+Changing only the Pages path on the same HTTPS host keeps browser storage at
+the same origin; moving to another hostname would require a separate export.
+
+The local checkout is named `SpeedGate`; a `PixelGate` compatibility symlink keeps existing chat/tool paths usable. It contains the same repository and is not a second copy.

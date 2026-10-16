@@ -8,3 +8,7 @@ coverage/
 .DS_Store
 *.tsbuildinfo
 *.log
+
+# Generated local code graph; keep its small ignore policy only.
+.codegraph/*
+!.codegraph/.gitignore

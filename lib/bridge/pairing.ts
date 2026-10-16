@@ -64,7 +64,7 @@ export function decodePair(
   if (token.length > MAX_TOKEN + 4)
     throw new Error('Pairing data is too large.');
   if (!/^pg1\.[A-Za-z0-9_-]+$/.test(token))
-    throw new Error('Paste a PixelGate pairing link or response.');
+    throw new Error('Paste a SpeedGate pairing link or response.');
   try {
     const binary = atob(token.slice(4).replace(/-/g, '+').replace(/_/g, '/'));
     // A fixed output buffer caps memory even for a malicious compressed token.

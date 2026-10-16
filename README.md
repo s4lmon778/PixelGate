@@ -1,14 +1,15 @@
 <div align="center">
-  <img src="docs/assets/logo.svg" alt="PixelGate" width="80" height="80" />
-  <h1>PixelGate</h1>
+  <img src="docs/assets/logo.svg" alt="SpeedGate" width="80" height="80" />
+  <h1>SpeedGate</h1>
   <p><strong>Move files. Keep every byte.</strong></p>
   <p>Direct browser-to-browser transfers with resumable checkpoints and independent SHA-256 verification.</p>
   <p>
-    <a href="https://s4lmon778.github.io/PixelGate/">Live app</a> ·
+    <a href="https://s4lmon778.github.io/SpeedGate/">Live app</a> ·
     <a href="#quick-start">Quick start</a> ·
+    <a href="https://s4lmon778.github.io/SpeedGate/releases/0.3.28/">0.3.28 comparison</a> ·
     <a href="#engineering-decisions">Engineering decisions</a> ·
     <a href="docs/README.md">Documentation</a> ·
-    <a href="https://github.com/s4lmon778/PixelGate/issues">Report an issue</a>
+    <a href="https://github.com/s4lmon778/SpeedGate/issues">Report an issue</a>
   </p>
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license" /></a>
@@ -19,18 +20,29 @@
   </p>
 </div>
 
-PixelGate moves files between computers, phones, and tablets using their browsers. File bytes travel over a direct encrypted WebRTC data channel. The receiver closes and rereads each stored file before comparing its SHA-256 with the source. Filenames, manifests, hashes, file bytes, and transfer history remain on the participating devices.
+SpeedGate moves files between computers, phones, and tablets using their browsers. File bytes travel over a direct encrypted WebRTC data channel. The receiver closes and rereads each stored file before comparing its SHA-256 with the source. Filenames, manifests, hashes, file bytes, and transfer history remain on the participating devices.
 
 The app is a static **TypeScript / React / Vite** build hosted on GitHub Pages. **PeerJS** exchanges connection metadata for six-digit pairing; it carries no file payloads. No native app, account, cloud media storage, or TURN relay is required.
 
-> **Status:** experimental. The current app is **0.3.35**. Automated checks exercise integrity and recovery; browser capabilities, available storage, and network policies still determine usability. Large-file and physical-device boundaries are documented below.
+> **Status:** experimental. The current app is **0.3.36**. Automated checks exercise integrity and recovery; browser capabilities, available storage, and network policies still determine usability. Large-file and physical-device boundaries are documented below.
 
 Android senders have **Choose photos & videos** for the media library and **Choose files** for documents. Direct **Save to Photos folder** appears only when the browser supports choosing a local folder; older Chrome uses verified downloads with Photos device-folder backup. Updating the browser can enable the folder option without changing the Android system.
 
 <div align="center">
-  <img src="docs/assets/controls-demo.gif" alt="PixelGate's screen-awake switch animates between sun and moon while the appearance menu switches between Light and Dark" width="960" />
+  <img src="docs/assets/controls-demo.gif" alt="SpeedGate's screen-awake switch animates between sun and moon while the appearance menu switches between Light and Dark" width="960" />
   <p><sub>Recorded from the app: the screen-awake preference and appearance controls.</sub></p>
 </div>
+
+The earlier iPhone → Pixel speed report was on **0.3.28**: approximately 5 MB/s
+on screen, with 4.57 MB/s over the recorded Send-to-Verified batch. The
+[unchanged historical build](https://s4lmon778.github.io/SpeedGate/releases/0.3.28/)
+is retained for same-device comparisons. Local browser-engine measurements do
+not certify a physical phone speed. See the [measured comparisons](docs/TRANSFER-PERFORMANCE.md) and [code graph](docs/CODEGRAPH.md).
+
+SpeedGate retains existing browser data and older-peer protocol identifiers.
+The repository rebrand does not reset history, staged bytes, preferences or
+resume checkpoints. Historical compiled releases and measurement JSON retain
+their original branding and provenance.
 
 ## Contents
 
@@ -46,13 +58,13 @@ Android senders have **Choose photos & videos** for the media library and **Choo
 ## Quick start
 
 <div align="center">
-  <img src="docs/assets/quick-start.gif" alt="Six-step PixelGate walkthrough: create a receiver code, connect the sender, approve, send files, select and save inline, optionally check final bytes in History, and clear cached files" width="960" />
+  <img src="docs/assets/quick-start.gif" alt="Six-step SpeedGate walkthrough: create a receiver code, connect the sender, approve, send files, select and save inline, optionally check final bytes in History, and clear cached files" width="960" />
   <p><sub>A real synthetic-file transfer, with step captions and click highlights. Playback is edited for instruction.</sub></p>
 </div>
 
 [Watch or download the 29-second video](docs/assets/quick-start.mp4) · [Recording details](docs/assets/README.md#quick-start-walkthrough)
 
-1. Open **[PixelGate](https://s4lmon778.github.io/PixelGate/)** on both devices, using a trusted network that permits connections between them.
+1. Open **[SpeedGate](https://s4lmon778.github.io/SpeedGate/)** on both devices, using a trusted network that permits connections between them.
 2. On the destination device, choose **Receive files**, optionally choose a destination folder, and click **Create a connection**.
 3. On the sender, enter the receiver's **six-digit code** or scan its QR code, then click **Connect**.
 4. On the receiver, **Approve sender** for your intended device.
@@ -61,9 +73,9 @@ Android senders have **Choose photos & videos** for the media library and **Choo
 
 Codes expire after ten minutes and accept one sender. A code is a temporary lookup, not identity authentication. Same-network-name Wi-Fi can still block local connections; use a permitted network or hotspot if necessary.
 
-For large collections, receive a batch, save it, and choose **Clear verified staging** before the next batch. It deletes PixelGate’s cached file bytes from both storage backends, removes cleared files from the receiving list, and releases prepared download references in open tabs. Receipts remain available only in History. For downloads or app saves, confirm the save finished and the files open before clearing; optional independent saved-copy checks remain in History. Saved originals, unfinished transfers, and reports are kept. **Clear history** is a separate action that preserves staging and resume data.
+For large collections, receive a batch, save it, and choose **Clear verified staging** before the next batch. It deletes SpeedGate’s cached file bytes from both storage backends, removes cleared files from the receiving list, and releases prepared download references in open tabs. Receipts remain available only in History. For downloads or app saves, confirm the save finished and the files open before clearing; optional independent saved-copy checks remain in History. Saved originals, unfinished transfers, and reports are kept. **Clear history** is a separate action that preserves staging and resume data.
 
-On browsers without writable-folder access, **Choose where downloads are saved** is a text disclosure beneath the saving buttons. Mac Safari uses its native download flow; enable **Safari → Settings → General → File download location → Ask for each download** to choose a destination for downloads. PixelGate cannot enable that browser setting for you.
+On browsers without writable-folder access, **Choose where downloads are saved** is a text disclosure beneath the saving buttons. Mac Safari uses its native download flow; enable **Safari → Settings → General → File download location → Ask for each download** to choose a destination for downloads. SpeedGate cannot enable that browser setting for you.
 
 See the [usage guide](docs/USAGE.md) for saving modes and storage behavior, or [troubleshooting](docs/TROUBLESHOOTING.md) for network and browser issues.
 
@@ -72,9 +84,9 @@ See the [usage guide](docs/USAGE.md) for saving modes and storage behavior, or [
 
 Screenshots show the 0.3.13 interface with empty queues, including paired saving controls and expandable help.
 
-![PixelGate desktop interface](docs/assets/desktop.png)
+![SpeedGate desktop interface](docs/assets/desktop.png)
 
-<img src="docs/assets/mobile.png" alt="PixelGate mobile receiving and saving controls" width="390" />
+<img src="docs/assets/mobile.png" alt="SpeedGate mobile receiving and saving controls" width="390" />
 
 </details>
 
@@ -83,7 +95,7 @@ Screenshots show the 0.3.13 interface with empty queues, including paired saving
 - **Pairing and approval:** six-digit entry, QR links, receiver consent, expiry, and revocation. Copy/paste pairing is available when signaling is unavailable.
 - **Files and folders:** multiple selection, recursive drops where supported, Unicode filenames, preserved relative paths, and destination-path validation.
 - **Integrity and recovery:** incremental worker hashing, independent stored-file readback, durable checkpoints, and resume after source reselection and rehashing.
-- **Parallel transfers:** learn path delivery rates and sequence chunks across up to fourteen independent peer connections, recover gaps on another lane, restore order, and overlap up to eight checkpoints between capable peers, with legacy fallback.
+- **Parallel transfers:** learn path delivery rates and start phone transfers with the five-connection budget from the fastest recorded phone run, allow explicit seven/fourteen-connection comparisons, recover gaps on another lane, restore order, and overlap up to eight checkpoints between capable peers, with legacy fallback.
 - **Saving:** Android Chrome 132+ Photos device-folder saving for the whole collection, direct folder writes with destination readback, native save/share where supported, whole-collection verified downloads, Google Photos device-folder guidance, duplicate checks, and numbered conflicting filenames.
 - **Batch controls:** inline file selection/saving, pause/resume/cancel, pinned mobile progress, optional final-byte verification in History, direct file-cache cleanup, and JSON/CSV/text reports.
 - **Speed checks:** explicit peer-link measurements without storage, separate bounded internet dummy downloads, browser network estimates where available, sender stage durations, and optional 5/7-path limits for same-version comparisons. Tests run only while idle and do not upload originals or reports.
@@ -172,7 +184,7 @@ flowchart TD
 
 OPFS and manifest metadata are separate persistence systems. Their ordering supports refresh/reconnect recovery; it does not establish OS power-loss durability. File identity includes both content hash and relative path, and retained verified copies must pass readback before they can be skipped.
 
-For the original Pixel / Pixel XL, keep originals local and let Google Photos on that phone back up the device folder in Original quality. [Google documents the model-specific storage benefit](https://support.google.com/pixelphone/answer/6220791?co=GENIE.Platform%3DAndroid&hl=en). Album organization and Free up space happen in Photos; PixelGate does not replace that device backup with a cloud API upload.
+For the original Pixel / Pixel XL, keep originals local and let Google Photos on that phone back up the device folder in Original quality. [Google documents the model-specific storage benefit](https://support.google.com/pixelphone/answer/6220791?co=GENIE.Platform%3DAndroid&hl=en). Album organization and Free up space happen in Photos; SpeedGate does not replace that device backup with a cloud API upload.
 
 Native sharing uses a fresh user tap after file preparation so hashing does not consume transient activation. History clearing affects only the presentation log, preserving recovery records and staged bytes.
 
@@ -197,15 +209,15 @@ Browser tests include byte-exact large transfers/downloads through OPFS and comp
 - Guest, campus, hotel, or workplace networks may block direct connections even when both devices use the same Wi-Fi name. No relay is available to bypass that restriction.
 - Browser quotas are estimates, and temporary sessions can discard local data. Real files over 4 GB, 10,000-file sessions, and 100 GB reliability require further hardware validation.
 - Picker-supplied bytes are the source of truth. Original Photos resources, complete Live Photo pairing, iCloud-original retrieval, native media scanning, and filesystem timestamp restoration are outside this version.
-- PixelGate cannot select an arbitrary photo album or verify external backup. It never reports Google Photos backup success or deletes source media.
+- SpeedGate cannot select an arbitrary photo album or verify external backup. It never reports Google Photos backup success or deletes source media.
 
 ## Development
 
 Requires **Node.js 22.13+** and npm.
 
 ```sh
-git clone https://github.com/s4lmon778/PixelGate.git
-cd PixelGate
+git clone https://github.com/s4lmon778/SpeedGate.git
+cd SpeedGate
 npm ci
 npm run dev
 ```
@@ -233,7 +245,7 @@ docs/assets/         Current interface screenshots and project artwork
 .github/             Issue forms and pull request template
 ```
 
-Build output, dependencies, browser reports, and environment files are ignored. Legacy internal `pixelbridge` storage identifiers remain unchanged to preserve compatibility; the public app is PixelGate.
+Build output, dependencies, browser reports, and environment files are ignored. Legacy internal `pixelbridge` storage identifiers remain unchanged to preserve compatibility; the public app is SpeedGate.
 
 ## Deployment
 
@@ -244,9 +256,9 @@ The app can run on any HTTPS static host. For GitHub Pages:
 3. Run `npm run deploy:pages`.
 4. Select **Settings → Pages → Deploy from a branch → gh-pages → /(root)**.
 
-The publisher preserves deployment history and writes the app version/source commit to `build.json`. Pushing `main` alone does not publish the site. Relative asset paths support project subpaths such as `/PixelGate/`.
+The publisher preserves deployment history and writes the app version/source commit to `build.json`. Pushing `main` alone does not publish the site. Relative asset paths support project subpaths such as `/SpeedGate/`.
 
-Default pairing uses PeerJS's public signaling service without an API key; shared-service availability and limits remain external dependencies. A TLS-enabled PeerServer can be selected with `VITE_PIXELGATE_SIGNAL_URL`. No application database, media backend, analytics, or TURN service is deployed.
+Default pairing uses PeerJS's public signaling service without an API key; shared-service availability and limits remain external dependencies. A TLS-enabled PeerServer can be selected with `VITE_SPEEDGATE_SIGNAL_URL`. No application database, media backend, analytics, or TURN service is deployed.
 
 Moving to another origin does not migrate browser files, history, or permissions. See [Deployment](docs/DEPLOYMENT.md) for custom signaling, hosting constraints, and verification steps, and [Security](SECURITY.md) for the trust model.
 
@@ -258,7 +270,7 @@ Issues and focused pull requests are welcome. Include device/browser versions, s
 
 - [Contributing guide](CONTRIBUTING.md)
 - [Security assumptions and vulnerability reporting](SECURITY.md)
-- [Report a bug](https://github.com/s4lmon778/PixelGate/issues/new?template=bug_report.yml)
+- [Report a bug](https://github.com/s4lmon778/SpeedGate/issues/new?template=bug_report.yml)
 
 ## License
 

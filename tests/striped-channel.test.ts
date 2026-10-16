@@ -252,6 +252,83 @@ describe('parallel transport compatibility, ordering, and fallback', () => {
     expect(transport.snapshot().source).toBeUndefined();
     vi.restoreAllMocks();
   });
+  it.each([
+    ['Mozilla/5.0 (iPhone) Mobile', 4],
+    ['Mozilla/5.0 (Linux; Android 9; Pixel XL) Mobile', 4],
+    ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', 13],
+  ])(
+    'advertises and negotiates a matching local connection budget for %s',
+    async (userAgent, limit) => {
+      vi.stubGlobal('navigator', { userAgent, maxTouchPoints: 0 });
+      const primary = new Channel();
+      const transport = new StripedChannel(primary.native(), 'send');
+      opened.push(transport);
+      transport.send(JSON.stringify({ type: 'hello', version: 1 }));
+      expect(JSON.parse(primary.sent[0] as string).stripedLanes).toBe(13);
+      primary.receive(
+        JSON.stringify({
+          type: 'hello',
+          version: 1,
+          stripedTransport: 1,
+          stripedReceipts: 1,
+          stripedLanes: 13,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(Peer.peers).toHaveLength(limit);
+      expect(transport.snapshot().payloadConnectionLimit).toBe(limit + 1);
+      transport.setPayloadLimit(14);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(Peer.peers).toHaveLength(13);
+      transport.setPayloadLimit(5);
+      expect(transport.snapshot().payloadConnectionLimit).toBe(5);
+      expect(transport.readyState).toBe('open');
+    },
+  );
+  it('keeps file preparation bounded when native offer creation never settles', async () => {
+    const offer = vi
+      .spyOn(Peer.prototype, 'createOffer')
+      .mockImplementation(() => new Promise(() => {}));
+    try {
+      const primary = new Channel();
+      const transport = new StripedChannel(primary.native(), 'send');
+      opened.push(transport);
+      primary.receive(
+        JSON.stringify({
+          type: 'hello',
+          version: 1,
+          stripedTransport: 1,
+          stripedReceipts: 1,
+          stripedLanes: 13,
+        }),
+      );
+      const prepared = transport.prepare();
+      await vi.advanceTimersByTimeAsync(501);
+      await expect(prepared).resolves.toBeUndefined();
+      expect(transport.readyState).toBe('open');
+    } finally {
+      offer.mockRestore();
+    }
+  });
+  it('starts a computer sender with five connections when its peer identifies as a phone', async () => {
+    const primary = new Channel();
+    const transport = new StripedChannel(primary.native(), 'send');
+    opened.push(transport);
+    primary.receive(
+      JSON.stringify({
+        type: 'hello',
+        version: 1,
+        deviceKind: 'phone',
+        stripedTransport: 1,
+        stripedReceipts: 1,
+        stripedLanes: 13,
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(Peer.peers).toHaveLength(4);
+    expect(transport.defaultPayloadConnections).toBe(5);
+    expect(transport.maximumPayloadConnections).toBe(14);
+  });
   it('exchanges broad device kinds in existing hellos without changing legacy transfer behavior', () => {
     const primary = new Channel();
     const transport = new StripedChannel(primary.native(), 'receive');

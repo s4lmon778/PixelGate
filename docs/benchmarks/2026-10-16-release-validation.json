@@ -1,0 +1,49 @@
+{
+  "version": "0.3.36",
+  "scope": "automated browser-engine checks; no physical phone certification",
+  "unitTests": 265,
+  "browserRuns": {
+    "initial_chromium": {
+      "startTime": "2026-10-16T08:00:46.940Z",
+      "duration": 202870.24000000002,
+      "expected": 33,
+      "skipped": 2,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "final_chromium": {
+      "startTime": "2026-10-16T08:10:37.529Z",
+      "duration": 242413.569,
+      "expected": 32,
+      "skipped": 2,
+      "unexpected": 1,
+      "flaky": 0
+    },
+    "pairing_reruns": {
+      "startTime": "2026-10-16T08:15:15.414Z",
+      "duration": 15827.618999999999,
+      "expected": 2,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "cross_engine": {
+      "startTime": "2026-10-16T08:05:29.188Z",
+      "duration": 58381.031,
+      "expected": 8,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "chromium101": {
+      "startTime": "2026-10-16T08:09:06.765Z",
+      "duration": 58978.472,
+      "expected": 5,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "pairingLimit": "One automatic native-route timeout in the final broad run; exact scenario passed twice on isolated rerun without weakening assertions.",
+  "demo": "Real synthetic transfer, independently hashed download, saved-copy check and cache cleanup completed."
+}

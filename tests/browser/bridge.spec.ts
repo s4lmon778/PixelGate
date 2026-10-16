@@ -10,6 +10,7 @@ import WebSocket from 'ws';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import packageInfo from '../../package.json' with { type: 'json' };
+import { MAX_BULK_LANES } from '../../lib/bridge/model';
 
 async function scanQr(image: Locator) {
   await expect(image).toBeVisible();
@@ -53,7 +54,7 @@ for (const mode of [
       );
       test.skip(
         !['automatic', 'indexeddb', 'safari-receiver'].includes(mode) &&
-          Boolean(process.env.PIXELGATE_TEST_PUBLIC_SIGNALING),
+          Boolean(process.env.SPEEDGATE_TEST_PUBLIC_SIGNALING),
         'Local discovery failure is injected only in the isolated fixture.',
       );
       const lanAddress = Object.values(networkInterfaces())
@@ -65,7 +66,7 @@ for (const mode of [
           'A LAN interface is required for the fallback fixture',
         ).toBeTruthy();
       const publicSignaling = Boolean(
-        process.env.PIXELGATE_TEST_PUBLIC_SIGNALING,
+        process.env.SPEEDGATE_TEST_PUBLIC_SIGNALING,
       );
       const server = publicSignaling
         ? undefined
@@ -82,8 +83,8 @@ for (const mode of [
         safariReceiver ? 'chromium' : browserName
       ].launch(
         browserName === 'chromium' &&
-          process.env.PIXELGATE_TEST_CHROMIUM_EXECUTABLE
-          ? { executablePath: process.env.PIXELGATE_TEST_CHROMIUM_EXECUTABLE }
+          process.env.SPEEDGATE_TEST_CHROMIUM_EXECUTABLE
+          ? { executablePath: process.env.SPEEDGATE_TEST_CHROMIUM_EXECUTABLE }
           : mode === 'indexeddb' && !publicSignaling
             ? browserName === 'chromium'
               ? { args: ['--disable-features=WebRtcHideLocalIpsWithMdns'] }
@@ -105,7 +106,7 @@ for (const mode of [
       const senderContext = await senderBrowser.newContext();
       if (
         mode === 'indexeddb' &&
-        !process.env.PIXELGATE_TEST_CHROMIUM_EXECUTABLE
+        !process.env.SPEEDGATE_TEST_CHROMIUM_EXECUTABLE
       )
         await receiverContext.addInitScript(() => {
           Object.defineProperty(
@@ -159,7 +160,7 @@ for (const mode of [
               const obscure = (candidate: string) =>
                 candidate.replace(
                   /(candidate:[^\s]+ 1 (?:[Uu][Dd][Pp]|[Tt][Cc][Pp]) \d+ )[^\s]+( \d+ typ host)/g,
-                  '$1pixelgate-unresolvable.local$2',
+                  '$1speedgate-unresolvable.local$2',
                 );
               if (value.payload?.candidate?.candidate)
                 value.payload.candidate.candidate = obscure(
@@ -206,7 +207,7 @@ for (const mode of [
             .getByLabel('Sender’s local IPv4 (optional)', { exact: true })
             .fill(lanAddress!);
           await receiver.locator('.connection-panel').screenshot({
-            path: `test-results/pixelgate-lan-${browserName}.png`,
+            path: `test-results/speedgate-lan-${browserName}.png`,
             mask: [
               receiver.getByLabel('Sender’s local IPv4 (optional)', {
                 exact: true,
@@ -259,7 +260,7 @@ for (const mode of [
           .innerText();
         const route = JSON.parse(routeReport);
         expect(route.version).toBe(
-          process.env.PIXELGATE_TEST_APP_VERSION ?? packageInfo.version,
+          process.env.SPEEDGATE_TEST_APP_VERSION ?? packageInfo.version,
         );
         expect(route.localCandidates).toHaveProperty('host');
         expect(routeReport).not.toMatch(
@@ -267,7 +268,7 @@ for (const mode of [
         );
         expect(routeReport).not.toContain(code);
         await receiver.locator('.route-diagnostics').screenshot({
-          path: 'test-results/pixelgate-route-report.png',
+          path: 'test-results/speedgate-route-report.png',
         });
         await receiver
           .getByText('Connection diagnostics', { exact: true })
@@ -299,7 +300,7 @@ for (const mode of [
             .last(),
         ).toBeDisabled();
         await receiver.locator('.connection-panel').screenshot({
-          path: 'test-results/pixelgate-code-receiver.png',
+          path: 'test-results/speedgate-code-receiver.png',
         });
         await receiver
           .getByRole('button', { name: 'Approve sender', exact: true })
@@ -324,7 +325,7 @@ for (const mode of [
             await sender
               .getByText('Connection diagnostics', { exact: true })
               .click();
-            if (process.env.PIXELGATE_EXPECT_EARLY_FAILURE) {
+            if (process.env.SPEEDGATE_EXPECT_EARLY_FAILURE) {
               await expect(sender.getByRole('alert')).toContainText(
                 'Pairing failed',
                 { timeout: 10000 },
@@ -400,7 +401,7 @@ for (const mode of [
               },
               { timeout: 15000 },
             )
-            .toBe(5);
+            .toBe(MAX_BULK_LANES + 1);
         }
         const actualHash = await receiver.evaluate(
           async (indexed) => {
@@ -979,7 +980,7 @@ test('responsive screen exposes primary actions with no overflow', async ({
     ),
   ).toBe(true);
   await page.screenshot({
-    path: 'test-results/pixelgate-mobile.png',
+    path: 'test-results/speedgate-mobile.png',
     fullPage: true,
   });
   await page
@@ -996,7 +997,7 @@ test('responsive screen exposes primary actions with no overflow', async ({
   ).toBe(true);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({
-    path: 'test-results/pixelgate-desktop.png',
+    path: 'test-results/speedgate-desktop.png',
     fullPage: true,
   });
 });

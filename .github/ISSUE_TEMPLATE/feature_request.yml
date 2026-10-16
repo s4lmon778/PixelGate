@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest a focused improvement to PixelGate.
+description: Suggest a focused improvement to SpeedGate.
 title: '[Feature]: '
 body:
   - type: textarea

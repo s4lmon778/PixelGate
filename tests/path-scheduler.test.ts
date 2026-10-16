@@ -67,6 +67,19 @@ describe('delivery-aware scheduling', () => {
       scheduler.choose(paths, (path) => (path === 'a' ? 10000 : 1), 400),
     ).toBe('b');
   });
+  it('keeps rotating equal queues when paths leave and rejoin the pool', () => {
+    const scheduler = new PathScheduler<string>();
+    const paths = ['a', 'b', 'c'];
+    expect(scheduler.choose(paths, () => 0, 0)).toBe('a');
+    expect(scheduler.choose(paths, () => 0, 0)).toBe('b');
+    expect(scheduler.choose(['a', 'c'], () => 0, 0)).toBe('a');
+    expect(scheduler.choose(paths, () => 0, 0)).toBe('a');
+    const queued = (path: string) => (path === 'b' ? FRAME_BYTES : 0);
+    expect(scheduler.choose(paths, queued, 0)).toBe('c');
+    expect(scheduler.choose(['c'], queued, 0)).toBe('c');
+    scheduler.clear();
+    expect(scheduler.choose(paths, () => 0, 0)).toBe('a');
+  });
   it('prefers the faster delivery path while still filling its available capacity', () => {
     const scheduler = new PathScheduler<string>();
     learn(scheduler, 'fast', 100);

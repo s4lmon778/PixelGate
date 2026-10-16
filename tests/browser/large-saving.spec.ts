@@ -4,11 +4,18 @@ import { createReadStream } from 'node:fs';
 import { mkdir, open, rm, writeFile } from 'node:fs/promises';
 import { isolateHostIce } from './host-only';
 
-const largeMiB = Number(process.env.PIXELGATE_TEST_LARGE_MIB || 400);
+const largeMiB = Number(
+  process.env.SPEEDGATE_TEST_LARGE_MIB ||
+    process.env.PIXELGATE_TEST_LARGE_MIB ||
+    400,
+);
 const largeName = `original-${largeMiB}MiB.mp4`;
 const transferTimeout = Math.max(120000, largeMiB * 80);
 const savingTimeout = Math.max(60000, largeMiB * 60);
-const safariReceiver = Boolean(process.env.PIXELGATE_TEST_SAFARI_RECEIVER);
+const safariReceiver = Boolean(
+  process.env.SPEEDGATE_TEST_SAFARI_RECEIVER ||
+  process.env.PIXELGATE_TEST_SAFARI_RECEIVER,
+);
 
 for (const backend of ['opfs', 'indexeddb']) {
   const scenario = safariReceiver
@@ -19,7 +26,11 @@ for (const backend of ['opfs', 'indexeddb']) {
     browserName,
   }, testInfo) => {
     test.skip(
-      browserName !== 'chromium' && !process.env.PIXELGATE_TEST_ALL_ENGINES,
+      browserName !== 'chromium' &&
+        !(
+          process.env.SPEEDGATE_TEST_ALL_ENGINES ||
+          process.env.PIXELGATE_TEST_ALL_ENGINES
+        ),
       'Additional sending engines run in the explicit large-file comparison.',
     );
     test.setTimeout(Math.max(240000, largeMiB * 200));
@@ -67,7 +78,9 @@ for (const backend of ['opfs', 'indexeddb']) {
           {
             ...contextOptions,
             headless: true,
-            executablePath: process.env.PIXELGATE_TEST_CHROMIUM_EXECUTABLE,
+            executablePath:
+              process.env.SPEEDGATE_TEST_CHROMIUM_EXECUTABLE ||
+              process.env.PIXELGATE_TEST_CHROMIUM_EXECUTABLE,
             args: ['--disable-features=WebRtcHideLocalIpsWithMdns'],
           },
         );
@@ -99,7 +112,7 @@ for (const backend of ['opfs', 'indexeddb']) {
               Reflect.get(window, 'testDirectory') ??
               navigator.storage.getDirectory.bind(navigator.storage)
             )()
-          ).getDirectoryHandle('pixelgate-test-photos', { create: true }),
+          ).getDirectoryHandle('speedgate-test-photos', { create: true }),
       });
       Object.defineProperty(Navigator.prototype, 'canShare', {
         configurable: true,
@@ -336,7 +349,7 @@ for (const backend of ['opfs', 'indexeddb']) {
             Reflect.get(window, 'testDirectory') ??
             navigator.storage.getDirectory.bind(navigator.storage)
           )()
-        ).getDirectoryHandle('pixelgate-test-photos');
+        ).getDirectoryHandle('speedgate-test-photos');
         const file = await (await root.getFileHandle(name)).getFile();
         const link = document.createElement('a');
         link.href = URL.createObjectURL(file);
@@ -395,7 +408,7 @@ for (const backend of ['opfs', 'indexeddb']) {
                     Reflect.get(window, 'testDirectory') ??
                     navigator.storage.getDirectory.bind(navigator.storage)
                   )()
-                ).getDirectoryHandle('pixelgate-test-photos');
+                ).getDirectoryHandle('speedgate-test-photos');
                 const file = await (
                   await root.getFileHandle('later-original.jpg')
                 ).getFile();
@@ -450,7 +463,7 @@ test('125 selected originals stay queued across native handoffs and fifty-file d
         configurable: true,
         value: async () =>
           (await navigator.storage.getDirectory()).getDirectoryHandle(
-            'pixelgate-test-photos',
+            'speedgate-test-photos',
             { create: true },
           ),
       });
@@ -607,7 +620,7 @@ test('125 selected originals stay queued across native handoffs and fifty-file d
     const saved = await page.evaluate(async () => {
       const root = await (
         await navigator.storage.getDirectory()
-      ).getDirectoryHandle('pixelgate-test-photos');
+      ).getDirectoryHandle('speedgate-test-photos');
       const hashes: string[] = [];
       for (let i = 0; i < 125; i++) {
         const file = await (

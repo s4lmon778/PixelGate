@@ -23,14 +23,14 @@ function deploy() {
   });
 }
 beforeEach(() => {
-  temp = mkdtempSync(join(tmpdir(), 'pixelgate-publish-test-'));
+  temp = mkdtempSync(join(tmpdir(), 'speedgate-publish-test-'));
   root = join(temp, 'project');
   remote = join(temp, 'remote.git');
   mkdirSync(root);
   mkdirSync(join(root, 'scripts'));
   run(['git', 'init', '--bare', remote], temp);
   run(['git', 'init', '-b', 'main']);
-  run(['git', 'config', 'user.name', 'PixelGate Test']);
+  run(['git', 'config', 'user.name', 'SpeedGate Test']);
   run(['git', 'config', 'user.email', 'test@example.invalid']);
   run(['git', 'remote', 'add', 'origin', remote]);
   cpSync(
