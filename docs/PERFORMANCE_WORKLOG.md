@@ -1422,3 +1422,31 @@ CodeGraph 1.6.2 builds the local structural index, without an app dependency or
 agent-global configuration change. Current documentation and interface branding
 are SpeedGate; legacy storage/protocol names and historical release bytes remain
 for compatibility and provenance. Publication and final checks are recorded next.
+
+### Verified publication
+
+SpeedGate 0.3.36 is deployed from source
+`b4925688f17deb322dce7f1ead3ee2d159cd7917`, Pages commit
+`d77ec8f20bcb0c3fe4d12de24ceb9c302bccab42`.
+[The Pages workflow](https://github.com/s4lmon778/SpeedGate/actions/runs/38872684023)
+completed successfully. GitHub repository, homepage, source links and current
+branding are SpeedGate. The canonical local checkout is
+`/Users/s4lmon/Documents/SpeedGate`; the old directory name is a compatibility
+symlink for existing chat/tool references.
+
+The live metadata, HTML, JavaScript, CSS, both workers and notices match the
+validated distribution byte for byte. Two live Chromium cases pass: real
+transfer/readback/download/export verification/reconnect, and phone five → seven
+→ fourteen connection probes followed by an untouched-file transfer/download.
+The 0.3.28 and 0.3.35 archive Git trees are unchanged and both remain reachable
+under the new Pages path.
+
+Final checks: 265 unit/integration cases, TypeScript, ESLint, build and formatting
+pass. The broad final Chromium run has 32 passes, two intentional skips and one
+automatic native-route pairing timeout before the transfer connection opens.
+That exact case passes twice on isolated rerun, without changing its assertion
+or timeout; all 33 runnable scenarios have passing final-source runs. Eight
+Firefox/WebKit and five actual Chromium 101 checks also pass. The intermittent
+pairing result remains in the validation record. No new physical-phone speed
+is claimed. README visuals are refreshed; the real demo independently verifies
+its downloaded synthetic original and saved-copy check, then clears its cache.

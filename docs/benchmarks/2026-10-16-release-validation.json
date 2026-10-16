@@ -45,5 +45,17 @@
     }
   },
   "pairingLimit": "One automatic native-route timeout in the final broad run; exact scenario passed twice on isolated rerun without weakening assertions.",
-  "demo": "Real synthetic transfer, independently hashed download, saved-copy check and cache cleanup completed."
+  "demo": "Real synthetic transfer, independently hashed download, saved-copy check and cache cleanup completed.",
+  "sourceCommit": "b4925688f17deb322dce7f1ead3ee2d159cd7917",
+  "pagesCommit": "d77ec8f20bcb0c3fe4d12de24ceb9c302bccab42",
+  "live": {
+    "startTime": "2026-10-16T08:18:35.324Z",
+    "duration": 14083.978,
+    "expected": 2,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "liveAssetsMatchTestedBuild": true,
+  "previousReleaseTreesUnchanged": ["0.3.28", "0.3.35"]
 }
